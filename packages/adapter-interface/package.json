@@ -1,0 +1,13 @@
+{
+  "name": "@agentmesh/adapter-interface",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "main": "dist/interface.js",
+  "scripts": {
+    "dev": "tsx watch src/interface.ts",
+    "build": "tsc -p tsconfig.json",
+    "lint": "biome check src",
+    "test": "node --test"
+  }
+}

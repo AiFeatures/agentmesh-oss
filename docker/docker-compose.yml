@@ -1,0 +1,14 @@
+services:
+  hub:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "3777:3777"
+    volumes:
+      - agentmesh_data:/app/packages/hub/data
+      - ~/.agentmesh:/home/agentmesh/.agentmesh
+    restart: unless-stopped
+
+volumes:
+  agentmesh_data:
