@@ -86,3 +86,68 @@ test("unauthenticated requests are rejected with 401", async () => {
 
   await app.close();
 });
+
+test("GET handoffs rejects invalid status query param", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-qp-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "QP Test" },
+  });
+
+  const badStatus = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/handoffs?status=invalid`,
+    headers: auth,
+  });
+  assert.equal(badStatus.statusCode, 400);
+
+  const goodStatus = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/handoffs?status=pending`,
+    headers: auth,
+  });
+  assert.equal(goodStatus.statusCode, 200);
+
+  await app.close();
+});
+
+test("agent register rejects oversized metadata", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-meta-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Meta Test" },
+  });
+
+  const bigMeta: Record<string, string> = {};
+  for (let i = 0; i < 60; i++) {
+    bigMeta[`key_${i}`] = `value_${i}`;
+  }
+
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: {
+      agent_id: `agent-meta-${suffix}`,
+      display_name: "Big Meta Agent",
+      metadata: bigMeta,
+    },
+  });
+  assert.equal(res.statusCode, 400);
+
+  await app.close();
+});
