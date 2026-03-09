@@ -59,6 +59,17 @@ export class AgentMeshClient {
     });
   }
 
+  async updateAgentStatus(
+    workspace: string,
+    agentId: string,
+    status: "online" | "idle" | "blocked",
+  ): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    });
+  }
+
   startHeartbeat(workspace: string, agentId: string, intervalMs = 10000): () => void {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {

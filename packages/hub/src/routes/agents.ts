@@ -188,4 +188,42 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ ok: true });
     },
   );
+
+  app.patch(
+    "/api/v1/workspaces/:workspace/agents/:agentId/status",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["status"],
+          additionalProperties: false,
+          properties: {
+            status: { type: "string", enum: ["online", "idle", "blocked"] },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as {
+        workspace: string;
+        agentId: string;
+      };
+      const { status } = request.body as { status: string };
+
+      const agent = db
+        .prepare("SELECT agent_id FROM agents WHERE agent_id = ? AND workspace_id = ?")
+        .get(agentId, workspace);
+      if (!agent) {
+        return reply.code(404).send({ error: "Agent not found" });
+      }
+
+      db.prepare(
+        "UPDATE agents SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE agent_id = ?",
+      ).run(status, agentId);
+
+      broadcast("agents.updated", { workspace, agent_id: agentId, status });
+      return reply.send({ ok: true, status });
+    },
+  );
 };

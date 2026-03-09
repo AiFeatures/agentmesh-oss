@@ -535,3 +535,84 @@ test("agent deregister removes agent and cascades claims", async () => {
 
   await app.close();
 });
+
+test("blocker accepts deadline_seconds parameter", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-sla-${suffix}`;
+  const agentId = `agent-sla-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "SLA Test" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "SLA Agent" },
+  });
+
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/blockers`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: {
+      agent_id: agentId,
+      title: "SLA blocker",
+      severity: "high",
+      deadline_seconds: 3600,
+    },
+  });
+  assert.equal(res.statusCode, 201);
+  assert.ok((res.json() as { blocker_id: string }).blocker_id);
+
+  await app.close();
+});
+
+test("agent status update changes agent status", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-status-${suffix}`;
+  const agentId = `agent-status-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Status Test" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "Status Agent" },
+  });
+
+  const patchRes = await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${workspaceId}/agents/${agentId}/status`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { status: "idle" },
+  });
+  assert.equal(patchRes.statusCode, 200);
+  assert.deepStrictEqual(patchRes.json(), { ok: true, status: "idle" });
+
+  const badStatus = await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${workspaceId}/agents/${agentId}/status`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { status: "invalid" },
+  });
+  assert.equal(badStatus.statusCode, 400);
+
+  await app.close();
+});

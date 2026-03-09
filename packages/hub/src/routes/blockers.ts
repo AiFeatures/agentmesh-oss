@@ -19,6 +19,7 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
             title: { type: "string", minLength: 1, maxLength: 300 },
             details: { type: "string", maxLength: 5000 },
             severity: { type: "string", enum: ["low", "medium", "high", "critical"] },
+            deadline_seconds: { type: "integer", minimum: 60, maximum: 604800 },
           },
         },
       },
@@ -30,6 +31,7 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
         title: string;
         details?: string;
         severity: "low" | "medium" | "high" | "critical";
+        deadline_seconds?: number;
       };
 
       const agentExists = db
@@ -45,6 +47,7 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
         title: body.title,
         details: body.details,
         severity: body.severity,
+        deadlineSeconds: body.deadline_seconds,
       });
 
       writeAuditLog({

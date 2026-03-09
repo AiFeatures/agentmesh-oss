@@ -32,6 +32,7 @@ export type BlockerPayload = {
   title: string;
   details?: string;
   severity: "low" | "medium" | "high" | "critical";
+  deadline_seconds?: number;
 };
 
 export type RoutePayload = {
@@ -51,6 +52,7 @@ export type MeshEventName =
   | "handoffs.expired"
   | "blocker.created"
   | "blocker.resolved"
+  | "blockers.sla_breached"
   | "presence.updated"
   | "audit.logged";
 
