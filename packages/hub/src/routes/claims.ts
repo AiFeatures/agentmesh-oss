@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { db } from "../db/index.js";
 import { writeAuditLog } from "../services/audit.js";
 import { createClaim, listClaims, releaseClaim, renewClaim } from "../services/claims.js";
+import { parseJsonSafe } from "../utils/json.js";
 import { broadcast } from "../ws/gateway.js";
 
 export const claimRoutes: FastifyPluginAsync = async (app) => {
@@ -81,17 +82,58 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
 
   app.get(
     "/api/v1/workspaces/:workspace/claims",
-    { preHandler: app.authGuard },
+    {
+      preHandler: app.authGuard,
+      schema: {
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            status: {
+              type: "string",
+              enum: ["active", "released", "expired", "force_released"],
+            },
+            limit: { type: "string" },
+            offset: { type: "string" },
+          },
+        },
+      },
+    },
     async (request, reply) => {
       const { workspace } = request.params as { workspace: string };
-      const { limit, offset } = request.query as {
+      const { limit, offset, status } = request.query as {
         limit?: string;
         offset?: string;
+        status?: string;
       };
-      const all = listClaims(workspace);
+      let all = listClaims(workspace);
+      if (status) {
+        all = all.filter((c) => c.status === status);
+      }
       const start = Math.max(0, Number(offset) || 0);
       const count = Math.min(200, Math.max(1, Number(limit) || 50));
       return reply.send({ data: all.slice(start, start + count), total: all.length });
+    },
+  );
+
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/:claimId",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, claimId } = request.params as {
+        workspace: string;
+        claimId: string;
+      };
+      const row = db
+        .prepare(
+          "SELECT c.*, json_group_array(cp.path_pattern) AS paths FROM claims c JOIN claim_paths cp ON cp.claim_id = c.claim_id WHERE c.claim_id = ? AND c.workspace_id = ? GROUP BY c.claim_id",
+        )
+        .get(claimId, workspace) as Record<string, unknown> | undefined;
+      if (!row) {
+        return reply.code(404).send({ error: "Claim not found" });
+      }
+      row.paths = parseJsonSafe(String(row.paths ?? "[]"), [] as string[]);
+      return reply.send(row);
     },
   );
 

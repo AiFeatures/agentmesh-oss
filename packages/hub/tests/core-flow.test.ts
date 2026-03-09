@@ -734,3 +734,105 @@ test("workspace update changes display name", async () => {
 
   await app.close();
 });
+
+test("GET single blocker and blocker list filters", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-blk-${suffix}`;
+  const agentId = `agent-blk-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Blocker Detail" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "Blk Agent" },
+  });
+
+  const createRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/blockers`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, title: "Detail blocker", severity: "high" },
+  });
+  const blockerId = (createRes.json() as { blocker_id: string }).blocker_id;
+
+  const detailRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/blockers/${blockerId}`,
+    headers: auth,
+  });
+  assert.equal(detailRes.statusCode, 200);
+  assert.equal((detailRes.json() as { blocker_id: string }).blocker_id, blockerId);
+
+  const filteredRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/blockers?severity=high&status=open`,
+    headers: auth,
+  });
+  assert.equal(filteredRes.statusCode, 200);
+  const filtered = filteredRes.json() as { data: unknown[]; total: number };
+  assert.equal(filtered.total, 1);
+
+  await app.close();
+});
+
+test("GET single claim returns claim with paths", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-clmd-${suffix}`;
+  const agentId = `agent-clmd-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Claim Detail" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "Claim Agent" },
+  });
+
+  const createRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, scope: "backend", paths: ["src/**", "lib/**"] },
+  });
+  const claimId = (createRes.json() as { claim_id: string }).claim_id;
+
+  const detailRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/claims/${claimId}`,
+    headers: auth,
+  });
+  assert.equal(detailRes.statusCode, 200);
+  const claim = detailRes.json() as { claim_id: string; paths: string[] };
+  assert.equal(claim.claim_id, claimId);
+  assert.deepStrictEqual(claim.paths, ["src/**", "lib/**"]);
+
+  const filterRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/claims?status=active`,
+    headers: auth,
+  });
+  assert.equal(filterRes.statusCode, 200);
+  const filtered = filterRes.json() as { data: unknown[]; total: number };
+  assert.equal(filtered.total, 1);
+
+  await app.close();
+});

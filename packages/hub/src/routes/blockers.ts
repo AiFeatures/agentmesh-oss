@@ -118,17 +118,57 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
 
   app.get(
     "/api/v1/workspaces/:workspace/blockers",
-    { preHandler: app.authGuard },
+    {
+      preHandler: app.authGuard,
+      schema: {
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            status: { type: "string", enum: ["open", "resolved"] },
+            severity: { type: "string", enum: ["low", "medium", "high", "critical"] },
+            limit: { type: "string" },
+            offset: { type: "string" },
+          },
+        },
+      },
+    },
     async (request, reply) => {
       const { workspace } = request.params as { workspace: string };
-      const { limit, offset } = request.query as {
+      const { limit, offset, status, severity } = request.query as {
         limit?: string;
         offset?: string;
+        status?: string;
+        severity?: string;
       };
-      const all = listBlockers(workspace);
+      let all = listBlockers(workspace);
+      if (status) {
+        all = all.filter((b) => b.status === status);
+      }
+      if (severity) {
+        all = all.filter((b) => b.severity === severity);
+      }
       const start = Math.max(0, Number(offset) || 0);
       const count = Math.min(200, Math.max(1, Number(limit) || 50));
       return reply.send({ data: all.slice(start, start + count), total: all.length });
+    },
+  );
+
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/:blockerId",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, blockerId } = request.params as {
+        workspace: string;
+        blockerId: string;
+      };
+      const row = db
+        .prepare("SELECT * FROM blockers WHERE blocker_id = ? AND workspace_id = ?")
+        .get(blockerId, workspace);
+      if (!row) {
+        return reply.code(404).send({ error: "Blocker not found" });
+      }
+      return reply.send(row);
     },
   );
 };

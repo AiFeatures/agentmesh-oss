@@ -180,6 +180,18 @@ export class AgentMeshClient {
     });
   }
 
+  async getBlocker(workspace: string, blockerId: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/blockers/${blockerId}`, {
+      method: "GET",
+    });
+  }
+
+  async getClaim(workspace: string, claimId: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/claims/${claimId}`, {
+      method: "GET",
+    });
+  }
+
   async route(payload: RoutePayload): Promise<unknown> {
     return await this.request(`/api/v1/workspaces/${payload.workspace}/route`, {
       method: "POST",
