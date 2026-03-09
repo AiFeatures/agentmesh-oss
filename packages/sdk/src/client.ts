@@ -47,6 +47,12 @@ export class AgentMeshClient {
     });
   }
 
+  async getWorkspace(workspace: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}`, {
+      method: "GET",
+    });
+  }
+
   async updateWorkspace(
     workspace: string,
     updates: { display_name?: string; base_path?: string },

@@ -14,6 +14,23 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get(
+    "/api/v1/workspaces/:workspace",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const row = db
+        .prepare(
+          "SELECT workspace_id, display_name, base_path, created_at FROM workspaces WHERE workspace_id = ?",
+        )
+        .get(workspace);
+      if (!row) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      return reply.send(row);
+    },
+  );
+
+  app.get(
     "/api/v1/workspaces/:workspace/stats",
     { preHandler: app.authGuard },
     async (request, reply) => {

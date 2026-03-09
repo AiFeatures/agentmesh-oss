@@ -836,3 +836,60 @@ test("GET single claim returns claim with paths", async () => {
 
   await app.close();
 });
+
+test("GET single workspace returns workspace detail", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-single-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Single WS" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { workspace_id: string; display_name: string };
+  assert.equal(body.workspace_id, workspaceId);
+  assert.equal(body.display_name, "Single WS");
+
+  const notFound = await app.inject({
+    method: "GET",
+    url: "/api/v1/workspaces/nonexistent-ws",
+    headers: auth,
+  });
+  assert.equal(notFound.statusCode, 404);
+
+  await app.close();
+});
+
+test("X-Request-Id header is propagated in responses", async () => {
+  runMigrations();
+  const app = buildApp();
+
+  const customId = "my-custom-request-id-12345";
+  const res = await app.inject({
+    method: "GET",
+    url: "/health",
+    headers: { "x-request-id": customId },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.headers["x-request-id"], customId);
+
+  const autoRes = await app.inject({
+    method: "GET",
+    url: "/health",
+  });
+  assert.equal(autoRes.statusCode, 200);
+  assert.ok(autoRes.headers["x-request-id"]);
+
+  await app.close();
+});
