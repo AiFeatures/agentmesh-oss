@@ -435,3 +435,103 @@ test("handoff accepts timeout_seconds parameter", async () => {
 
   await app.close();
 });
+
+test("capabilities introspection returns capability-to-agent map", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-caps-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Caps Test" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: {
+      agent_id: `agent-cap-a-${suffix}`,
+      display_name: "Cap Agent A",
+      capabilities: ["typescript", "python"],
+    },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: {
+      agent_id: `agent-cap-b-${suffix}`,
+      display_name: "Cap Agent B",
+      capabilities: ["typescript"],
+    },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/capabilities`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const caps = res.json() as { data: Array<{ capability: string; agents: string[]; count: number }> };
+  const ts = caps.data.find((c) => c.capability === "typescript");
+  assert.ok(ts);
+  assert.equal(ts.count, 2);
+  const py = caps.data.find((c) => c.capability === "python");
+  assert.ok(py);
+  assert.equal(py.count, 1);
+
+  await app.close();
+});
+
+test("agent deregister removes agent and cascades claims", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-dereg-${suffix}`;
+  const agentId = `agent-dereg-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Dereg Test" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "Dereg Agent", capabilities: ["test"] },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, scope: "backend", paths: ["src/**"] },
+  });
+
+  const delRes = await app.inject({
+    method: "DELETE",
+    url: `/api/v1/workspaces/${workspaceId}/agents/${agentId}`,
+    headers: auth,
+  });
+  assert.equal(delRes.statusCode, 200);
+  assert.deepStrictEqual(delRes.json(), { ok: true });
+
+  const del404 = await app.inject({
+    method: "DELETE",
+    url: `/api/v1/workspaces/${workspaceId}/agents/${agentId}`,
+    headers: auth,
+  });
+  assert.equal(del404.statusCode, 404);
+
+  await app.close();
+});

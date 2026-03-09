@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { db } from "../db/index.js";
 import { writeAuditLog } from "../services/audit.js";
 import { heartbeatAgent, listAgents, registerAgent } from "../services/registry.js";
+import { parseJsonSafe } from "../utils/json.js";
 import { broadcast } from "../ws/gateway.js";
 
 export const agentRoutes: FastifyPluginAsync = async (app) => {
@@ -116,6 +117,75 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       const start = Math.max(0, Number(offset) || 0);
       const count = Math.min(200, Math.max(1, Number(limit) || 50));
       return reply.send({ data: all.slice(start, start + count), total: all.length });
+    },
+  );
+
+  app.get(
+    "/api/v1/workspaces/:workspace/capabilities",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          "SELECT agent_id, capabilities, status FROM agents WHERE workspace_id = ? AND status IN ('online', 'idle')",
+        )
+        .all(workspace) as Array<{
+        agent_id: string;
+        capabilities: string;
+        status: string;
+      }>;
+
+      const capMap = new Map<string, string[]>();
+      for (const row of rows) {
+        const caps = parseJsonSafe(String(row.capabilities ?? "[]"), [] as string[]);
+        for (const cap of caps) {
+          const agents = capMap.get(cap) ?? [];
+          agents.push(row.agent_id);
+          capMap.set(cap, agents);
+        }
+      }
+
+      const data = Array.from(capMap.entries()).map(([capability, agents]) => ({
+        capability,
+        agents,
+        count: agents.length,
+      }));
+
+      return reply.send({ data });
+    },
+  );
+
+  app.delete(
+    "/api/v1/workspaces/:workspace/agents/:agentId",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as {
+        workspace: string;
+        agentId: string;
+      };
+      const agent = db
+        .prepare("SELECT agent_id FROM agents WHERE agent_id = ? AND workspace_id = ?")
+        .get(agentId, workspace);
+      if (!agent) {
+        return reply.code(404).send({ error: "Agent not found" });
+      }
+
+      db.prepare("DELETE FROM agents WHERE agent_id = ? AND workspace_id = ?").run(
+        agentId,
+        workspace,
+      );
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "system",
+        action: "agent.deregister",
+        entityType: "agent",
+        entityId: agentId,
+        requestId: request.id,
+      });
+
+      broadcast("agents.updated", { workspace, agent_id: agentId, status: "deregistered" });
+      return reply.send({ ok: true });
     },
   );
 };

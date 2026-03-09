@@ -47,6 +47,18 @@ export class AgentMeshClient {
     });
   }
 
+  async deregisterAgent(workspace: string, agentId: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}`, {
+      method: "DELETE",
+    });
+  }
+
+  async getCapabilities(workspace: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/capabilities`, {
+      method: "GET",
+    });
+  }
+
   startHeartbeat(workspace: string, agentId: string, intervalMs = 10000): () => void {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {
