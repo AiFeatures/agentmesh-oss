@@ -66,3 +66,23 @@ test("register, claim, handoff, blocker core flow", async () => {
 
   await app.close();
 });
+
+test("unauthenticated requests are rejected with 401", async () => {
+  runMigrations();
+  const app = buildApp();
+
+  const noAuth = await app.inject({
+    method: "GET",
+    url: "/api/v1/workspaces/default/agents",
+  });
+  assert.equal(noAuth.statusCode, 401);
+
+  const badAuth = await app.inject({
+    method: "GET",
+    url: "/api/v1/workspaces/default/agents",
+    headers: { authorization: "Bearer wrong-secret" },
+  });
+  assert.equal(badAuth.statusCode, 401);
+
+  await app.close();
+});
