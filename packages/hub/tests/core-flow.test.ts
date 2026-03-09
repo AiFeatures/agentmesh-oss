@@ -616,3 +616,121 @@ test("agent status update changes agent status", async () => {
 
   await app.close();
 });
+
+test("GET single agent returns agent detail", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-ga-${suffix}`;
+  const agentId = `agent-ga-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "GetAgent Test" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "Detail Agent", capabilities: ["ts"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/agents/${agentId}`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { agent_id: string; capabilities: string[] };
+  assert.equal(body.agent_id, agentId);
+  assert.deepStrictEqual(body.capabilities, ["ts"]);
+
+  const notFound = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/agents/nonexistent`,
+    headers: auth,
+  });
+  assert.equal(notFound.statusCode, 404);
+
+  await app.close();
+});
+
+test("GET single handoff returns handoff detail", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-gh-${suffix}`;
+  const agentId = `agent-gh-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "GetHandoff Test" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "GH Agent" },
+  });
+
+  const createRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/handoffs`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { from_agent_id: agentId, summary: "Detail test" },
+  });
+  const handoffId = (createRes.json() as { handoff_id: string }).handoff_id;
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/handoffs/${handoffId}`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { handoff_id: string; summary: string };
+  assert.equal(body.handoff_id, handoffId);
+  assert.equal(body.summary, "Detail test");
+
+  await app.close();
+});
+
+test("workspace update changes display name", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-upd-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Before" },
+  });
+
+  const patchRes = await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${workspaceId}`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { display_name: "After" },
+  });
+  assert.equal(patchRes.statusCode, 200);
+
+  const emptyPatch = await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${workspaceId}`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: {},
+  });
+  assert.equal(emptyPatch.statusCode, 400);
+
+  await app.close();
+});

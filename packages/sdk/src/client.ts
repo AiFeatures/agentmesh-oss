@@ -47,6 +47,28 @@ export class AgentMeshClient {
     });
   }
 
+  async updateWorkspace(
+    workspace: string,
+    updates: { display_name?: string; base_path?: string },
+  ): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}`, {
+      method: "PATCH",
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async getAgent(workspace: string, agentId: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}`, {
+      method: "GET",
+    });
+  }
+
+  async getHandoff(workspace: string, handoffId: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/handoffs/${handoffId}`, {
+      method: "GET",
+    });
+  }
+
   async deregisterAgent(workspace: string, agentId: string): Promise<unknown> {
     return await this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}`, {
       method: "DELETE",

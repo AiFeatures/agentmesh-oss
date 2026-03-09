@@ -56,6 +56,55 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  app.patch(
+    "/api/v1/workspaces/:workspace",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            display_name: { type: "string", minLength: 1, maxLength: 256 },
+            base_path: { type: "string", maxLength: 1024 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const body = request.body as { display_name?: string; base_path?: string };
+
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+
+      const updates: string[] = [];
+      const params: unknown[] = [];
+      if (body.display_name !== undefined) {
+        updates.push("display_name = ?");
+        params.push(body.display_name);
+      }
+      if (body.base_path !== undefined) {
+        updates.push("base_path = ?");
+        params.push(body.base_path);
+      }
+      if (updates.length === 0) {
+        return reply.code(400).send({ error: "No fields to update" });
+      }
+
+      params.push(workspace);
+      db.prepare(`UPDATE workspaces SET ${updates.join(", ")} WHERE workspace_id = ?`).run(
+        ...params,
+      );
+
+      return reply.send({ ok: true });
+    },
+  );
+
   app.delete(
     "/api/v1/workspaces/:workspace",
     { preHandler: app.authGuard },

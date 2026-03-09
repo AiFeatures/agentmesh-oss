@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { db } from "../db/index.js";
 import { writeAuditLog } from "../services/audit.js";
 import { createHandoff, listHandoffs, updateHandoffStatus } from "../services/handoffs.js";
+import { parseJsonSafe } from "../utils/json.js";
 import { broadcast } from "../ws/gateway.js";
 
 export const handoffRoutes: FastifyPluginAsync = async (app) => {
@@ -149,6 +150,25 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
         Math.max(1, Number((request.query as Record<string, string>).limit) || 50),
       );
       return reply.send({ data: data.slice(start, start + count), total: data.length });
+    },
+  );
+
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/:handoffId",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, handoffId } = request.params as {
+        workspace: string;
+        handoffId: string;
+      };
+      const row = db
+        .prepare("SELECT * FROM handoffs WHERE handoff_id = ? AND workspace_id = ?")
+        .get(handoffId, workspace) as Record<string, unknown> | undefined;
+      if (!row) {
+        return reply.code(404).send({ error: "Handoff not found" });
+      }
+      row.context = parseJsonSafe(String(row.context ?? ""), null);
+      return reply.send(row);
     },
   );
 };

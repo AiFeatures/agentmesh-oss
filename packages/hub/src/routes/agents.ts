@@ -106,17 +106,62 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
 
   app.get(
     "/api/v1/workspaces/:workspace/agents",
-    { preHandler: app.authGuard },
+    {
+      preHandler: app.authGuard,
+      schema: {
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            status: {
+              type: "string",
+              enum: ["online", "idle", "stale", "evicted", "blocked"],
+            },
+            limit: { type: "string" },
+            offset: { type: "string" },
+          },
+        },
+      },
+    },
     async (request, reply) => {
       const { workspace } = request.params as { workspace: string };
-      const { limit, offset } = request.query as {
+      const { limit, offset, status } = request.query as {
         limit?: string;
         offset?: string;
+        status?: string;
       };
-      const all = listAgents(workspace);
+      let all = listAgents(workspace);
+      if (status) {
+        all = all.filter((a) => a.status === status);
+      }
       const start = Math.max(0, Number(offset) || 0);
       const count = Math.min(200, Math.max(1, Number(limit) || 50));
       return reply.send({ data: all.slice(start, start + count), total: all.length });
+    },
+  );
+
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/:agentId",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as {
+        workspace: string;
+        agentId: string;
+      };
+      const row = db
+        .prepare(
+          "SELECT agent_id, workspace_id, display_name, model, capabilities, status, last_heartbeat_at, metadata, created_at, updated_at FROM agents WHERE agent_id = ? AND workspace_id = ?",
+        )
+        .get(agentId, workspace) as Record<string, unknown> | undefined;
+      if (!row) {
+        return reply.code(404).send({ error: "Agent not found" });
+      }
+      row.capabilities = parseJsonSafe(String(row.capabilities ?? "[]"), [] as string[]);
+      row.metadata = parseJsonSafe(
+        String(row.metadata ?? ""),
+        null as Record<string, unknown> | null,
+      );
+      return reply.send(row);
     },
   );
 
