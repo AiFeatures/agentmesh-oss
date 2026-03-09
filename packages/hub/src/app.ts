@@ -8,7 +8,7 @@ import { claimRoutes } from "./routes/claims.js";
 import { handoffRoutes } from "./routes/handoffs.js";
 import { routingRoutes } from "./routes/route.js";
 import { workspaceRoutes } from "./routes/workspaces.js";
-import { authGuard } from "./security/auth.js";
+import { authGuard, validateSecret } from "./security/auth.js";
 import { registerSocket } from "./ws/gateway.js";
 
 declare module "fastify" {
@@ -34,7 +34,11 @@ export function buildApp() {
 
   app.register(async (wsApp) => {
     await wsApp.register(websocket);
-    wsApp.get("/ws", { websocket: true }, (socket, _request) => {
+    wsApp.get("/ws", { websocket: true }, (socket, request) => {
+      if (!validateSecret(request)) {
+        socket.close(1008, "Unauthorized");
+        return;
+      }
       registerSocket(socket);
       socket.send(JSON.stringify({ event: "connected", ts: new Date().toISOString() }));
     });

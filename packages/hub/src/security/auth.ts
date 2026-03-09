@@ -33,3 +33,21 @@ export async function authGuard(request: FastifyRequest, reply: FastifyReply): P
 
   request.meshAuth = { secretValidated: true };
 }
+
+export function validateSecret(request: FastifyRequest): boolean {
+  const header = request.headers.authorization;
+  if (!header || !header.startsWith("Bearer ")) {
+    return false;
+  }
+  const token = header.slice("Bearer ".length).trim();
+  const expected = getSharedSecret();
+  if (!token) {
+    return false;
+  }
+  const tokenBuf = Buffer.from(token);
+  const expectedBuf = Buffer.from(expected);
+  if (tokenBuf.length !== expectedBuf.length || !timingSafeEqual(tokenBuf, expectedBuf)) {
+    return false;
+  }
+  return true;
+}

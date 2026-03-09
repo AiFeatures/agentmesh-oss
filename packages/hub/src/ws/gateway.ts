@@ -11,7 +11,11 @@ export function broadcast(event: string, data: Record<string, unknown>): void {
   const payload = JSON.stringify({ event, data, ts: new Date().toISOString() });
   for (const socket of sockets) {
     if (socket.readyState === 1) {
-      socket.send(payload);
+      try {
+        socket.send(payload);
+      } catch {
+        sockets.delete(socket);
+      }
     }
   }
 }

@@ -24,7 +24,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
               items: { type: "string", minLength: 1, maxLength: 64 },
               maxItems: 128,
             },
-            metadata: { type: "object", additionalProperties: true },
+            metadata: { type: "object", additionalProperties: true, maxProperties: 50 },
           },
         },
       },

@@ -19,7 +19,7 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
             to_agent_id: { type: "string", minLength: 2, maxLength: 128 },
             capability_tag: { type: "string", minLength: 1, maxLength: 64 },
             summary: { type: "string", minLength: 1, maxLength: 2000 },
-            context: { type: "object", additionalProperties: true },
+            context: { type: "object", additionalProperties: true, maxProperties: 50 },
           },
         },
       },
@@ -101,7 +101,18 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
 
   app.get(
     "/api/v1/workspaces/:workspace/handoffs",
-    { preHandler: app.authGuard },
+    {
+      preHandler: app.authGuard,
+      schema: {
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            status: { type: "string", enum: ["pending", "accepted", "rejected"] },
+          },
+        },
+      },
+    },
     async (request, reply) => {
       const { workspace } = request.params as { workspace: string };
       const { status } = request.query as { status?: string };
