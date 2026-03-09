@@ -12,21 +12,25 @@ type MeshClientOptions = {
   baseUrl?: string;
   wsUrl?: string;
   sharedSecret: string;
+  requestTimeoutMs?: number;
 };
 
 export class AgentMeshClient {
   private readonly baseUrl: string;
   private readonly wsUrl: string;
   private readonly sharedSecret: string;
+  private readonly requestTimeoutMs: number;
   private ws: WebSocket | null = null;
   private wsClosed = true;
   private wsBackoffMs = 1000;
   private heartbeatTimer: NodeJS.Timeout | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: MeshClientOptions) {
     this.baseUrl = options.baseUrl ?? "http://localhost:3777";
     this.wsUrl = options.wsUrl ?? "ws://localhost:3777/ws";
     this.sharedSecret = options.sharedSecret;
+    this.requestTimeoutMs = options.requestTimeoutMs ?? 30000;
   }
 
   async register(payload: RegisterPayload): Promise<unknown> {
@@ -126,7 +130,8 @@ export class AgentMeshClient {
       });
       this.ws.on("close", () => {
         if (!this.wsClosed) {
-          setTimeout(connect, this.wsBackoffMs);
+          if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+          this.reconnectTimer = setTimeout(connect, this.wsBackoffMs);
           this.wsBackoffMs = Math.min(this.wsBackoffMs * 2, 30000);
         }
       });
@@ -141,24 +146,35 @@ export class AgentMeshClient {
 
   disconnect(): void {
     this.wsClosed = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.ws?.close();
     this.ws = null;
     this.stopHeartbeat();
   }
 
   private async request(path: string, init: RequestInit): Promise<unknown> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      ...init,
-      headers: {
-        authorization: `Bearer ${this.sharedSecret}`,
-        "content-type": "application/json",
-        ...(init.headers ?? {}),
-      },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    try {
+      const response = await fetch(`${this.baseUrl}${path}`, {
+        ...init,
+        signal: controller.signal,
+        headers: {
+          authorization: `Bearer ${this.sharedSecret}`,
+          "content-type": "application/json",
+          ...(init.headers ?? {}),
+        },
+      });
 
-    if (!response.ok) {
-      throw new Error(`request failed: ${response.status} ${await response.text()}`);
+      if (!response.ok) {
+        throw new Error(`request failed: ${response.status} ${await response.text()}`);
+      }
+      return await response.json();
+    } finally {
+      clearTimeout(timeout);
     }
-    return await response.json();
   }
 }
