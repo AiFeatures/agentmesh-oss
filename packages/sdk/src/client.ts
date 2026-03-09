@@ -82,6 +82,13 @@ export class AgentMeshClient {
     });
   }
 
+  async batchReleaseClaims(workspace: string, claimIds: string[]): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/claims/batch-release`, {
+      method: "POST",
+      body: JSON.stringify({ claim_ids: claimIds }),
+    });
+  }
+
   async handoff(payload: HandoffPayload): Promise<unknown> {
     return await this.request(`/api/v1/workspaces/${payload.workspace}/handoffs`, {
       method: "POST",

@@ -20,6 +20,7 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
             capability_tag: { type: "string", minLength: 1, maxLength: 64 },
             summary: { type: "string", minLength: 1, maxLength: 2000 },
             context: { type: "object", additionalProperties: true, maxProperties: 50 },
+            timeout_seconds: { type: "integer", minimum: 60, maximum: 86400 },
           },
         },
       },
@@ -32,6 +33,7 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
         capability_tag?: string;
         summary: string;
         context?: Record<string, unknown>;
+        timeout_seconds?: number;
       };
 
       const fromExists = db
@@ -56,6 +58,7 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
         capabilityTag: body.capability_tag,
         summary: body.summary,
         context: body.context,
+        timeoutSeconds: body.timeout_seconds,
       });
 
       writeAuditLog({

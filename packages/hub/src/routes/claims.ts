@@ -150,6 +150,55 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
   );
 
   app.post(
+    "/api/v1/workspaces/:workspace/claims/batch-release",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["claim_ids"],
+          additionalProperties: false,
+          properties: {
+            claim_ids: {
+              type: "array",
+              minItems: 1,
+              maxItems: 100,
+              items: { type: "string", minLength: 1, maxLength: 128 },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { claim_ids } = request.body as { claim_ids: string[] };
+
+      const released: string[] = [];
+      const notFound: string[] = [];
+      for (const id of claim_ids) {
+        const claim = db
+          .prepare("SELECT workspace_id FROM claims WHERE claim_id = ? AND workspace_id = ?")
+          .get(id, workspace) as { workspace_id: string } | undefined;
+        if (!claim) {
+          notFound.push(id);
+          continue;
+        }
+        if (releaseClaim(id)) {
+          released.push(id);
+        } else {
+          notFound.push(id);
+        }
+      }
+
+      if (released.length > 0) {
+        broadcast("claims.updated", { workspace, released, status: "released" });
+      }
+
+      return reply.send({ released, not_found: notFound });
+    },
+  );
+
+  app.post(
     "/api/v1/workspaces/:workspace/claims/gc",
     { preHandler: app.authGuard },
     async (request, reply) => {

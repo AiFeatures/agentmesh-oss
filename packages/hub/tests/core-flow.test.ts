@@ -347,3 +347,91 @@ test("audit log endpoint returns workspace events", async () => {
 
   await app.close();
 });
+
+test("batch claim release releases multiple claims at once", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-batch-${suffix}`;
+  const agentId = `agent-batch-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Batch Test" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "Batch Agent" },
+  });
+
+  const ids: string[] = [];
+  for (const scope of ["backend", "frontend"]) {
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/v1/workspaces/${workspaceId}/claims`,
+      headers: { ...auth, "content-type": "application/json" },
+      payload: { agent_id: agentId, scope, paths: [`${scope}/**`] },
+    });
+    assert.equal(res.statusCode, 201);
+    ids.push((res.json() as { claim_id: string }).claim_id);
+  }
+
+  const batchRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/claims/batch-release`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { claim_ids: [...ids, "nonexistent-id"] },
+  });
+  assert.equal(batchRes.statusCode, 200);
+  const body = batchRes.json() as { released: string[]; not_found: string[] };
+  assert.equal(body.released.length, 2);
+  assert.equal(body.not_found.length, 1);
+  assert.equal(body.not_found[0], "nonexistent-id");
+
+  await app.close();
+});
+
+test("handoff accepts timeout_seconds parameter", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-hto-${suffix}`;
+  const agentId = `agent-hto-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Timeout Test" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "Timeout Agent" },
+  });
+
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/handoffs`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: {
+      from_agent_id: agentId,
+      summary: "Timeout handoff",
+      timeout_seconds: 3600,
+    },
+  });
+  assert.equal(res.statusCode, 201);
+  const body = res.json() as { handoff_id: string };
+  assert.ok(body.handoff_id);
+
+  await app.close();
+});

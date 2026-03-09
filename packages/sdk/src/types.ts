@@ -23,6 +23,7 @@ export type HandoffPayload = {
   capability_tag?: string;
   summary: string;
   context?: Record<string, unknown>;
+  timeout_seconds?: number;
 };
 
 export type BlockerPayload = {
@@ -47,6 +48,7 @@ export type MeshEventName =
   | "claims.updated"
   | "claims.conflict"
   | "claims.expired"
+  | "handoffs.expired"
   | "blocker.created"
   | "blocker.resolved"
   | "presence.updated"
