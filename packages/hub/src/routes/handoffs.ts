@@ -99,6 +99,27 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  app.post(
+    "/api/v1/workspaces/:workspace/handoffs/:handoffId/reject",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { handoffId, workspace } = request.params as { handoffId: string; workspace: string };
+      const exists = db
+        .prepare("SELECT handoff_id FROM handoffs WHERE handoff_id = ? AND workspace_id = ?")
+        .get(handoffId, workspace);
+      if (!exists) {
+        return reply.code(404).send({ error: "Handoff not found" });
+      }
+
+      const ok = updateHandoffStatus(handoffId, "rejected");
+      if (!ok) {
+        return reply.code(404).send({ error: "Handoff not found" });
+      }
+      broadcast("handoffs.updated", { workspace, handoff_id: handoffId, status: "rejected" });
+      return reply.send({ ok: true });
+    },
+  );
+
   app.get(
     "/api/v1/workspaces/:workspace/handoffs",
     {

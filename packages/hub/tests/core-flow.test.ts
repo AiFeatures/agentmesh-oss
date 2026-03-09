@@ -151,3 +151,108 @@ test("agent register rejects oversized metadata", async () => {
 
   await app.close();
 });
+
+test("handoff reject endpoint changes status to rejected", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-rej-${suffix}`;
+  const agentId = `agent-rej-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Reject Test" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "Rej Agent" },
+  });
+
+  const handoffRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/handoffs`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: {
+      from_agent_id: agentId,
+      summary: "Please reject this.",
+    },
+  });
+  assert.equal(handoffRes.statusCode, 201);
+  const handoffId = (handoffRes.json() as { handoff_id: string }).handoff_id;
+
+  const rejectRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/handoffs/${handoffId}/reject`,
+    headers: auth,
+  });
+  assert.equal(rejectRes.statusCode, 200);
+  assert.deepStrictEqual(rejectRes.json(), { ok: true });
+
+  const listRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/handoffs?status=rejected`,
+    headers: auth,
+  });
+  const list = listRes.json() as { data: Array<{ handoff_id: string }> };
+  assert.equal(list.data.length, 1);
+  assert.equal(list.data[0].handoff_id, handoffId);
+
+  await app.close();
+});
+
+test("workspace stats endpoint returns counts", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-stats-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Stats Test" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `agent-st-${suffix}`, display_name: "Stats Agent" },
+  });
+
+  const statsRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/stats`,
+    headers: auth,
+  });
+  assert.equal(statsRes.statusCode, 200);
+  const stats = statsRes.json() as {
+    workspace_id: string;
+    agents: { total: number; online: number };
+  };
+  assert.equal(stats.workspace_id, workspaceId);
+  assert.equal(stats.agents.total, 1);
+  assert.equal(stats.agents.online, 1);
+
+  await app.close();
+});
+
+test("health check returns db and uptime info", async () => {
+  runMigrations();
+  const app = buildApp();
+  const res = await app.inject({ method: "GET", url: "/health" });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { status: string; db: string; uptime: number };
+  assert.equal(body.status, "ok");
+  assert.equal(body.db, "connected");
+  assert.equal(typeof body.uptime, "number");
+
+  await app.close();
+});

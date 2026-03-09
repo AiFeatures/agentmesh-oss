@@ -13,6 +13,49 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ data: rows });
   });
 
+  app.get(
+    "/api/v1/workspaces/:workspace/stats",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+
+      const agents = db
+        .prepare(
+          "SELECT COUNT(*) as total, SUM(CASE WHEN status = 'online' THEN 1 ELSE 0 END) as online FROM agents WHERE workspace_id = ?",
+        )
+        .get(workspace) as { total: number; online: number };
+      const claims = db
+        .prepare(
+          "SELECT COUNT(*) as total FROM claims WHERE workspace_id = ? AND status = 'active'",
+        )
+        .get(workspace) as { total: number };
+      const handoffs = db
+        .prepare(
+          "SELECT COUNT(*) as total, SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending FROM handoffs WHERE workspace_id = ?",
+        )
+        .get(workspace) as { total: number; pending: number };
+      const blockers = db
+        .prepare(
+          "SELECT COUNT(*) as total, SUM(CASE WHEN status != 'resolved' THEN 1 ELSE 0 END) as open FROM blockers WHERE workspace_id = ?",
+        )
+        .get(workspace) as { total: number; open: number };
+
+      return reply.send({
+        workspace_id: workspace,
+        agents: { total: agents.total, online: agents.online },
+        claims: { active: claims.total },
+        handoffs: { total: handoffs.total, pending: handoffs.pending },
+        blockers: { total: blockers.total, open: blockers.open },
+      });
+    },
+  );
+
   app.post(
     "/api/v1/workspaces",
     {

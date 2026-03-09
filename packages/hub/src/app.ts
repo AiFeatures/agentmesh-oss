@@ -3,6 +3,7 @@ import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import websocket from "@fastify/websocket";
 import Fastify from "fastify";
+import { db } from "./db/index.js";
 import { agentRoutes } from "./routes/agents.js";
 import { blockerRoutes } from "./routes/blockers.js";
 import { claimRoutes } from "./routes/claims.js";
@@ -32,10 +33,15 @@ export function buildApp() {
   app.register(cors, { origin: true });
   app.register(rateLimit, { max: 100, timeWindow: "1 minute" });
 
-  app.get("/health", { config: { rateLimit: { max: 300 } } }, async () => ({
-    status: "ok",
-    service: "agentmesh-hub",
-  }));
+  app.get("/health", { config: { rateLimit: { max: 300 } } }, async () => {
+    const dbCheck = db.prepare("SELECT 1 as ok").get() as { ok: number } | undefined;
+    return {
+      status: dbCheck?.ok === 1 ? "ok" : "degraded",
+      service: "agentmesh-hub",
+      uptime: Math.floor(process.uptime()),
+      db: dbCheck?.ok === 1 ? "connected" : "error",
+    };
+  });
 
   app.register(async (wsApp) => {
     await wsApp.register(websocket);
