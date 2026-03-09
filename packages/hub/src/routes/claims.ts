@@ -84,7 +84,14 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: app.authGuard },
     async (request, reply) => {
       const { workspace } = request.params as { workspace: string };
-      return reply.send({ data: listClaims(workspace) });
+      const { limit, offset } = request.query as {
+        limit?: string;
+        offset?: string;
+      };
+      const all = listClaims(workspace);
+      const start = Math.max(0, Number(offset) || 0);
+      const count = Math.min(200, Math.max(1, Number(limit) || 50));
+      return reply.send({ data: all.slice(start, start + count), total: all.length });
     },
   );
 

@@ -1,6 +1,7 @@
 import { buildApp } from "./app.js";
 import { startSchedulers } from "./cron/index.js";
 import { runMigrations } from "./db/index.js";
+import { drainSockets } from "./ws/gateway.js";
 
 const app = buildApp();
 let stopSchedulers: () => void = () => {};
@@ -13,6 +14,7 @@ async function shutdown(signal: string): Promise<void> {
   shuttingDown = true;
   app.log.info({ signal }, "Shutting down AgentMesh hub");
   stopSchedulers();
+  drainSockets();
   await app.close();
   process.exit(0);
 }

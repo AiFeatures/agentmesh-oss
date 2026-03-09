@@ -7,6 +7,17 @@ export function registerSocket(socket: WebSocket): void {
   socket.on("close", () => sockets.delete(socket));
 }
 
+export function drainSockets(): void {
+  for (const socket of sockets) {
+    try {
+      socket.close(1001, "Server shutting down");
+    } catch {
+      // ignore
+    }
+  }
+  sockets.clear();
+}
+
 export function broadcast(event: string, data: Record<string, unknown>): void {
   const payload = JSON.stringify({ event, data, ts: new Date().toISOString() });
   for (const socket of sockets) {

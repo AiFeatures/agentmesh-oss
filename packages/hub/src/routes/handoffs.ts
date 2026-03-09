@@ -130,6 +130,8 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
           additionalProperties: false,
           properties: {
             status: { type: "string", enum: ["pending", "accepted", "rejected"] },
+            limit: { type: "string" },
+            offset: { type: "string" },
           },
         },
       },
@@ -138,7 +140,12 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       const { workspace } = request.params as { workspace: string };
       const { status } = request.query as { status?: string };
       const data = listHandoffs(workspace).filter((row) => (status ? row.status === status : true));
-      return reply.send({ data });
+      const start = Math.max(0, Number((request.query as Record<string, string>).offset) || 0);
+      const count = Math.min(
+        200,
+        Math.max(1, Number((request.query as Record<string, string>).limit) || 50),
+      );
+      return reply.send({ data: data.slice(start, start + count), total: data.length });
     },
   );
 };

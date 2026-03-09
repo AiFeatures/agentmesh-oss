@@ -118,8 +118,14 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: app.authGuard },
     async (request, reply) => {
       const { workspace } = request.params as { workspace: string };
-      const rows = listBlockers(workspace);
-      return reply.send({ data: rows });
+      const { limit, offset } = request.query as {
+        limit?: string;
+        offset?: string;
+      };
+      const all = listBlockers(workspace);
+      const start = Math.max(0, Number(offset) || 0);
+      const count = Math.min(200, Math.max(1, Number(limit) || 50));
+      return reply.send({ data: all.slice(start, start + count), total: all.length });
     },
   );
 };

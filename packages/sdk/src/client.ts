@@ -95,6 +95,12 @@ export class AgentMeshClient {
     });
   }
 
+  async rejectHandoff(workspace: string, handoffId: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/handoffs/${handoffId}/reject`, {
+      method: "POST",
+    });
+  }
+
   async blocker(payload: BlockerPayload): Promise<unknown> {
     return await this.request(`/api/v1/workspaces/${payload.workspace}/blockers`, {
       method: "POST",
