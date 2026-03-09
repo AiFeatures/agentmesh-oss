@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { readConfig, readSecret } from "../config.js";
+import { printResponse, readConfig, readSecret } from "../config.js";
 
 export function resolveCommand(): Command {
   return new Command("resolve")
@@ -20,6 +20,6 @@ export function resolveCommand(): Command {
           body: JSON.stringify({ option }),
         },
       );
-      console.log(await response.text());
+      await printResponse(response);
     });
 }

@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { readConfig, readSecret } from "../config.js";
+import { printResponse, readConfig, readSecret } from "../config.js";
 
 export function claimsCommand(): Command {
   return new Command("claims")
@@ -10,6 +10,6 @@ export function claimsCommand(): Command {
       const response = await fetch(`${cfg.hubUrl}/api/v1/workspaces/${workspace}/claims`, {
         headers: { authorization: `Bearer ${readSecret()}` },
       });
-      console.log(await response.text());
+      await printResponse(response);
     });
 }

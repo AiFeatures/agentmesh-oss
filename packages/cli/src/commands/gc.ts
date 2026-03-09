@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { readConfig, readSecret } from "../config.js";
+import { printResponse, readConfig, readSecret } from "../config.js";
 
 export function gcCommand(): Command {
   return new Command("gc")
@@ -13,6 +13,6 @@ export function gcCommand(): Command {
           authorization: `Bearer ${readSecret()}`,
         },
       });
-      console.log(await response.text());
+      await printResponse(response);
     });
 }

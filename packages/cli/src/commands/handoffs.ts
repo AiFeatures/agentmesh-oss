@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { readConfig, readSecret } from "../config.js";
+import { printResponse, readConfig, readSecret } from "../config.js";
 
 export function handoffsCommand(): Command {
   return new Command("handoffs")
@@ -15,6 +15,6 @@ export function handoffsCommand(): Command {
           headers: { authorization: `Bearer ${readSecret()}` },
         },
       );
-      console.log(await response.text());
+      await printResponse(response);
     });
 }

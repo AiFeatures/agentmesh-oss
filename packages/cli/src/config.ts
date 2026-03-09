@@ -31,3 +31,18 @@ export function writeConfig(config: MeshConfig): void {
   mkdirSync(CONFIG_DIR, { recursive: true });
   writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
 }
+
+export async function printResponse(response: Response): Promise<void> {
+  const text = await response.text();
+  if (!response.ok) {
+    console.error(`Error ${response.status}: ${text}`);
+    process.exitCode = 1;
+    return;
+  }
+  try {
+    const json = JSON.parse(text);
+    console.log(JSON.stringify(json, null, 2));
+  } catch {
+    console.log(text);
+  }
+}

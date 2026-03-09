@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { readConfig, readSecret } from "../config.js";
+import { printResponse, readConfig, readSecret } from "../config.js";
 
 function authHeader(): Record<string, string> {
   return { authorization: `Bearer ${readSecret()}` };
@@ -27,7 +27,7 @@ export function workspaceCommand(): Command {
           base_path: opts.basePath,
         }),
       });
-      console.log(await response.text());
+      await printResponse(response);
     });
 
   command.command("list").action(async () => {
@@ -35,7 +35,7 @@ export function workspaceCommand(): Command {
     const response = await fetch(`${cfg.hubUrl}/api/v1/workspaces`, {
       headers: authHeader(),
     });
-    console.log(await response.text());
+    await printResponse(response);
   });
 
   return command;
