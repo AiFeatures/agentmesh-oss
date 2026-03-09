@@ -256,3 +256,94 @@ test("health check returns db and uptime info", async () => {
 
   await app.close();
 });
+
+test("workspace delete cascades to agents and claims", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-del-${suffix}`;
+  const agentId = `agent-del-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Delete Test" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "Del Agent" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, scope: "backend", paths: ["src/**"] },
+  });
+
+  const delRes = await app.inject({
+    method: "DELETE",
+    url: `/api/v1/workspaces/${workspaceId}`,
+    headers: auth,
+  });
+  assert.equal(delRes.statusCode, 200);
+  assert.deepStrictEqual(delRes.json(), { ok: true });
+
+  const listRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/agents`,
+    headers: auth,
+  });
+  const agents = listRes.json() as { data: unknown[] };
+  assert.equal(agents.data.length, 0);
+
+  const del404 = await app.inject({
+    method: "DELETE",
+    url: `/api/v1/workspaces/${workspaceId}`,
+    headers: auth,
+  });
+  assert.equal(del404.statusCode, 404);
+
+  await app.close();
+});
+
+test("audit log endpoint returns workspace events", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-audit-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Audit Test" },
+  });
+
+  const auditRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/audit`,
+    headers: auth,
+  });
+  assert.equal(auditRes.statusCode, 200);
+  const audit = auditRes.json() as { data: Array<{ action: string }> };
+  assert.ok(audit.data.length >= 1);
+  assert.ok(audit.data.some((e) => e.action === "workspace.create"));
+
+  const filteredRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/audit?action=workspace.create&limit=1`,
+    headers: auth,
+  });
+  const filtered = filteredRes.json() as { data: Array<{ action: string }> };
+  assert.equal(filtered.data.length, 1);
+  assert.equal(filtered.data[0].action, "workspace.create");
+
+  await app.close();
+});

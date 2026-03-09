@@ -30,6 +30,21 @@ export function workspaceCommand(): Command {
       await printResponse(response);
     });
 
+  command
+    .command("delete")
+    .requiredOption("--id <workspaceId>", "workspace identifier to delete")
+    .action(async (opts: { id: string }) => {
+      const cfg = readConfig();
+      const response = await fetch(
+        `${cfg.hubUrl}/api/v1/workspaces/${encodeURIComponent(opts.id)}`,
+        {
+          method: "DELETE",
+          headers: authHeader(),
+        },
+      );
+      await printResponse(response);
+    });
+
   command.command("list").action(async () => {
     const cfg = readConfig();
     const response = await fetch(`${cfg.hubUrl}/api/v1/workspaces`, {

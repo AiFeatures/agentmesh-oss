@@ -56,6 +56,77 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  app.delete(
+    "/api/v1/workspaces/:workspace",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+
+      db.prepare("DELETE FROM workspaces WHERE workspace_id = ?").run(workspace);
+
+      writeAuditLog({
+        actorType: "system",
+        action: "workspace.delete",
+        entityType: "workspace",
+        entityId: workspace,
+        requestId: request.id,
+      });
+
+      return reply.send({ ok: true });
+    },
+  );
+
+  app.get(
+    "/api/v1/workspaces/:workspace/audit",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            action: { type: "string", maxLength: 128 },
+            limit: { type: "integer", minimum: 1, maximum: 200, default: 50 },
+            offset: { type: "integer", minimum: 0, default: 0 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { action, limit, offset } = request.query as {
+        action?: string;
+        limit: number;
+        offset: number;
+      };
+
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+
+      let sql = "SELECT * FROM audit_log WHERE workspace_id = ?";
+      const params: unknown[] = [workspace];
+      if (action) {
+        sql += " AND action = ?";
+        params.push(action);
+      }
+      sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?";
+      params.push(limit, offset);
+
+      const rows = db.prepare(sql).all(...params);
+      return reply.send({ data: rows });
+    },
+  );
+
   app.post(
     "/api/v1/workspaces",
     {
@@ -86,6 +157,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       ).run(id, body.display_name, body.base_path ?? null);
 
       writeAuditLog({
+        workspaceId: id,
         actorType: "system",
         action: "workspace.create",
         entityType: "workspace",

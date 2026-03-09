@@ -101,6 +101,26 @@ export class AgentMeshClient {
     });
   }
 
+  async deleteWorkspace(workspace: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}`, {
+      method: "DELETE",
+    });
+  }
+
+  async getAuditLog(
+    workspace: string,
+    opts?: { action?: string; limit?: number; offset?: number },
+  ): Promise<unknown> {
+    const params = new URLSearchParams();
+    if (opts?.action) params.set("action", opts.action);
+    if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
+    if (opts?.offset !== undefined) params.set("offset", String(opts.offset));
+    const qs = params.toString();
+    return await this.request(`/api/v1/workspaces/${workspace}/audit${qs ? `?${qs}` : ""}`, {
+      method: "GET",
+    });
+  }
+
   async blocker(payload: BlockerPayload): Promise<unknown> {
     return await this.request(`/api/v1/workspaces/${payload.workspace}/blockers`, {
       method: "POST",
