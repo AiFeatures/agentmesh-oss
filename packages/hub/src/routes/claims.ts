@@ -3236,4 +3236,25 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, claims: rows });
     },
   );
+
+  // F-464 claim-created-hourly
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/claim-created-hourly",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT strftime('%H', created_at) AS hour, COUNT(*) AS count
+           FROM claims
+           WHERE workspace_id = ?
+           GROUP BY strftime('%H', created_at)
+           ORDER BY hour ASC`,
+        )
+        .all(req.params.workspace) as {
+        hour: string;
+        count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, hours: rows });
+    },
+  );
 };

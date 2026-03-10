@@ -2917,4 +2917,28 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, blockers: rows });
     },
   );
+
+  // F-463 blocker-severity-age-avg
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/blocker-severity-age-avg",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT severity,
+                  COUNT(*) AS count,
+                  ROUND(AVG((julianday('now') - julianday(created_at)) * 24), 2) AS avg_age_hours
+           FROM blockers
+           WHERE workspace_id = ? AND status != 'resolved'
+           GROUP BY severity
+           ORDER BY avg_age_hours DESC`,
+        )
+        .all(req.params.workspace) as {
+        severity: string;
+        count: number;
+        avg_age_hours: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, severities: rows });
+    },
+  );
 };
