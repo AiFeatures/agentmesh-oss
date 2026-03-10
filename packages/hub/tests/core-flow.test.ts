@@ -8860,3 +8860,103 @@ test("GET /blockers/clustering returns blocker groups", async () => {
 
   await app.close();
 });
+
+// F-183: Claim ownership map
+test("GET /claims/ownership-map returns claim-agent mapping", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `om-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "om-a1", display_name: "OM A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "om-a1", scope: "fileScope", paths: ["src/app.ts"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/ownership-map`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.total_agents === "number");
+  assert.ok(typeof body.total_active_claims === "number");
+  assert.ok(Array.isArray(body.owners));
+  assert.equal(body.total_agents, 1);
+  assert.equal(body.owners[0].agent_id, "om-a1");
+  assert.equal(body.owners[0].claim_count, 1);
+
+  await app.close();
+});
+
+// F-184: Handoff completion rate
+test("GET /handoffs/completion-rate returns completion analytics", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `cr-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "cr-a1", display_name: "CR A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "cr-a2", display_name: "CR A2", capabilities: ["review"] },
+  });
+  const h = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "cr-a1", to_agent_id: "cr-a2", summary: "Completion rate test" },
+  });
+  const handoffId = h.json().handoff_id;
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs/${handoffId}/accept`,
+    headers: auth,
+    payload: {},
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/completion-rate`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.total === "number");
+  assert.ok(typeof body.accepted === "number");
+  assert.ok(typeof body.completion_rate === "number");
+  assert.ok(Array.isArray(body.by_target));
+  assert.equal(body.total, 1);
+  assert.equal(body.accepted, 1);
+  assert.equal(body.completion_rate, 100);
+
+  await app.close();
+});

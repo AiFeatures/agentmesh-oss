@@ -1476,4 +1476,74 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-183: Claim ownership map
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/ownership-map",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const claims = db
+        .prepare(
+          `SELECT c.claim_id, c.agent_id, c.scope, cp.path_pattern
+           FROM claims c
+           LEFT JOIN claim_paths cp ON c.claim_id = cp.claim_id
+           WHERE c.workspace_id = ? AND c.status = 'active'`,
+        )
+        .all(workspace) as Array<{
+        claim_id: string;
+        agent_id: string;
+        scope: string;
+        path_pattern: string | null;
+      }>;
+
+      const ownerMap: Record<
+        string,
+        Array<{ claim_id: string; scope: string; paths: string[] }>
+      > = {};
+      const claimMap: Record<
+        string,
+        { claim_id: string; agent_id: string; scope: string; paths: string[] }
+      > = {};
+
+      for (const c of claims) {
+        if (!claimMap[c.claim_id]) {
+          claimMap[c.claim_id] = {
+            claim_id: c.claim_id,
+            agent_id: c.agent_id,
+            scope: c.scope,
+            paths: [],
+          };
+        }
+        if (c.path_pattern) {
+          claimMap[c.claim_id].paths.push(c.path_pattern);
+        }
+      }
+
+      for (const claim of Object.values(claimMap)) {
+        if (!ownerMap[claim.agent_id]) ownerMap[claim.agent_id] = [];
+        ownerMap[claim.agent_id].push({
+          claim_id: claim.claim_id,
+          scope: claim.scope,
+          paths: claim.paths,
+        });
+      }
+
+      const owners = Object.entries(ownerMap).map(([agent_id, claimList]) => ({
+        agent_id,
+        claim_count: claimList.length,
+        total_paths: claimList.reduce((s, c) => s + c.paths.length, 0),
+        claims: claimList,
+      }));
+
+      owners.sort((a, b) => b.claim_count - a.claim_count);
+
+      return reply.send({
+        total_agents: owners.length,
+        total_active_claims: Object.keys(claimMap).length,
+        owners,
+      });
+    },
+  );
 };

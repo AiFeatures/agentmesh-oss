@@ -1190,4 +1190,52 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-184: Handoff completion rate
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/completion-rate",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const stats = db
+        .prepare(
+          `SELECT COUNT(*) as total,
+                  SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted,
+                  SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
+                  SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
+           FROM handoffs WHERE workspace_id = ?`,
+        )
+        .get(workspace) as { total: number; accepted: number; rejected: number; pending: number };
+
+      const byTarget = db
+        .prepare(
+          `SELECT to_agent_id,
+                  COUNT(*) as total,
+                  SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted
+           FROM handoffs
+           WHERE workspace_id = ? AND to_agent_id IS NOT NULL
+           GROUP BY to_agent_id
+           ORDER BY total DESC`,
+        )
+        .all(workspace) as Array<{ to_agent_id: string; total: number; accepted: number }>;
+
+      const completionRate =
+        stats.total > 0 ? Math.round((stats.accepted / stats.total) * 10000) / 100 : 0;
+
+      return reply.send({
+        total: stats.total,
+        accepted: stats.accepted,
+        rejected: stats.rejected,
+        pending: stats.pending,
+        completion_rate: completionRate,
+        by_target: byTarget.map((t) => ({
+          agent_id: t.to_agent_id,
+          total: t.total,
+          accepted: t.accepted,
+          rate: t.total > 0 ? Math.round((t.accepted / t.total) * 10000) / 100 : 0,
+        })),
+      });
+    },
+  );
 };
