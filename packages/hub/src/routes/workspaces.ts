@@ -3188,4 +3188,26 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ trend: rows });
     },
   );
+
+  // F-460 workspace-audit-action-types
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/workspace-audit-action-types",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT action, COUNT(*) AS count
+           FROM audit_log
+           WHERE workspace_id = ?
+           GROUP BY action
+           ORDER BY count DESC
+           LIMIT 30`,
+        )
+        .all(req.params.workspace) as {
+        action: string;
+        count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, actions: rows });
+    },
+  );
 };

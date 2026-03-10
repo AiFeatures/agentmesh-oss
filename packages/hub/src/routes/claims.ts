@@ -3212,4 +3212,28 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: rows });
     },
   );
+
+  // F-459 claim-dependency-count
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/claim-dependency-count",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT cd.claim_id, c.scope, COUNT(cd.depends_on_claim_id) AS dep_count
+           FROM claim_dependencies cd
+           JOIN claims c ON c.claim_id = cd.claim_id
+           WHERE c.workspace_id = ?
+           GROUP BY cd.claim_id
+           ORDER BY dep_count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        claim_id: string;
+        scope: string;
+        dep_count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, claims: rows });
+    },
+  );
 };
