@@ -2707,4 +2707,29 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ...row });
     },
   );
+
+  // F-336 blocker-aging-report
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blocker-aging-report",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT
+            CASE
+              WHEN julianday('now') - julianday(created_at) < 1 THEN 'under_1d'
+              WHEN julianday('now') - julianday(created_at) < 7 THEN '1d_to_7d'
+              WHEN julianday('now') - julianday(created_at) < 30 THEN '7d_to_30d'
+              ELSE 'over_30d'
+            END AS age_bucket,
+            COUNT(*) AS count
+           FROM blockers
+           WHERE workspace_id = ? AND status = 'open'
+           GROUP BY age_bucket
+           ORDER BY count DESC`,
+        )
+        .all(req.params.workspace) as { age_bucket: string; count: number }[];
+      reply.send({ workspace: req.params.workspace, aging: rows });
+    },
+  );
 };

@@ -2390,4 +2390,34 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ...row });
     },
   );
+
+  // F-335 summary-keyword-search
+  app.get<{ Params: { workspace: string }; Querystring: { q?: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/summary-keyword-search",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const keyword = req.query.q || "";
+      if (!keyword) {
+        reply.send({ workspace: req.params.workspace, results: [] });
+        return;
+      }
+      const rows = db
+        .prepare(
+          `SELECT handoff_id, from_agent_id, to_agent_id, summary, status, created_at
+           FROM handoffs
+           WHERE workspace_id = ? AND summary LIKE ?
+           ORDER BY created_at DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace, "%" + keyword + "%") as {
+        handoff_id: string;
+        from_agent_id: string;
+        to_agent_id: string;
+        summary: string;
+        status: string;
+        created_at: string;
+      }[];
+      reply.send({ workspace: req.params.workspace, results: rows });
+    },
+  );
 };
