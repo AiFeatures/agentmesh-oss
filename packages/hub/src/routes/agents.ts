@@ -3834,4 +3834,29 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, groups: rows });
     },
   );
+
+  // F-469 agent-last-seen-ranking
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/agent-last-seen-ranking",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT agent_id, display_name, status, last_heartbeat_at,
+                  RANK() OVER (ORDER BY last_heartbeat_at DESC) AS rank
+           FROM agents
+           WHERE workspace_id = ?
+           ORDER BY rank
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        status: string;
+        last_heartbeat_at: string | null;
+        rank: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, agents: rows });
+    },
+  );
 };

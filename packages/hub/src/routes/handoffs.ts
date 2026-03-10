@@ -3130,4 +3130,30 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, handoffs: rows });
     },
   );
+
+  // F-470 handoff-capability-tag-stats
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-capability-tag-stats",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT capability_tag,
+                  COUNT(*) AS total,
+                  SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
+                  SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending
+           FROM handoffs
+           WHERE workspace_id = ? AND capability_tag IS NOT NULL
+           GROUP BY capability_tag
+           ORDER BY total DESC`,
+        )
+        .all(req.params.workspace) as {
+        capability_tag: string;
+        total: number;
+        completed: number;
+        pending: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, tags: rows });
+    },
+  );
 };
