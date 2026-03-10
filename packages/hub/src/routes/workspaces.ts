@@ -1859,4 +1859,46 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-200: Workspace throughput metrics
+  app.get(
+    "/api/v1/workspaces/:workspace/throughput",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { hours = "24" } = request.query as { hours?: string };
+      const totalHours = Math.min(Number.parseInt(hours, 10) || 24, 720);
+      const since = new Date(Date.now() - totalHours * 3600000).toISOString();
+
+      const handoffCount = (
+        db
+          .prepare(`SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND created_at >= ?`)
+          .get(workspace, since) as { c: number }
+      ).c;
+
+      const claimCount = (
+        db
+          .prepare(`SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND created_at >= ?`)
+          .get(workspace, since) as { c: number }
+      ).c;
+
+      const blockerCount = (
+        db
+          .prepare(`SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND created_at >= ?`)
+          .get(workspace, since) as { c: number }
+      ).c;
+
+      const total = handoffCount + claimCount + blockerCount;
+
+      return reply.send({
+        workspace,
+        period_hours: totalHours,
+        handoffs: handoffCount,
+        claims: claimCount,
+        blockers: blockerCount,
+        total,
+        per_hour: totalHours > 0 ? Math.round((total / totalHours) * 100) / 100 : 0,
+      });
+    },
+  );
 };

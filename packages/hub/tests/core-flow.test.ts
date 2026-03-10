@@ -9362,3 +9362,45 @@ test("GET /handoffs/avg-acceptance-time returns acceptance stats", async () => {
   assert.ok(Array.isArray(body.agents));
   await app.close();
 });
+
+// ---------- F-199: Claim scope-overlap-risk ----------
+test("GET /claims/scope-overlap-risk returns risk analysis", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `cl-overrisk-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "scope1", paths: ["src/a.ts"], ttl_seconds: 3600 } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/scope-overlap-risk`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.active_claims === "number");
+  assert.ok(typeof body.path_overlaps === "number");
+  assert.ok(typeof body.risk_level === "string");
+  assert.ok(Array.isArray(body.hot_scopes));
+  await app.close();
+});
+
+// ---------- F-200: Workspace throughput ----------
+test("GET /workspaces/:workspace/throughput returns throughput metrics", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ws-thru-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/throughput?hours=24`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.handoffs === "number");
+  assert.ok(typeof body.claims === "number");
+  assert.ok(typeof body.blockers === "number");
+  assert.ok(typeof body.per_hour === "number");
+  assert.ok(body.handoffs >= 1);
+  await app.close();
+});

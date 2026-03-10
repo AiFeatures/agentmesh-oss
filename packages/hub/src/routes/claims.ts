@@ -1649,4 +1649,74 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-199: Scope overlap risk analysis
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/scope-overlap-risk",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const activeClaims = db
+        .prepare(
+          `SELECT c.claim_id, c.agent_id, c.scope, cp.path_pattern
+           FROM claims c
+           JOIN claim_paths cp ON cp.claim_id = c.claim_id
+           WHERE c.workspace_id = ? AND c.status = 'active'`,
+        )
+        .all(workspace) as {
+        claim_id: string;
+        agent_id: string;
+        scope: string;
+        path_pattern: string;
+      }[];
+
+      // Group paths by claim
+      const claimPaths: Record<string, { agent_id: string; scope: string; paths: string[] }> = {};
+      for (const c of activeClaims) {
+        if (!claimPaths[c.claim_id])
+          claimPaths[c.claim_id] = { agent_id: c.agent_id, scope: c.scope, paths: [] };
+        claimPaths[c.claim_id].paths.push(c.path_pattern);
+      }
+
+      // Find path prefix overlaps between different claims
+      const claimIds = Object.keys(claimPaths);
+      const overlaps: { claim_a: string; claim_b: string; overlapping_paths: string[] }[] = [];
+      for (let i = 0; i < claimIds.length; i++) {
+        for (let j = i + 1; j < claimIds.length; j++) {
+          const a = claimPaths[claimIds[i]];
+          const b = claimPaths[claimIds[j]];
+          const shared = a.paths.filter((p) =>
+            b.paths.some((bp) => p.startsWith(bp) || bp.startsWith(p)),
+          );
+          if (shared.length > 0) {
+            overlaps.push({
+              claim_a: claimIds[i],
+              claim_b: claimIds[j],
+              overlapping_paths: shared,
+            });
+          }
+        }
+      }
+
+      // Scope frequency as risk indicator
+      const scopeCount: Record<string, number> = {};
+      for (const c of Object.values(claimPaths)) {
+        scopeCount[c.scope] = (scopeCount[c.scope] || 0) + 1;
+      }
+      const hotScopes = Object.entries(scopeCount)
+        .filter(([_, count]) => count > 1)
+        .sort((a, b) => b[1] - a[1])
+        .map(([scope, count]) => ({ scope, active_claims: count }));
+
+      return reply.send({
+        workspace,
+        active_claims: claimIds.length,
+        path_overlaps: overlaps.length,
+        overlap_details: overlaps.slice(0, 20),
+        hot_scopes: hotScopes,
+        risk_level: overlaps.length > 5 ? "high" : overlaps.length > 0 ? "medium" : "low",
+      });
+    },
+  );
 };
