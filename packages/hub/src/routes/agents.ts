@@ -3859,4 +3859,26 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: rows });
     },
   );
+
+  // F-477 agent-status-transition-matrix
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/agent-status-transition-matrix",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT old_status, new_status, COUNT(*) AS transition_count
+           FROM agent_status_history
+           WHERE workspace_id = ?
+           GROUP BY old_status, new_status
+           ORDER BY transition_count DESC`,
+        )
+        .all(req.params.workspace) as {
+        old_status: string;
+        new_status: string;
+        transition_count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, transitions: rows });
+    },
+  );
 };
