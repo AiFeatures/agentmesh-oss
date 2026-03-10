@@ -10958,3 +10958,34 @@ test("GET /handoffs/feedback-summary returns summary", async () => {
   await app.close();
 });
 
+// F-285 workspace-capacity
+test("GET /workspace-capacity returns capacity summary", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "wscap-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/workspace-capacity`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(typeof body.agents === "number");
+  assert.ok(typeof body.claims === "number");
+  assert.ok(typeof body.blockers === "number");
+  assert.ok(typeof body.handoffs === "number");
+  await app.close();
+});
+
+// F-286 handoff-peak-hours
+test("GET /handoffs/peak-hours returns peak hours", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "peakhrs-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/peak-hours`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.by_hour));
+  await app.close();
+});
+

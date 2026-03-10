@@ -2429,4 +2429,21 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total_events: events.length, events });
     },
   );
+
+  // F-285 workspace-capacity
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/workspace-capacity",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const ws = req.params.workspace;
+      const agents = (db.prepare("SELECT COUNT(*) as c FROM agents WHERE workspace_id = ?").get(ws) as { c: number }).c;
+      const claims = (db.prepare("SELECT COUNT(*) as c FROM claims WHERE workspace_id = ?").get(ws) as { c: number }).c;
+      const blockers = (db.prepare("SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ?").get(ws) as { c: number }).c;
+      const handoffs = (db.prepare("SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ?").get(ws) as { c: number }).c;
+      const active_claims = (db.prepare("SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND status = 'active'").get(ws) as { c: number }).c;
+      const open_blockers = (db.prepare("SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status != 'resolved'").get(ws) as { c: number }).c;
+      reply.send({ workspace: ws, agents, claims, active_claims, blockers, open_blockers, handoffs });
+    },
+  );
+
 };

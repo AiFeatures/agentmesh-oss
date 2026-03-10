@@ -2093,4 +2093,24 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+
+  // F-286 handoff-peak-hours
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/peak-hours",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT CAST(strftime('%H', created_at) AS INTEGER) as hour, COUNT(*) as count
+           FROM handoffs
+           WHERE workspace_id = ?
+           GROUP BY hour
+           ORDER BY count DESC`,
+        )
+        .all(req.params.workspace) as { hour: number; count: number }[];
+      const peak = rows.length > 0 ? rows[0] : null;
+      reply.send({ workspace: req.params.workspace, by_hour: rows, peak_hour: peak });
+    },
+  );
+
 };
