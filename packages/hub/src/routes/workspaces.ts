@@ -2547,4 +2547,62 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-310 summary-report
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/summary-report",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const ws = req.params.workspace;
+      const agents = (
+        db.prepare("SELECT COUNT(*) as c FROM agents WHERE workspace_id = ?").get(ws) as {
+          c: number;
+        }
+      ).c;
+      const onlineAgents = (
+        db
+          .prepare("SELECT COUNT(*) as c FROM agents WHERE workspace_id = ? AND status = 'online'")
+          .get(ws) as { c: number }
+      ).c;
+      const handoffs = (
+        db.prepare("SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ?").get(ws) as {
+          c: number;
+        }
+      ).c;
+      const pendingHandoffs = (
+        db
+          .prepare(
+            "SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND status = 'pending'",
+          )
+          .get(ws) as { c: number }
+      ).c;
+      const blockers = (
+        db.prepare("SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ?").get(ws) as {
+          c: number;
+        }
+      ).c;
+      const openBlockers = (
+        db
+          .prepare("SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status = 'open'")
+          .get(ws) as { c: number }
+      ).c;
+      const claims = (
+        db.prepare("SELECT COUNT(*) as c FROM claims WHERE workspace_id = ?").get(ws) as {
+          c: number;
+        }
+      ).c;
+      const activeClaims = (
+        db
+          .prepare("SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND status = 'active'")
+          .get(ws) as { c: number }
+      ).c;
+      reply.send({
+        workspace: ws,
+        agents: { total: agents, online: onlineAgents },
+        handoffs: { total: handoffs, pending: pendingHandoffs },
+        blockers: { total: blockers, open: openBlockers },
+        claims: { total: claims, active: activeClaims },
+      });
+    },
+  );
 };

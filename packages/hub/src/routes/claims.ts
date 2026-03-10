@@ -2502,4 +2502,33 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ...row });
     },
   );
+
+  // F-309 expiry-velocity
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/expiry-velocity",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT DATE(expires_at) as expiry_date, COUNT(*) as count
+           FROM claims
+           WHERE workspace_id = ? AND expires_at IS NOT NULL
+           GROUP BY DATE(expires_at)
+           ORDER BY expiry_date DESC
+           LIMIT 30`,
+        )
+        .all(req.params.workspace) as {
+        expiry_date: string;
+        count: number;
+      }[];
+      const totalExpiring = rows.reduce((s, r) => s + r.count, 0);
+      const avgPerDay = rows.length > 0 ? totalExpiring / rows.length : 0;
+      reply.send({
+        workspace: req.params.workspace,
+        daily: rows,
+        total_expiring: totalExpiring,
+        avg_per_day: avgPerDay,
+      });
+    },
+  );
 };

@@ -11306,3 +11306,35 @@ test("GET /handoffs/rejection-reasons returns rejection data", async () => {
   assert.ok(typeof body.total_rejected === "number");
   await app.close();
 });
+
+// F-309 expiry-velocity
+test("GET /claims/expiry-velocity returns velocity data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "expvel-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/expiry-velocity`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.daily));
+  assert.ok(typeof body.avg_per_day === "number");
+  await app.close();
+});
+
+// F-310 summary-report
+test("GET /summary-report returns comprehensive report", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "sumrpt-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/summary-report`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(typeof body.agents.total === "number");
+  assert.ok(typeof body.handoffs.total === "number");
+  assert.ok(typeof body.blockers.total === "number");
+  assert.ok(typeof body.claims.total === "number");
+  await app.close();
+});
