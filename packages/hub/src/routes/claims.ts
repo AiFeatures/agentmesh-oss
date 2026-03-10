@@ -997,4 +997,32 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows });
     },
   );
+
+  /* ── F-110  claim expiry forecast ──────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/expiry-forecast",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const qs = request.query as { minutes?: string };
+      const minutes = Math.min(Math.max(Number.parseInt(qs.minutes || "30", 10) || 30, 1), 1440);
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const rows = db
+        .prepare(
+          `SELECT claim_id, agent_id, scope, expires_at,
+                  ROUND((julianday(expires_at) - julianday('now')) * 86400) as seconds_remaining
+           FROM claims
+           WHERE workspace_id = ? AND status = 'active'
+             AND expires_at <= datetime('now', '+' || ? || ' minutes')
+           ORDER BY expires_at ASC`,
+        )
+        .all(workspace, minutes) as Array<Record<string, unknown>>;
+      return reply.send({ window_minutes: minutes, count: rows.length, data: rows });
+    },
+  );
 };

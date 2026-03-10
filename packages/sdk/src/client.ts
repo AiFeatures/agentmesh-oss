@@ -932,6 +932,35 @@ export class AgentMeshClient {
     });
   }
 
+  /* ── F-108  agent dependency graph ──────────────── */
+  async getAgentDependencyGraph(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/agents/dependency-graph`, {
+      method: "GET",
+    });
+  }
+
+  /* ── F-109  workspace activity feed ─────────────── */
+  async getActivityFeed(
+    workspace: string,
+    opts?: { limit?: number; since?: string },
+  ): Promise<unknown> {
+    const params = new URLSearchParams();
+    if (opts?.limit) params.set("limit", String(opts.limit));
+    if (opts?.since) params.set("since", opts.since);
+    const qs = params.toString() ? `?${params}` : "";
+    return this.request(`/api/v1/workspaces/${workspace}/activity-feed${qs}`, {
+      method: "GET",
+    });
+  }
+
+  /* ── F-110  claim expiry forecast ───────────────── */
+  async getClaimExpiryForecast(workspace: string, minutes?: number): Promise<unknown> {
+    const qs = minutes ? `?minutes=${minutes}` : "";
+    return this.request(`/api/v1/workspaces/${workspace}/claims/expiry-forecast${qs}`, {
+      method: "GET",
+    });
+  }
+
   private async request<T = unknown>(path: string, init: RequestInit): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);

@@ -5462,3 +5462,143 @@ test("notification preferences get and update", async () => {
 
   await app.close();
 });
+
+/* ── F-108  agent dependency graph ─────────────────── */
+test("agent dependency graph shows edges from handoffs", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "dg";
+  const ws = `ws-dg-${suffix}`;
+  const a1 = `dg-a1-${suffix}`;
+  const a2 = `dg-a2-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "DepGraph test" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: a1, display_name: "A1", capabilities: ["test"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: a2, display_name: "A2", capabilities: ["test"] },
+  });
+
+  // create a handoff from a1 to a2
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { from_agent_id: a1, to_agent_id: a2, summary: "pass work" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/dependency-graph`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { nodes: string[]; edges: Array<{ from: string; to: string; weight: number }> };
+  assert.ok(body.nodes.includes(a1));
+  assert.ok(body.nodes.includes(a2));
+  assert.equal(body.edges.length, 1);
+  assert.equal(body.edges[0].from, a1);
+  assert.equal(body.edges[0].to, a2);
+  assert.equal(body.edges[0].weight, 1);
+
+  await app.close();
+});
+
+/* ── F-109  workspace activity feed ────────────────── */
+test("workspace activity feed returns recent events", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "af";
+  const ws = `ws-af-${suffix}`;
+  const aid = `af-a1-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Feed test" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: aid, display_name: "FeedAgent", capabilities: ["test"] },
+  });
+
+  // create a blocker to generate audit events
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: aid, title: "Test blocker", severity: "low" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/activity-feed?limit=10`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const data = res.json().data as Array<{ action: string }>;
+  assert.ok(data.length >= 1);
+
+  await app.close();
+});
+
+/* ── F-110  claim expiry forecast ──────────────────── */
+test("claim expiry forecast returns claims expiring soon", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "ef";
+  const ws = `ws-ef-${suffix}`;
+  const aid = `ef-a1-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Expiry test" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: aid, display_name: "ExpAgent", capabilities: ["test"] },
+  });
+
+  // create a claim with short TTL (60s -> expires within 30 min window)
+  const clm = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: aid, scope: "forecast-area", paths: ["f/**"], ttl_seconds: 60 },
+  });
+  assert.equal(clm.statusCode, 201);
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/expiry-forecast?minutes=60`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { window_minutes: number; count: number; data: unknown[] };
+  assert.equal(body.window_minutes, 60);
+  assert.ok(body.count >= 1);
+
+  await app.close();
+});

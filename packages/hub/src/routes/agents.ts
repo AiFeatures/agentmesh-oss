@@ -1166,4 +1166,45 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows });
     },
   );
+
+  /* ── F-108  agent dependency graph ──────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/dependency-graph",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const edges = db
+        .prepare(
+          `SELECT from_agent_id, to_agent_id, COUNT(*) as handoff_count
+           FROM handoffs
+           WHERE workspace_id = ? AND to_agent_id IS NOT NULL
+           GROUP BY from_agent_id, to_agent_id
+           ORDER BY handoff_count DESC`,
+        )
+        .all(workspace) as Array<{
+        from_agent_id: string;
+        to_agent_id: string;
+        handoff_count: number;
+      }>;
+      const nodeSet = new Set<string>();
+      for (const e of edges) {
+        nodeSet.add(e.from_agent_id);
+        nodeSet.add(e.to_agent_id);
+      }
+      return reply.send({
+        nodes: [...nodeSet],
+        edges: edges.map((e) => ({
+          from: e.from_agent_id,
+          to: e.to_agent_id,
+          weight: e.handoff_count,
+        })),
+      });
+    },
+  );
 };

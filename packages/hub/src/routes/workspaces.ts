@@ -896,4 +896,32 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send(settings.notifications);
     },
   );
+
+  /* ── F-109  workspace activity feed ───────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/activity-feed",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const qs = request.query as { limit?: string; since?: string };
+      const limit = Math.min(Math.max(Number.parseInt(qs.limit || "50", 10) || 50, 1), 200);
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      let sql =
+        "SELECT audit_id, action, entity_type, entity_id, actor_type, actor_id, created_at FROM audit_log WHERE workspace_id = ?";
+      const params: unknown[] = [workspace];
+      if (qs.since) {
+        sql += " AND created_at > ?";
+        params.push(qs.since);
+      }
+      sql += " ORDER BY created_at DESC LIMIT ?";
+      params.push(limit);
+      const rows = db.prepare(sql).all(...params);
+      return reply.send({ data: rows });
+    },
+  );
 };
