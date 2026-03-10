@@ -7356,3 +7356,93 @@ test("blocker auto_assign with no matching capability returns no assignment", as
 
   await app.close();
 });
+
+// --------------- F-149: Work queue stats ---------------
+test("work queue returns aggregated pending work", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-wq-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "wq-a1", display_name: "A1", capabilities: ["code"] },
+  });
+
+  // Create a claim
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "wq-a1", scope: "file", paths: ["src/a.ts"], ttl_seconds: 600 },
+  });
+
+  // Create a blocker
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "wq-a1", title: "Stuck", severity: "high" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/work-queue`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(body.summary);
+  assert.equal(body.summary.active_claims, 1);
+  assert.equal(body.summary.open_blockers, 1);
+  assert.equal(body.summary.online_agents, 1);
+  assert.ok(Array.isArray(body.agent_load));
+
+  await app.close();
+});
+
+// --------------- F-150: Workspace snapshot ---------------
+test("workspace snapshot returns current state", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-snap-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "snap-a1", display_name: "SA1", capabilities: ["code"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/snapshot`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(body.workspace);
+  assert.ok(body.snapshot_at);
+  assert.ok(Array.isArray(body.agents));
+  assert.equal(body.agents.length, 1);
+  assert.ok(Array.isArray(body.claims));
+  assert.ok(Array.isArray(body.blockers));
+  assert.ok(Array.isArray(body.handoffs));
+
+  await app.close();
+});

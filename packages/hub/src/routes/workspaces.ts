@@ -1336,4 +1336,131 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ ok: true, merged });
     },
   );
+
+  /* ── F-149  work queue stats ─────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/work-queue",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const activeClaims = (
+        db
+          .prepare("SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND status = 'active'")
+          .get(workspace) as { c: number }
+      ).c;
+
+      const pendingHandoffs = (
+        db
+          .prepare(
+            "SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND status = 'pending'",
+          )
+          .get(workspace) as { c: number }
+      ).c;
+
+      const openBlockers = (
+        db
+          .prepare("SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status = 'open'")
+          .get(workspace) as { c: number }
+      ).c;
+
+      const onlineAgents = (
+        db
+          .prepare("SELECT COUNT(*) as c FROM agents WHERE workspace_id = ? AND status = 'online'")
+          .get(workspace) as { c: number }
+      ).c;
+
+      const criticalBlockers = (
+        db
+          .prepare(
+            "SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status = 'open' AND severity IN ('high', 'critical')",
+          )
+          .get(workspace) as { c: number }
+      ).c;
+
+      const expiringClaims = (
+        db
+          .prepare(
+            "SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND status = 'active' AND expires_at <= datetime('now', '+5 minutes')",
+          )
+          .get(workspace) as { c: number }
+      ).c;
+
+      const agentLoad = db
+        .prepare(
+          `SELECT a.agent_id, a.display_name,
+           (SELECT COUNT(*) FROM claims c WHERE c.agent_id = a.agent_id AND c.workspace_id = ? AND c.status = 'active') as claims,
+           (SELECT COUNT(*) FROM handoffs h WHERE (h.from_agent_id = a.agent_id OR h.to_agent_id = a.agent_id) AND h.workspace_id = ? AND h.status = 'pending') as handoffs,
+           (SELECT COUNT(*) FROM blockers b WHERE b.agent_id = a.agent_id AND b.workspace_id = ? AND b.status = 'open') as blockers
+           FROM agents a WHERE a.workspace_id = ? AND a.status = 'online'
+           ORDER BY (claims * 2 + handoffs + blockers * 3) DESC
+           LIMIT 10`,
+        )
+        .all(workspace, workspace, workspace, workspace) as Array<{
+        agent_id: string;
+        display_name: string;
+        claims: number;
+        handoffs: number;
+        blockers: number;
+      }>;
+
+      return reply.send({
+        summary: {
+          active_claims: activeClaims,
+          pending_handoffs: pendingHandoffs,
+          open_blockers: openBlockers,
+          critical_blockers: criticalBlockers,
+          online_agents: onlineAgents,
+          expiring_claims_5m: expiringClaims,
+        },
+        agent_load: agentLoad,
+      });
+    },
+  );
+
+  /* ── F-150  workspace snapshot ────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/snapshot",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const ws = db.prepare("SELECT * FROM workspaces WHERE workspace_id = ?").get(workspace) as
+        | Record<string, unknown>
+        | undefined;
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+
+      const agents = db
+        .prepare(
+          "SELECT agent_id, display_name, status, capabilities FROM agents WHERE workspace_id = ?",
+        )
+        .all(workspace);
+      const claims = db
+        .prepare(
+          "SELECT claim_id, agent_id, scope, status, expires_at FROM claims WHERE workspace_id = ? AND status = 'active'",
+        )
+        .all(workspace);
+      const blockers = db
+        .prepare(
+          "SELECT blocker_id, agent_id, title, severity, status FROM blockers WHERE workspace_id = ? AND status = 'open'",
+        )
+        .all(workspace);
+      const handoffs = db
+        .prepare(
+          "SELECT handoff_id, from_agent_id, to_agent_id, status, summary FROM handoffs WHERE workspace_id = ? AND status = 'pending'",
+        )
+        .all(workspace);
+
+      return reply.send({
+        workspace: ws,
+        snapshot_at: new Date().toISOString(),
+        agents,
+        claims,
+        blockers,
+        handoffs,
+      });
+    },
+  );
 };
