@@ -2073,4 +2073,43 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, patterns: rows });
     },
   );
+
+  // F-303 severity-escalation-rate
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/severity-escalation-rate",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const total = (
+        db
+          .prepare("SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ?")
+          .get(req.params.workspace) as { c: number }
+      ).c;
+      const escalated = (
+        db
+          .prepare(
+            "SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND escalation_level > 0",
+          )
+          .get(req.params.workspace) as { c: number }
+      ).c;
+      const byLevel = db
+        .prepare(
+          `SELECT escalation_level, COUNT(*) as count
+           FROM blockers
+           WHERE workspace_id = ? AND escalation_level > 0
+           GROUP BY escalation_level
+           ORDER BY escalation_level`,
+        )
+        .all(req.params.workspace) as {
+        escalation_level: number;
+        count: number;
+      }[];
+      reply.send({
+        workspace: req.params.workspace,
+        total_blockers: total,
+        escalated,
+        escalation_rate: total > 0 ? escalated / total : 0,
+        by_level: byLevel,
+      });
+    },
+  );
 };
