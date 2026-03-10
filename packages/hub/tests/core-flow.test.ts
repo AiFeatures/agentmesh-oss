@@ -10839,3 +10839,34 @@ test("GET /claims/status-summary returns status breakdown", async () => {
   assert.ok(body.by_status);
   await app.close();
 });
+
+// F-277 agent-registration-trend
+test("GET /agents/registration-trend returns trend data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "regtrend-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/registration-trend`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.trend));
+  assert.ok(typeof body.total === "number");
+  await app.close();
+});
+
+// F-278 blocker-unresolved-aging
+test("GET /blockers/unresolved-aging returns aging stats", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "braging-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/unresolved-aging`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(typeof body.unresolved === "number");
+  assert.ok(typeof body.avg_hours_open === "number");
+  await app.close();
+});
+

@@ -2706,4 +2706,24 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total_interactions: rows.length, collaborations: result });
     },
   );
+
+  // F-277 agent-registration-trend
+  app.get<{ Params: { workspace: string }; Querystring: { days?: number } }>(
+    "/api/v1/workspaces/:workspace/agents/registration-trend",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const days = req.query.days ?? 30;
+      const rows = db
+        .prepare(
+          `SELECT date(created_at) as day, COUNT(*) as count
+           FROM agents
+           WHERE workspace_id = ? AND created_at >= datetime('now', '-' || ? || ' days')
+           GROUP BY day ORDER BY day`,
+        )
+        .all(req.params.workspace, days) as { day: string; count: number }[];
+      const total = rows.reduce((s, r) => s + r.count, 0);
+      reply.send({ workspace: req.params.workspace, days, trend: rows, total });
+    },
+  );
+
 };

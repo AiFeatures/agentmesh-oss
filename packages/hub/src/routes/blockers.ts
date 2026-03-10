@@ -1926,4 +1926,24 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total_agents: rows.length, agents: rows });
     },
   );
+
+  // F-278 blocker-unresolved-aging
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/unresolved-aging",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT blocker_id, title, severity,
+                  ROUND((julianday('now') - julianday(created_at)) * 24, 1) as hours_open
+           FROM blockers
+           WHERE workspace_id = ? AND status != 'resolved'
+           ORDER BY hours_open DESC`,
+        )
+        .all(req.params.workspace) as { blocker_id: string; title: string; severity: string; hours_open: number }[];
+      const avg_hours = rows.length > 0 ? Math.round((rows.reduce((s, r) => s + r.hours_open, 0) / rows.length) * 10) / 10 : 0;
+      reply.send({ workspace: req.params.workspace, unresolved: rows.length, avg_hours_open: avg_hours, blockers: rows });
+    },
+  );
+
 };
