@@ -1755,4 +1755,41 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-243: Handoff summary by agent
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/summary-by-agent",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const handoffs = db
+        .prepare(`SELECT from_agent_id, to_agent_id, status FROM handoffs WHERE workspace_id = ?`)
+        .all(workspace) as { from_agent_id: string; to_agent_id: string | null; status: string }[];
+
+      const agentStats: Record<
+        string,
+        { initiated: number; received: number; accepted: number; rejected: number }
+      > = {};
+      for (const h of handoffs) {
+        if (!agentStats[h.from_agent_id])
+          agentStats[h.from_agent_id] = { initiated: 0, received: 0, accepted: 0, rejected: 0 };
+        agentStats[h.from_agent_id].initiated++;
+        if (h.to_agent_id) {
+          if (!agentStats[h.to_agent_id])
+            agentStats[h.to_agent_id] = { initiated: 0, received: 0, accepted: 0, rejected: 0 };
+          agentStats[h.to_agent_id].received++;
+          if (h.status === "accepted" || h.status === "completed")
+            agentStats[h.to_agent_id].accepted++;
+          if (h.status === "rejected") agentStats[h.to_agent_id].rejected++;
+        }
+      }
+
+      const agents = Object.entries(agentStats)
+        .map(([agent_id, v]) => ({ agent_id, ...v }))
+        .sort((a, b) => b.initiated + b.received - (a.initiated + a.received));
+
+      return reply.send({ workspace, total_handoffs: handoffs.length, agents });
+    },
+  );
 };

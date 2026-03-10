@@ -2104,4 +2104,43 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-244: Claim expiry risk
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/expiry-risk",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const active = db
+        .prepare(
+          `SELECT claim_id, agent_id, scope, expires_at FROM claims WHERE workspace_id = ? AND status = 'active' AND expires_at IS NOT NULL`,
+        )
+        .all(workspace) as {
+        claim_id: string;
+        agent_id: string;
+        scope: string;
+        expires_at: string;
+      }[];
+
+      const now = Date.now();
+      const atRisk = active
+        .map((c) => {
+          const remaining = (new Date(c.expires_at).getTime() - now) / 60000;
+          return { ...c, remaining_minutes: Math.round(remaining * 100) / 100 };
+        })
+        .filter((c) => c.remaining_minutes < 60 && c.remaining_minutes > 0)
+        .sort((a, b) => a.remaining_minutes - b.remaining_minutes);
+
+      const expired = active.filter((c) => new Date(c.expires_at).getTime() < now).length;
+
+      return reply.send({
+        workspace,
+        active_with_expiry: active.length,
+        expiring_within_1h: atRisk.length,
+        already_expired: expired,
+        at_risk: atRisk.slice(0, 20),
+      });
+    },
+  );
 };
