@@ -12524,3 +12524,31 @@ test("GET /claims/expiry-window-stats returns windows", async () => {
   assert.ok(Array.isArray(body.windows));
   await app.close();
 });
+
+// F-395 handoff-sla-compliance
+test("GET /workspaces/handoff-sla-compliance returns compliance", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "slacmp-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoff-sla-compliance`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(typeof body.total === "number");
+  await app.close();
+});
+
+// F-396 notes-length-stats
+test("GET /handoffs/notes-length-stats returns stats", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "ntlen-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/notes-length-stats`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(typeof body.total === "number");
+  await app.close();
+});

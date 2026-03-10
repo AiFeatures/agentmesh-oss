@@ -2959,4 +2959,28 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, entity_types: rows });
     },
   );
+
+  // F-395 handoff-sla-compliance
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoff-sla-compliance",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT
+            COUNT(*) AS total,
+            SUM(CASE WHEN sla_deadline IS NOT NULL AND updated_at <= sla_deadline THEN 1 ELSE 0 END) AS met,
+            SUM(CASE WHEN sla_deadline IS NOT NULL AND updated_at > sla_deadline THEN 1 ELSE 0 END) AS missed
+           FROM handoffs
+           WHERE workspace_id = ? AND status IN ('accepted', 'completed') AND sla_deadline IS NOT NULL`,
+        )
+        .get(req.params.workspace) as {
+        total: number;
+        met: number;
+        missed: number;
+      };
+      const pct = row.total > 0 ? Math.round((row.met / row.total) * 10000) / 100 : null;
+      reply.send({ workspace: req.params.workspace, ...row, compliance_pct: pct });
+    },
+  );
 };

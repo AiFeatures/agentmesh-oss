@@ -2712,4 +2712,29 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, tags: rows });
     },
   );
+
+  // F-396 notes-length-stats
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/notes-length-stats",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS total,
+                  AVG(LENGTH(hn.content)) AS avg_length,
+                  MAX(LENGTH(hn.content)) AS max_length,
+                  MIN(LENGTH(hn.content)) AS min_length
+           FROM handoff_notes hn
+           JOIN handoffs h ON h.handoff_id = hn.handoff_id
+           WHERE h.workspace_id = ?`,
+        )
+        .get(req.params.workspace) as {
+        total: number;
+        avg_length: number | null;
+        max_length: number | null;
+        min_length: number | null;
+      };
+      reply.send({ workspace: req.params.workspace, ...row });
+    },
+  );
 };
