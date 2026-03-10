@@ -673,4 +673,36 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows });
     },
   );
+
+  /* ── F-135  handoff chain depth ─────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/chain-depth",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const rows = db
+        .prepare(
+          `SELECT h.handoff_id,
+                  (SELECT COUNT(*) FROM handoffs c
+                   WHERE c.workspace_id = h.workspace_id
+                     AND c.from_agent_id = h.to_agent_id
+                     AND c.created_at > h.created_at) as downstream_count
+           FROM handoffs h WHERE h.workspace_id = ?`,
+        )
+        .all(workspace) as Array<{ handoff_id: string; downstream_count: number }>;
+      const depths = rows.map((r) => r.downstream_count);
+      const maxDepth = depths.length > 0 ? Math.max(...depths) : 0;
+      const avgDepth =
+        depths.length > 0
+          ? Math.round((depths.reduce((a, b) => a + b, 0) / depths.length) * 100) / 100
+          : 0;
+      return reply.send({ total_handoffs: rows.length, max_depth: maxDepth, avg_depth: avgDepth });
+    },
+  );
 };

@@ -1112,6 +1112,23 @@ export class AgentMeshClient {
     });
   }
 
+  /* ── F-135  handoff chain depth ────────────────── */
+  async getHandoffChainDepth(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/handoffs/chain-depth`, { method: "GET" });
+  }
+
+  /* ── F-136  agent tag summary ──────────────────── */
+  async getAgentTagSummary(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/agents/tag-summary`, { method: "GET" });
+  }
+
+  /* ── F-137  claim scope frequency ──────────────── */
+  async getClaimScopeFrequency(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/claims/scope-frequency`, {
+      method: "GET",
+    });
+  }
+
   private async request<T = unknown>(path: string, init: RequestInit): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);

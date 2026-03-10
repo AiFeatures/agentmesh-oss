@@ -1117,4 +1117,27 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows });
     },
   );
+
+  /* ── F-137  claim scope frequency ──────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/scope-frequency",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const rows = db
+        .prepare(
+          `SELECT scope, COUNT(*) as frequency
+           FROM claims WHERE workspace_id = ?
+           GROUP BY scope ORDER BY frequency DESC LIMIT 50`,
+        )
+        .all(workspace);
+      return reply.send({ data: rows });
+    },
+  );
 };

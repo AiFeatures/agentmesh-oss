@@ -6422,3 +6422,94 @@ test("GET /workspaces/:workspace/blockers/escalation-rate", async () => {
 
   await app.close();
 });
+
+/* ── F-135  handoff chain depth ────────────────────────── */
+test("GET /workspaces/:workspace/handoffs/chain-depth", async () => {
+  runMigrations();
+  const app = buildApp();
+  const suffix = Date.now().toString(36);
+  const ws = `ws-cd-${suffix}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "ChainDepth" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/chain-depth`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { total_handoffs: number; max_depth: number; avg_depth: number };
+  assert.equal(body.total_handoffs, 0);
+  assert.equal(body.max_depth, 0);
+
+  await app.close();
+});
+
+/* ── F-136  agent tag summary ──────────────────────────── */
+test("GET /workspaces/:workspace/agents/tag-summary", async () => {
+  runMigrations();
+  const app = buildApp();
+  const suffix = Date.now().toString(36);
+  const ws = `ws-ts-${suffix}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "TagSum" },
+  });
+
+  // Register agent with tags
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-ts-${suffix}`, display_name: "TagAgent", capabilities: ["code"], tags: ["frontend", "react"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/tag-summary`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { data: Array<{ tag: string; count: number }> };
+  assert.ok(Array.isArray(body.data));
+  assert.ok(body.data.length >= 2);
+
+  await app.close();
+});
+
+/* ── F-137  claim scope frequency ──────────────────────── */
+test("GET /workspaces/:workspace/claims/scope-frequency", async () => {
+  runMigrations();
+  const app = buildApp();
+  const suffix = Date.now().toString(36);
+  const ws = `ws-sf-${suffix}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "ScopeFreq" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/scope-frequency`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { data: unknown[] };
+  assert.ok(Array.isArray(body.data));
+
+  await app.close();
+});

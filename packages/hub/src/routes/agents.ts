@@ -1426,4 +1426,39 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: handoffCaps });
     },
   );
+
+  /* ── F-136  agent tag summary ───────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/tag-summary",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const agents = db
+        .prepare("SELECT tags FROM agents WHERE workspace_id = ? AND tags IS NOT NULL")
+        .all(workspace) as Array<{ tags: string }>;
+      const tagCounts: Record<string, number> = {};
+      for (const a of agents) {
+        try {
+          const arr = JSON.parse(a.tags);
+          if (Array.isArray(arr)) {
+            for (const t of arr) {
+              tagCounts[t] = (tagCounts[t] || 0) + 1;
+            }
+          }
+        } catch {
+          /* skip malformed */
+        }
+      }
+      const data = Object.entries(tagCounts)
+        .map(([tag, count]) => ({ tag, count }))
+        .sort((a, b) => b.count - a.count);
+      return reply.send({ data });
+    },
+  );
 };
