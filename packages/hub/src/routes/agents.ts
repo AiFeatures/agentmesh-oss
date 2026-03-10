@@ -3380,4 +3380,36 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-381 agent-capability-diversity
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/capability-diversity",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT agent_id, display_name, capabilities
+           FROM agents
+           WHERE workspace_id = ?`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        capabilities: string;
+      }[];
+      const result = rows.map((r) => {
+        let caps: string[] = [];
+        try {
+          caps = JSON.parse(r.capabilities || "[]");
+        } catch {}
+        return {
+          agent_id: r.agent_id,
+          display_name: r.display_name,
+          unique_capabilities: caps.length,
+        };
+      });
+      result.sort((a, b) => b.unique_capabilities - a.unique_capabilities);
+      reply.send({ workspace: req.params.workspace, agents: result });
+    },
+  );
 };

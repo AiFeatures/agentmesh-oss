@@ -2905,4 +2905,22 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, days: rows });
     },
   );
+
+  // F-382 workspace-blocker-severity-summary
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blocker-severity-summary",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT severity, COUNT(*) AS count
+           FROM blockers
+           WHERE workspace_id = ?
+           GROUP BY severity
+           ORDER BY count DESC`,
+        )
+        .all(req.params.workspace) as { severity: string; count: number }[];
+      reply.send({ workspace: req.params.workspace, severities: rows });
+    },
+  );
 };
