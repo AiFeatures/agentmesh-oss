@@ -3057,4 +3057,33 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, capabilities: result });
     },
   );
+
+  // F-324 heartbeat-consistency
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/heartbeat-consistency",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT agent_id, display_name, last_heartbeat_at,
+                  (julianday('now') - julianday(last_heartbeat_at)) * 86400 as seconds_since_heartbeat
+           FROM agents
+           WHERE workspace_id = ? AND last_heartbeat_at IS NOT NULL
+           ORDER BY seconds_since_heartbeat ASC`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        last_heartbeat_at: string;
+        seconds_since_heartbeat: number;
+      }[];
+      const avg =
+        rows.length > 0 ? rows.reduce((s, r) => s + r.seconds_since_heartbeat, 0) / rows.length : 0;
+      reply.send({
+        workspace: req.params.workspace,
+        agents: rows,
+        avg_seconds_since_heartbeat: avg,
+      });
+    },
+  );
 };

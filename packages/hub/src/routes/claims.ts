@@ -2589,4 +2589,28 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-323 scope-prefix-tree
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/scope-prefix-tree",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare("SELECT scope FROM claims WHERE workspace_id = ?")
+        .all(req.params.workspace) as { scope: string }[];
+      const prefixes: Record<string, number> = {};
+      for (const r of rows) {
+        const parts = r.scope.split(".");
+        let prefix = "";
+        for (const p of parts) {
+          prefix = prefix ? `${prefix}.${p}` : p;
+          prefixes[prefix] = (prefixes[prefix] || 0) + 1;
+        }
+      }
+      const tree = Object.entries(prefixes)
+        .map(([prefix, count]) => ({ prefix, count, depth: prefix.split(".").length }))
+        .sort((a, b) => b.count - a.count);
+      reply.send({ workspace: req.params.workspace, prefixes: tree });
+    },
+  );
 };

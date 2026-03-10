@@ -11511,3 +11511,32 @@ test("GET /blockers/cross-agent-impact returns impact data", async () => {
   assert.ok(Array.isArray(body.blockers));
   await app.close();
 });
+
+// F-323 scope-prefix-tree
+test("GET /claims/scope-prefix-tree returns prefix data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "scppfx-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/scope-prefix-tree`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.prefixes));
+  await app.close();
+});
+
+// F-324 heartbeat-consistency
+test("GET /agents/heartbeat-consistency returns consistency data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "hbcon-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/heartbeat-consistency`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.agents));
+  assert.ok(typeof body.avg_seconds_since_heartbeat === "number");
+  await app.close();
+});
