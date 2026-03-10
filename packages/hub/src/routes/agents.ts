@@ -3110,4 +3110,29 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: rows });
     },
   );
+
+  // F-332 idle-duration
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/idle-duration",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT agent_id, display_name, status, last_heartbeat_at,
+                  CAST((julianday('now') - julianday(last_heartbeat_at)) * 86400 AS INTEGER) AS idle_seconds
+           FROM agents
+           WHERE workspace_id = ? AND last_heartbeat_at IS NOT NULL
+           ORDER BY idle_seconds DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        status: string;
+        last_heartbeat_at: string;
+        idle_seconds: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, agents: rows });
+    },
+  );
 };

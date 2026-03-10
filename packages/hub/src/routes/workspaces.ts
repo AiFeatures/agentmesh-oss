@@ -2684,4 +2684,27 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-331 handoff-flow-balance
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoff-flow-balance",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT
+            SUM(CASE WHEN to_agent_id IS NOT NULL THEN 1 ELSE 0 END) AS incoming,
+            SUM(CASE WHEN from_agent_id IS NOT NULL THEN 1 ELSE 0 END) AS outgoing,
+            COUNT(*) AS total
+           FROM handoffs
+           WHERE workspace_id = ?`,
+        )
+        .get(req.params.workspace) as {
+        incoming: number;
+        outgoing: number;
+        total: number;
+      };
+      reply.send({ workspace: req.params.workspace, ...row });
+    },
+  );
 };
