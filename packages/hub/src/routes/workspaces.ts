@@ -1463,4 +1463,73 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-155  workspace comparison ───────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/compare/:other",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, other } = request.params as {
+        workspace: string;
+        other: string;
+      };
+
+      const statsFor = (wsId: string) => {
+        const agents = (
+          db.prepare("SELECT COUNT(*) as c FROM agents WHERE workspace_id = ?").get(wsId) as {
+            c: number;
+          }
+        ).c;
+        const claims = (
+          db
+            .prepare(
+              "SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND status = 'active'",
+            )
+            .get(wsId) as { c: number }
+        ).c;
+        const blockers = (
+          db
+            .prepare(
+              "SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status = 'open'",
+            )
+            .get(wsId) as { c: number }
+        ).c;
+        const handoffs = (
+          db
+            .prepare(
+              "SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND status = 'pending'",
+            )
+            .get(wsId) as { c: number }
+        ).c;
+
+        const capabilities = db
+          .prepare(
+            `SELECT DISTINCT json_each.value as cap
+             FROM agents, json_each(agents.capabilities)
+             WHERE agents.workspace_id = ?`,
+          )
+          .all(wsId)
+          .map((r: any) => r.cap);
+
+        return { agents, claims, blockers, handoffs, capabilities };
+      };
+
+      const left = statsFor(workspace);
+      const right = statsFor(other);
+
+      const sharedCaps = left.capabilities.filter((c: string) => right.capabilities.includes(c));
+      const leftOnly = left.capabilities.filter((c: string) => !right.capabilities.includes(c));
+      const rightOnly = right.capabilities.filter((c: string) => !left.capabilities.includes(c));
+
+      return reply.send({
+        left: { workspace_id: workspace, ...left },
+        right: { workspace_id: other, ...right },
+        capability_overlap: {
+          shared: sharedCaps,
+          left_only: leftOnly,
+          right_only: rightOnly,
+        },
+      });
+    },
+  );
 };

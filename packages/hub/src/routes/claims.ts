@@ -1227,4 +1227,61 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-156  claim overlap detection ────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/overlaps",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      // Find active claims that share the same path patterns
+      const overlaps = db
+        .prepare(
+          `SELECT p1.path_pattern, c1.claim_id as claim_a, c1.agent_id as agent_a,
+                  c2.claim_id as claim_b, c2.agent_id as agent_b
+           FROM claim_paths p1
+           JOIN claim_paths p2 ON p1.path_pattern = p2.path_pattern AND p1.claim_id < p2.claim_id
+           JOIN claims c1 ON c1.claim_id = p1.claim_id AND c1.status = 'active'
+           JOIN claims c2 ON c2.claim_id = p2.claim_id AND c2.status = 'active'
+           WHERE c1.workspace_id = ? AND c2.workspace_id = ?
+           ORDER BY p1.path_pattern
+           LIMIT 100`,
+        )
+        .all(workspace, workspace) as Array<{
+        path_pattern: string;
+        claim_a: string;
+        agent_a: string;
+        claim_b: string;
+        agent_b: string;
+      }>;
+
+      // Group by path
+      const byPath = new Map<
+        string,
+        Array<{ claim_a: string; agent_a: string; claim_b: string; agent_b: string }>
+      >();
+      for (const o of overlaps) {
+        const list = byPath.get(o.path_pattern) ?? [];
+        list.push({
+          claim_a: o.claim_a,
+          agent_a: o.agent_a,
+          claim_b: o.claim_b,
+          agent_b: o.agent_b,
+        });
+        byPath.set(o.path_pattern, list);
+      }
+
+      const grouped = Array.from(byPath.entries()).map(([path, pairs]) => ({
+        path_pattern: path,
+        overlap_count: pairs.length,
+        pairs,
+      }));
+
+      return reply.send({
+        total_overlaps: overlaps.length,
+        paths: grouped,
+      });
+    },
+  );
 };

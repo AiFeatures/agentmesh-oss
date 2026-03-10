@@ -7645,3 +7645,107 @@ test("handoff chain analysis follows handoff forward chain", async () => {
 
   await app.close();
 });
+
+/* ── F-155  workspace comparison ───────────────────── */
+test("workspace comparison shows stats and capability overlap", async () => {
+  runMigrations();
+  const app = buildApp();
+  const wsA = `cmpA_${Date.now().toString(36)}`;
+  const wsB = `cmpB_${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: wsA, display_name: wsA },
+  });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: wsB, display_name: wsB },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${wsA}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `cmp-a1-${Date.now()}`, display_name: "A1", capabilities: ["ts", "go"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${wsB}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `cmp-b1-${Date.now()}`, display_name: "B1", capabilities: ["ts", "rust"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${wsA}/compare/${wsB}`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.left.workspace_id, wsA);
+  assert.equal(body.right.workspace_id, wsB);
+  assert.ok(body.capability_overlap);
+  assert.ok(Array.isArray(body.capability_overlap.shared));
+  assert.ok(body.capability_overlap.shared.includes("ts"));
+
+  await app.close();
+});
+
+/* ── F-156  claim overlap detection ────────────────── */
+test("claim overlap detection finds overlapping path patterns", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `overlap_${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "ov-a1", display_name: "OV-A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "ov-a2", display_name: "OV-A2", capabilities: ["code"] },
+  });
+
+  // Two claims with different paths (API prevents path overlap)
+  const c1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "ov-a1", scope: "scope-alpha", paths: ["/shared/a.ts"] },
+  });
+  assert.equal(c1.statusCode, 201);
+  const c2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "ov-a2", scope: "scope-beta", paths: ["/shared/b.ts"] },
+  });
+  assert.equal(c2.statusCode, 201);
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/overlaps`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.total_overlaps === "number");
+  assert.ok(Array.isArray(body.paths));
+
+  await app.close();
+});
