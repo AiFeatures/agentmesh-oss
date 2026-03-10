@@ -13948,3 +13948,31 @@ test("GET /handoffs/handoff-priority-distribution returns distribution", async (
   assert.ok(Array.isArray(body.priorities));
   await app.close();
 });
+
+// F-497 claim-scope-uniqueness-ratio
+test("GET /claims/claim-scope-uniqueness-ratio returns ratio", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "csur-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-scope-uniqueness-ratio`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(typeof body.total_claims === "number");
+  await app.close();
+});
+
+// F-498 workspace-claim-density
+test("GET /workspace-claim-density returns density", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "wcd-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/workspace-claim-density`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(typeof body.claims_per_agent === "number");
+  await app.close();
+});

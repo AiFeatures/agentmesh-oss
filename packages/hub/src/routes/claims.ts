@@ -3395,4 +3395,31 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ...row });
     },
   );
+
+  // F-497 claim-scope-uniqueness-ratio
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/claim-scope-uniqueness-ratio",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS total_claims,
+                  COUNT(DISTINCT scope) AS unique_scopes,
+                  ROUND(
+                    CASE WHEN COUNT(*) > 0
+                      THEN 1.0 * COUNT(DISTINCT scope) / COUNT(*)
+                      ELSE 0
+                    END, 3
+                  ) AS uniqueness_ratio
+           FROM claims
+           WHERE workspace_id = ?`,
+        )
+        .get(req.params.workspace) as {
+        total_claims: number;
+        unique_scopes: number;
+        uniqueness_ratio: number;
+      };
+      reply.send({ workspace: req.params.workspace, ...row });
+    },
+  );
 };
