@@ -10184,3 +10184,40 @@ test("GET /claims/active-summary returns active claims detail", async () => {
   assert.ok(Array.isArray(body.claims));
   await app.close();
 });
+
+// ---------- F-241: Workspace handoff summary ----------
+test("GET /workspace handoff-summary returns handoff status breakdown", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ws-hosumm-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", summary: "task" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoff-summary`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_handoffs === "number");
+  assert.ok(body.by_status);
+  assert.ok(typeof body.success_rate_percent === "number");
+  await app.close();
+});
+
+// ---------- F-242: Blocker age histogram ----------
+test("GET /blockers/age-histogram returns age buckets", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `bl-agehist-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "bug", severity: "medium" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/age-histogram`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_blockers === "number");
+  assert.ok(body.buckets);
+  await app.close();
+});

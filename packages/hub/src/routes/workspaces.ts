@@ -2185,4 +2185,35 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-241: Workspace handoff summary
+  app.get(
+    "/api/v1/workspaces/:workspace/handoff-summary",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const handoffs = db
+        .prepare(`SELECT status FROM handoffs WHERE workspace_id = ?`)
+        .all(workspace) as { status: string }[];
+
+      const total = handoffs.length;
+      const byStatus: Record<string, number> = {};
+      for (const h of handoffs) {
+        byStatus[h.status] = (byStatus[h.status] || 0) + 1;
+      }
+
+      const accepted = byStatus.accepted || 0;
+      const completed = byStatus.completed || 0;
+      const successRate =
+        total > 0 ? Math.round(((accepted + completed) / total) * 10000) / 100 : 0;
+
+      return reply.send({
+        workspace,
+        total_handoffs: total,
+        by_status: byStatus,
+        success_rate_percent: successRate,
+      });
+    },
+  );
 };

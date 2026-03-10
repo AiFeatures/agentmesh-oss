@@ -1672,4 +1672,53 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-242: Blocker age distribution (histogram)
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/age-histogram",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const blockers = db
+        .prepare(
+          `SELECT blocker_id, created_at, status, resolved_at FROM blockers WHERE workspace_id = ?`,
+        )
+        .all(workspace) as {
+        blocker_id: string;
+        created_at: string;
+        status: string;
+        resolved_at: string | null;
+      }[];
+
+      const now = Date.now();
+      const buckets = {
+        "<1h": 0,
+        "1-4h": 0,
+        "4-12h": 0,
+        "12-24h": 0,
+        "1-3d": 0,
+        "3-7d": 0,
+        ">7d": 0,
+      };
+
+      for (const b of blockers) {
+        const end = b.resolved_at ? new Date(b.resolved_at).getTime() : now;
+        const hours = (end - new Date(b.created_at).getTime()) / 3600000;
+        if (hours < 1) buckets["<1h"]++;
+        else if (hours < 4) buckets["1-4h"]++;
+        else if (hours < 12) buckets["4-12h"]++;
+        else if (hours < 24) buckets["12-24h"]++;
+        else if (hours < 72) buckets["1-3d"]++;
+        else if (hours < 168) buckets["3-7d"]++;
+        else buckets[">7d"]++;
+      }
+
+      return reply.send({
+        workspace,
+        total_blockers: blockers.length,
+        buckets,
+      });
+    },
+  );
 };
