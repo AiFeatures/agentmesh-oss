@@ -7153,3 +7153,117 @@ test("workspace merge rejects self-merge", async () => {
 
   await app.close();
 });
+
+// --------------- F-146: Handoff SLA countdown ---------------
+test("handoff SLA countdown returns approaching deadlines", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-slac-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] },
+  });
+
+  // Create handoff with tight SLA
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: {
+      from_agent_id: "a1",
+      summary: "Urgent review",
+      required_capability: "review",
+      sla_seconds: 600,
+    },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/sla-countdown?threshold_minutes=15`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.ok(typeof res.json().threshold_minutes === "number");
+  assert.ok(Array.isArray(res.json().data));
+
+  await app.close();
+});
+
+// --------------- F-147: Handoff batch accept ---------------
+test("batch accept handles multiple handoffs", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-ba-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "sender", display_name: "S", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "receiver", display_name: "R", capabilities: ["review"] },
+  });
+
+  const ids: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    const h = await app.inject({
+      method: "POST",
+      url: `/api/v1/workspaces/${ws}/handoffs`,
+      headers: auth,
+      payload: {
+        from_agent_id: "sender",
+        summary: `Task ${i}`,
+        required_capability: "review",
+      },
+    });
+    ids.push(h.json().handoff_id);
+  }
+
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs/batch-accept`,
+    headers: auth,
+    payload: { handoff_ids: ids, agent_id: "receiver" },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().accepted, 3);
+  assert.equal(res.json().results.length, 3);
+
+  // Accept again should fail (already accepted)
+  const res2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs/batch-accept`,
+    headers: auth,
+    payload: { handoff_ids: ids, agent_id: "receiver" },
+  });
+  assert.equal(res2.json().accepted, 0);
+
+  await app.close();
+});

@@ -734,4 +734,113 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ total, rejected, rejection_rate: rate });
     },
   );
+
+  /* ── F-146  handoff SLA countdown ─────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/sla-countdown",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        querystring: {
+          type: "object",
+          properties: {
+            threshold_minutes: { type: "integer", minimum: 1 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const qs = request.query as { threshold_minutes?: number };
+      const threshold = qs.threshold_minutes ?? 30;
+
+      const rows = db
+        .prepare(
+          `SELECT handoff_id, from_agent_id, to_agent_id, summary, sla_deadline,
+           CAST((julianday(sla_deadline) - julianday('now')) * 1440 AS INTEGER) as minutes_remaining
+           FROM handoffs
+           WHERE workspace_id = ? AND status = 'pending' AND sla_deadline IS NOT NULL
+             AND sla_deadline > datetime('now')
+             AND sla_deadline <= datetime('now', '+' || ? || ' minutes')
+           ORDER BY sla_deadline ASC`,
+        )
+        .all(workspace, threshold) as Array<{
+        handoff_id: string;
+        from_agent_id: string;
+        to_agent_id: string | null;
+        summary: string;
+        sla_deadline: string;
+        minutes_remaining: number;
+      }>;
+
+      return reply.send({
+        threshold_minutes: threshold,
+        count: rows.length,
+        data: rows,
+      });
+    },
+  );
+
+  /* ── F-147  handoff batch accept ─────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/handoffs/batch-accept",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["handoff_ids", "agent_id"],
+          properties: {
+            handoff_ids: { type: "array", items: { type: "string" }, maxItems: 50 },
+            agent_id: { type: "string", minLength: 1, maxLength: 128 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { handoff_ids, agent_id } = request.body as {
+        handoff_ids: string[];
+        agent_id: string;
+      };
+
+      const results: Array<{ handoff_id: string; accepted: boolean }> = [];
+      for (const hid of handoff_ids) {
+        const row = db
+          .prepare(
+            "SELECT handoff_id, status FROM handoffs WHERE handoff_id = ? AND workspace_id = ?",
+          )
+          .get(hid, workspace) as { handoff_id: string; status: string } | undefined;
+
+        if (!row || row.status !== "pending") {
+          results.push({ handoff_id: hid, accepted: false });
+          continue;
+        }
+
+        const ok = updateHandoffStatus(hid, "accepted");
+        if (ok) {
+          writeAuditLog({
+            workspaceId: workspace,
+            actorType: "agent",
+            action: "handoff.accept",
+            entityType: "handoff",
+            entityId: hid,
+            requestId: request.id,
+            payload: { agent_id },
+          });
+          broadcast("handoffs.updated", {
+            workspace,
+            handoff_id: hid,
+            status: "accepted",
+          });
+        }
+        results.push({ handoff_id: hid, accepted: ok });
+      }
+
+      return reply.send({
+        accepted: results.filter((r) => r.accepted).length,
+        results,
+      });
+    },
+  );
 };
