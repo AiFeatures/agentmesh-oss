@@ -3338,4 +3338,22 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: rows });
     },
   );
+
+  // F-496 handoff-priority-distribution
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-priority-distribution",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT COALESCE(priority, 0) AS priority, COUNT(*) AS count
+           FROM handoffs
+           WHERE workspace_id = ?
+           GROUP BY priority
+           ORDER BY priority`,
+        )
+        .all(req.params.workspace) as { priority: number; count: number }[];
+      reply.send({ workspace: req.params.workspace, priorities: rows });
+    },
+  );
 };

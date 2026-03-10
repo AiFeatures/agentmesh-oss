@@ -3063,4 +3063,26 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, buckets: rows });
     },
   );
+
+  // F-495 blocker-severity-agent-crosstab
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/blocker-severity-agent-crosstab",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT agent_id, severity, COUNT(*) AS count
+           FROM blockers
+           WHERE workspace_id = ?
+           GROUP BY agent_id, severity
+           ORDER BY agent_id, severity`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        severity: string;
+        count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, crosstab: rows });
+    },
+  );
 };
