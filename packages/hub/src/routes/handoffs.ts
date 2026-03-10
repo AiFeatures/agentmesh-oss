@@ -3282,4 +3282,28 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, handoffs: rows });
     },
   );
+
+  // F-490 handoff-sla-deadline-remaining
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-sla-deadline-remaining",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT handoff_id, summary, sla_deadline,
+                  ROUND((julianday(sla_deadline) - julianday('now')) * 24, 1) AS hours_remaining
+           FROM handoffs
+           WHERE workspace_id = ? AND sla_deadline IS NOT NULL AND status = 'pending'
+           ORDER BY hours_remaining ASC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        handoff_id: string;
+        summary: string;
+        sla_deadline: string;
+        hours_remaining: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, handoffs: rows });
+    },
+  );
 };

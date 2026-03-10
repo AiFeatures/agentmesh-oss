@@ -13836,3 +13836,31 @@ test("GET /claims/claim-path-pattern-popularity returns pattern stats", async ()
   assert.ok(Array.isArray(body.patterns));
   await app.close();
 });
+
+// F-489 blocker-age-bucket
+test("GET /blockers/blocker-age-bucket returns age buckets", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "bab-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-age-bucket`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.buckets));
+  await app.close();
+});
+
+// F-490 handoff-sla-deadline-remaining
+test("GET /handoffs/handoff-sla-deadline-remaining returns remaining hours", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "hsdr-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-sla-deadline-remaining`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.handoffs));
+  await app.close();
+});

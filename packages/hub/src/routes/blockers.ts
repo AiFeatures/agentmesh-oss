@@ -3038,4 +3038,29 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, levels: rows });
     },
   );
+
+  // F-489 blocker-age-bucket
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/blocker-age-bucket",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT
+             CASE
+               WHEN (julianday('now') - julianday(created_at)) < 1 THEN '<1d'
+               WHEN (julianday('now') - julianday(created_at)) < 7 THEN '1-7d'
+               WHEN (julianday('now') - julianday(created_at)) < 30 THEN '7-30d'
+               ELSE '30d+'
+             END AS bucket,
+             COUNT(*) AS count
+           FROM blockers
+           WHERE workspace_id = ? AND status = 'open'
+           GROUP BY bucket
+           ORDER BY count DESC`,
+        )
+        .all(req.params.workspace) as { bucket: string; count: number }[];
+      reply.send({ workspace: req.params.workspace, buckets: rows });
+    },
+  );
 };
