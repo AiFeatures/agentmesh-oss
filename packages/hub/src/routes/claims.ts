@@ -3325,4 +3325,24 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, transfers: rows });
     },
   );
+
+  // F-483 claim-renewal-count-distribution
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/claim-renewal-count-distribution",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT claim_id, COUNT(*) AS renewal_count
+           FROM claim_renewal_history crh
+           JOIN claims c USING (claim_id)
+           WHERE c.workspace_id = ?
+           GROUP BY claim_id
+           ORDER BY renewal_count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as { claim_id: string; renewal_count: number }[];
+      reply.send({ workspace: req.params.workspace, renewals: rows });
+    },
+  );
 };

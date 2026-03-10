@@ -3907,4 +3907,31 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, tags: sorted });
     },
   );
+
+  // F-484 agent-metadata-key-count
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/agent-metadata-key-count",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const agents = db
+        .prepare(
+          `SELECT agent_id, display_name, metadata FROM agents WHERE workspace_id = ? AND metadata IS NOT NULL`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        metadata: string;
+      }[];
+      const result = agents.map((a) => {
+        let key_count = 0;
+        try {
+          const obj = JSON.parse(a.metadata);
+          if (obj && typeof obj === "object") key_count = Object.keys(obj).length;
+        } catch {}
+        return { agent_id: a.agent_id, display_name: a.display_name, key_count };
+      });
+      result.sort((a, b) => b.key_count - a.key_count);
+      reply.send({ workspace: req.params.workspace, agents: result });
+    },
+  );
 };
