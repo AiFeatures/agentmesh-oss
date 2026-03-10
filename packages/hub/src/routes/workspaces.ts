@@ -3006,4 +3006,30 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, actors: rows });
     },
   );
+
+  // F-406 entity-totals
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/entity-totals",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const ws = req.params.workspace;
+      const row = db
+        .prepare(
+          `SELECT
+             (SELECT COUNT(*) FROM agents WHERE workspace_id = ?) AS agents,
+             (SELECT COUNT(*) FROM claims WHERE workspace_id = ?) AS claims,
+             (SELECT COUNT(*) FROM handoffs WHERE workspace_id = ?) AS handoffs,
+             (SELECT COUNT(*) FROM blockers WHERE workspace_id = ?) AS blockers,
+             (SELECT COUNT(*) FROM audit_log WHERE workspace_id = ?) AS audit_entries`,
+        )
+        .get(ws, ws, ws, ws, ws) as {
+        agents: number;
+        claims: number;
+        handoffs: number;
+        blockers: number;
+        audit_entries: number;
+      };
+      reply.send({ workspace: ws, totals: row });
+    },
+  );
 };

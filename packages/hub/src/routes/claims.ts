@@ -2968,4 +2968,29 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, patterns: rows });
     },
   );
+
+  // F-405 age-distribution
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/age-distribution",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT
+             CASE
+               WHEN (strftime('%s','now') - strftime('%s', created_at)) < 3600 THEN '<1h'
+               WHEN (strftime('%s','now') - strftime('%s', created_at)) < 86400 THEN '1h-1d'
+               WHEN (strftime('%s','now') - strftime('%s', created_at)) < 604800 THEN '1d-7d'
+               ELSE '>7d'
+             END AS bucket,
+             COUNT(*) AS count
+           FROM claims
+           WHERE workspace_id = ?
+           GROUP BY bucket
+           ORDER BY count DESC`,
+        )
+        .all(req.params.workspace) as { bucket: string; count: number }[];
+      reply.send({ workspace: req.params.workspace, distribution: rows });
+    },
+  );
 };

@@ -12664,3 +12664,32 @@ test("GET /blockers/severity-resolution-time returns stats", async () => {
   assert.ok(Array.isArray(body.stats));
   await app.close();
 });
+
+// F-405 age-distribution
+test("GET /claims/age-distribution returns buckets", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "cage-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/age-distribution`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.distribution));
+  await app.close();
+});
+
+// F-406 entity-totals
+test("GET /workspaces/entity-totals returns counts", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "etot-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/entity-totals`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(typeof body.totals.agents === "number");
+  assert.ok(typeof body.totals.claims === "number");
+  await app.close();
+});
