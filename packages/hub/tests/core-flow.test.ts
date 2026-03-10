@@ -13976,3 +13976,31 @@ test("GET /workspace-claim-density returns density", async () => {
   assert.ok(typeof body.claims_per_agent === "number");
   await app.close();
 });
+
+// F-499 agent-model-capability-matrix
+test("GET /agents/agent-model-capability-matrix returns matrix", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "amcm-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/agent-model-capability-matrix`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.matrix));
+  await app.close();
+});
+
+// F-500 blocker-comment-timeline
+test("GET /blockers/blocker-comment-timeline returns timeline", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "bct-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-comment-timeline`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.timeline));
+  await app.close();
+});

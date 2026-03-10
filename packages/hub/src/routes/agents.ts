@@ -3958,4 +3958,39 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, breakdown: rows });
     },
   );
+
+  // F-499 agent-model-capability-matrix
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/agent-model-capability-matrix",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const agents = db
+        .prepare(
+          `SELECT agent_id, display_name, model, capabilities
+           FROM agents
+           WHERE workspace_id = ?`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        model: string | null;
+        capabilities: string;
+      }[];
+      const result = agents.map((a) => {
+        let caps: string[] = [];
+        try {
+          const parsed = JSON.parse(a.capabilities);
+          if (Array.isArray(parsed)) caps = parsed;
+        } catch {}
+        return {
+          agent_id: a.agent_id,
+          display_name: a.display_name,
+          model: a.model,
+          capabilities: caps,
+          capability_count: caps.length,
+        };
+      });
+      reply.send({ workspace: req.params.workspace, matrix: result });
+    },
+  );
 };

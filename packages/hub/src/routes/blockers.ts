@@ -3085,4 +3085,23 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, crosstab: rows });
     },
   );
+
+  // F-500 blocker-comment-timeline
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/blocker-comment-timeline",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT DATE(bc.created_at) AS date, COUNT(*) AS comment_count
+           FROM blocker_comments bc
+           JOIN blockers b ON b.blocker_id = bc.blocker_id AND b.workspace_id = ?
+           GROUP BY date
+           ORDER BY date DESC
+           LIMIT 30`,
+        )
+        .all(req.params.workspace) as { date: string; comment_count: number }[];
+      reply.send({ workspace: req.params.workspace, timeline: rows });
+    },
+  );
 };
