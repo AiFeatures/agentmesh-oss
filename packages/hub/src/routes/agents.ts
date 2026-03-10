@@ -1860,4 +1860,46 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-178: Agent stale detection
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/stale-detection",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { minutes = "10" } = request.query as { minutes?: string };
+      const threshold = Math.max(Number.parseInt(minutes, 10) || 10, 1);
+
+      const agents = db
+        .prepare(
+          `SELECT agent_id, display_name, status, last_heartbeat_at,
+                  ROUND((julianday('now') - julianday(last_heartbeat_at)) * 1440, 1) as minutes_since_heartbeat
+           FROM agents
+           WHERE workspace_id = ?`,
+        )
+        .all(workspace) as Array<{
+        agent_id: string;
+        display_name: string;
+        status: string;
+        last_heartbeat_at: string;
+        minutes_since_heartbeat: number;
+      }>;
+
+      const staleAgents = agents.filter((a) => a.minutes_since_heartbeat > threshold);
+      const healthyAgents = agents.filter((a) => a.minutes_since_heartbeat <= threshold);
+
+      return reply.send({
+        threshold_minutes: threshold,
+        total_agents: agents.length,
+        healthy_count: healthyAgents.length,
+        stale_count: staleAgents.length,
+        stale_agents: staleAgents.map((a) => ({
+          agent_id: a.agent_id,
+          display_name: a.display_name,
+          status: a.status,
+          minutes_since_heartbeat: a.minutes_since_heartbeat,
+        })),
+      });
+    },
+  );
 };

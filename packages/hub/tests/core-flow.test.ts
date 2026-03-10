@@ -8593,3 +8593,75 @@ test("GET /blockers/heatmap returns creation heatmap", async () => {
 
   await app.close();
 });
+
+// F-177: Claim renewal forecast
+test("GET /claims/renewal-forecast returns upcoming renewals", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `rf-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "rf-a1", display_name: "RF A1", capabilities: ["code"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/renewal-forecast?hours=24`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.forecast_hours, 24);
+  assert.ok(typeof body.expiring_count === "number");
+  assert.ok(Array.isArray(body.by_agent));
+  assert.ok(Array.isArray(body.claims));
+
+  await app.close();
+});
+
+// F-178: Agent stale detection
+test("GET /agents/stale-detection returns stale agent analysis", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `stale-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "stale-a1", display_name: "STALE A1", capabilities: ["code"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/stale-detection?minutes=10`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.threshold_minutes, 10);
+  assert.ok(typeof body.total_agents === "number");
+  assert.ok(typeof body.healthy_count === "number");
+  assert.ok(typeof body.stale_count === "number");
+  assert.ok(Array.isArray(body.stale_agents));
+  assert.equal(body.total_agents, 1);
+
+  await app.close();
+});

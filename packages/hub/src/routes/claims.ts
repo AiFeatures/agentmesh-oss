@@ -1435,4 +1435,45 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-177: Claim renewal forecast
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/renewal-forecast",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { hours = "6" } = request.query as { hours?: string };
+      const numHours = Math.max(Number.parseInt(hours, 10) || 6, 1);
+
+      const expiringSoon = db
+        .prepare(
+          `SELECT claim_id, agent_id, scope, expires_at,
+                  ROUND((julianday(expires_at) - julianday('now')) * 24, 2) as hours_remaining
+           FROM claims
+           WHERE workspace_id = ? AND status = 'active'
+                 AND datetime(expires_at) <= datetime('now', ?)
+                 AND datetime(expires_at) > datetime('now')
+           ORDER BY expires_at ASC`,
+        )
+        .all(workspace, `+${numHours} hours`) as Array<{
+        claim_id: string;
+        agent_id: string;
+        scope: string;
+        expires_at: string;
+        hours_remaining: number;
+      }>;
+
+      const byAgent: Record<string, number> = {};
+      for (const c of expiringSoon) {
+        byAgent[c.agent_id] = (byAgent[c.agent_id] ?? 0) + 1;
+      }
+
+      return reply.send({
+        forecast_hours: numHours,
+        expiring_count: expiringSoon.length,
+        by_agent: Object.entries(byAgent).map(([agent_id, count]) => ({ agent_id, count })),
+        claims: expiringSoon,
+      });
+    },
+  );
 };
