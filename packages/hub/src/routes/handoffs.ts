@@ -1880,4 +1880,31 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-257 handoff-priority-balance
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/priority-balance",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params;
+      const rows = db
+        .prepare(
+          `SELECT COALESCE(priority, 'normal') AS priority, status, COUNT(*) AS cnt
+           FROM handoffs WHERE workspace_id = ?
+           GROUP BY COALESCE(priority, 'normal'), status`,
+        )
+        .all(workspace) as { priority: string; status: string; cnt: number }[];
+
+      const priorities: Record<string, { total: number; by_status: Record<string, number> }> = {};
+      let total = 0;
+      for (const r of rows) {
+        if (!priorities[r.priority]) priorities[r.priority] = { total: 0, by_status: {} };
+        priorities[r.priority].total += r.cnt;
+        priorities[r.priority].by_status[r.status] = r.cnt;
+        total += r.cnt;
+      }
+
+      return reply.send({ workspace, total_handoffs: total, by_priority: priorities });
+    },
+  );
 };

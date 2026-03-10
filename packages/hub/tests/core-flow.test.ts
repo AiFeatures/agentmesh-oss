@@ -10483,3 +10483,41 @@ test("GET /workspace audit-frequency returns event breakdown", async () => {
   assert.ok(Array.isArray(body.daily));
   await app.close();
 });
+
+// F-257 handoff-priority-balance
+test("GET /handoffs/priority-balance returns priority distribution", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `ws-hpb-${Date.now().toString(36)}`;
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["x"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "t" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/priority-balance`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.strictEqual(body.workspace, ws);
+  assert.ok(typeof body.total_handoffs === "number");
+  assert.ok(body.by_priority);
+  await app.close();
+});
+
+// F-258 blocker-dependency-stats
+test("GET /blockers/dependency-stats returns dependency statistics", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `ws-bds-${Date.now().toString(36)}`;
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "b1", severity: "medium" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/dependency-stats`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.strictEqual(body.workspace, ws);
+  assert.ok(typeof body.total_blockers === "number");
+  assert.ok(typeof body.total_dependencies === "number");
+  assert.ok(typeof body.blockers_with_dependencies === "number");
+  await app.close();
+});

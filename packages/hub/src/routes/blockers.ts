@@ -1795,4 +1795,47 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total_resolved: resolved.length, by_severity: severities });
     },
   );
+
+  // F-258 blocker-dependency-stats
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/dependency-stats",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params;
+      const blockers = db
+        .prepare("SELECT blocker_id, status FROM blockers WHERE workspace_id = ?")
+        .all(workspace) as { blocker_id: string; status: string }[];
+
+      const deps = db
+        .prepare(
+          `SELECT bd.blocker_id, bd.depends_on_blocker_id
+           FROM blocker_dependencies bd
+           JOIN blockers b ON b.blocker_id = bd.blocker_id
+           WHERE b.workspace_id = ?`,
+        )
+        .all(workspace) as { blocker_id: string; depends_on_blocker_id: string }[];
+
+      const depCount: Record<string, number> = {};
+      const dependentCount: Record<string, number> = {};
+      for (const d of deps) {
+        depCount[d.blocker_id] = (depCount[d.blocker_id] || 0) + 1;
+        dependentCount[d.depends_on_blocker_id] =
+          (dependentCount[d.depends_on_blocker_id] || 0) + 1;
+      }
+
+      const totalBlockers = blockers.length;
+      const withDeps = Object.keys(depCount).length;
+      const depTargets = Object.keys(dependentCount).length;
+      const maxDepth = deps.length > 0 ? Math.max(...Object.values(depCount)) : 0;
+
+      return reply.send({
+        workspace,
+        total_blockers: totalBlockers,
+        total_dependencies: deps.length,
+        blockers_with_dependencies: withDeps,
+        blockers_depended_upon: depTargets,
+        max_dependency_count: maxDepth,
+      });
+    },
+  );
 };
