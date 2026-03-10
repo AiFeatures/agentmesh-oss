@@ -3070,4 +3070,22 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, daily: rows });
     },
   );
+
+  // F-425 workspace-settings-audit
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/workspace-settings-audit",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(`SELECT settings FROM workspaces WHERE workspace_id = ?`)
+        .get(req.params.workspace) as { settings: string } | undefined;
+      const parsed = row ? JSON.parse(row.settings || "{}") : {};
+      const keys = Object.keys(parsed);
+      reply.send({
+        workspace: req.params.workspace,
+        settings: keys.map((k) => ({ key: k, value: parsed[k] })),
+        count: keys.length,
+      });
+    },
+  );
 };
