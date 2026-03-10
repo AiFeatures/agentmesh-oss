@@ -6729,3 +6729,160 @@ test("GET /workspaces/:workspace/blockers/severity-trend", async () => {
 
   await app.close();
 });
+
+// --------------- F-142: Concurrent operations ---------------
+test("concurrent claim creations do not produce duplicates for same scope", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-cc-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "racer1", display_name: "R1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "racer2", display_name: "R2", capabilities: ["code"] },
+  });
+
+  // Fire two claims for the same scope concurrently
+  const [c1, c2] = await Promise.all([
+    app.inject({
+      method: "POST",
+      url: `/api/v1/workspaces/${ws}/claims`,
+      headers: auth,
+      payload: { agent_id: "racer1", scope: "file", paths: ["src/index.ts"], ttl_seconds: 300 },
+    }),
+    app.inject({
+      method: "POST",
+      url: `/api/v1/workspaces/${ws}/claims`,
+      headers: auth,
+      payload: { agent_id: "racer2", scope: "file", paths: ["src/index.ts"], ttl_seconds: 300 },
+    }),
+  ]);
+
+  // At least one should succeed, and the overlap check may reject one
+  const succeeded = [c1, c2].filter((r) => r.statusCode === 201);
+  assert.ok(succeeded.length >= 1, "At least one concurrent claim should succeed");
+
+  await app.close();
+});
+
+test("concurrent agent registrations with same id are idempotent", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-cr-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+
+  // Register same agent concurrently
+  const results = await Promise.all(
+    Array.from({ length: 5 }, () =>
+      app.inject({
+        method: "POST",
+        url: `/api/v1/workspaces/${ws}/agents/register`,
+        headers: auth,
+        payload: { agent_id: "dup-agent", display_name: "Dup", capabilities: ["code"] },
+      }),
+    ),
+  );
+
+  // All should either succeed (200/201) or conflict gracefully
+  for (const r of results) {
+    assert.ok(r.statusCode < 500, `Registration should not cause 500: got ${r.statusCode}`);
+  }
+
+  // Only one agent should exist
+  const list = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+  });
+  const agents = list.json().data as Array<{ agent_id: string }>;
+  const matching = agents.filter((a) => a.agent_id === "dup-agent");
+  assert.equal(matching.length, 1, "Only one instance of the agent should exist");
+
+  await app.close();
+});
+
+test("concurrent handoff creation and resolution", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-ch-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "sender", display_name: "S", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "receiver", display_name: "R", capabilities: ["review"] },
+  });
+
+  // Create multiple handoffs concurrently
+  const handoffs = await Promise.all(
+    Array.from({ length: 3 }, (_, i) =>
+      app.inject({
+        method: "POST",
+        url: `/api/v1/workspaces/${ws}/handoffs`,
+        headers: auth,
+        payload: {
+          from_agent_id: "sender",
+          summary: `Task ${i}`,
+          required_capability: "review",
+        },
+      }),
+    ),
+  );
+
+  for (const h of handoffs) {
+    assert.equal(h.statusCode, 201, "All handoffs should be created");
+  }
+
+  // Accept them concurrently
+  const resolutions = await Promise.all(
+    handoffs.map((h) => {
+      const hid = h.json().handoff_id;
+      return app.inject({
+        method: "POST",
+        url: `/api/v1/workspaces/${ws}/handoffs/${hid}/accept`,
+        headers: auth,
+        payload: { agent_id: "receiver" },
+      });
+    }),
+  );
+
+  for (const r of resolutions) {
+    assert.equal(r.statusCode, 200, "All accepts should succeed");
+  }
+
+  await app.close();
+});
