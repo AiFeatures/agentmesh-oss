@@ -3105,4 +3105,26 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send(row);
     },
   );
+
+  // F-437 workspace-description-length
+  app.get(
+    "/api/v1/workspaces/workspace-description-length",
+    { preHandler: app.authGuard },
+    async (_req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT workspace_id, display_name,
+                  LENGTH(COALESCE(description, '')) AS description_length
+           FROM workspaces
+           ORDER BY description_length DESC
+           LIMIT 20`,
+        )
+        .all() as {
+        workspace_id: string;
+        display_name: string;
+        description_length: number;
+      }[];
+      reply.send({ workspaces: rows });
+    },
+  );
 };

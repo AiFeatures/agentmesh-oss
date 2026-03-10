@@ -13113,3 +13113,29 @@ test("GET /handoffs/handoff-notes-word-count returns word counts", async () => {
   assert.ok(Array.isArray(body.notes));
   await app.close();
 });
+
+// F-437 workspace-description-length
+test("GET /workspaces/workspace-description-length returns lengths", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const res = await app.inject({ method: "GET", url: "/api/v1/workspaces/workspace-description-length", headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.workspaces));
+  await app.close();
+});
+
+// F-438 claim-transfer-volume
+test("GET /claims/claim-transfer-volume returns transfer data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "ctv-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-transfer-volume`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.transfers));
+  await app.close();
+});

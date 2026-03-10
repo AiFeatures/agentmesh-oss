@@ -3118,4 +3118,27 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, claims: rows });
     },
   );
+
+  // F-438 claim-transfer-volume
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/claim-transfer-volume",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT from_agent_id, to_agent_id, COUNT(*) AS transfer_count
+           FROM claim_transfer_history
+           WHERE workspace_id = ?
+           GROUP BY from_agent_id, to_agent_id
+           ORDER BY transfer_count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        from_agent_id: string;
+        to_agent_id: string;
+        transfer_count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, transfers: rows });
+    },
+  );
 };
