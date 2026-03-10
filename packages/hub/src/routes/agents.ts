@@ -2481,4 +2481,71 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, agents: result });
     },
   );
+
+  // F-250: Agent workload balance
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/workload-balance",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const agents = db
+        .prepare(`SELECT agent_id, display_name FROM agents WHERE workspace_id = ?`)
+        .all(workspace) as { agent_id: string; display_name: string }[];
+
+      const agentWorkloads = agents.map((a) => {
+        const claims = (
+          db
+            .prepare(
+              `SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND agent_id = ? AND status = 'active'`,
+            )
+            .get(workspace, a.agent_id) as { c: number }
+        ).c;
+        const handoffs = (
+          db
+            .prepare(
+              `SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND to_agent_id = ? AND status = 'pending'`,
+            )
+            .get(workspace, a.agent_id) as { c: number }
+        ).c;
+        const blockers = (
+          db
+            .prepare(
+              `SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND agent_id = ? AND status = 'open'`,
+            )
+            .get(workspace, a.agent_id) as { c: number }
+        ).c;
+        const total = claims + handoffs + blockers;
+        return {
+          agent_id: a.agent_id,
+          display_name: a.display_name,
+          active_claims: claims,
+          pending_handoffs: handoffs,
+          open_blockers: blockers,
+          total_workload: total,
+        };
+      });
+
+      agentWorkloads.sort((a, b) => b.total_workload - a.total_workload);
+      const avg =
+        agents.length > 0
+          ? Math.round(
+              (agentWorkloads.reduce((s, a) => s + a.total_workload, 0) / agents.length) * 100,
+            ) / 100
+          : 0;
+      const max = agentWorkloads.length > 0 ? agentWorkloads[0].total_workload : 0;
+      const min =
+        agentWorkloads.length > 0 ? agentWorkloads[agentWorkloads.length - 1].total_workload : 0;
+
+      return reply.send({
+        workspace,
+        total_agents: agents.length,
+        avg_workload: avg,
+        max_workload: max,
+        min_workload: min,
+        imbalance: max - min,
+        agents: agentWorkloads,
+      });
+    },
+  );
 };

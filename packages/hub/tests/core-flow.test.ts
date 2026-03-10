@@ -10334,3 +10334,41 @@ test("GET /handoffs/completion-time returns timing metrics", async () => {
   assert.ok(typeof body.median_completion_hours === "number");
   await app.close();
 });
+
+// ---------- F-249: Claim transfer rate ----------
+test("GET /claims/transfer-rate returns transfer ratio", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `cl-transrate-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/transfer-rate`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_claims === "number");
+  assert.ok(typeof body.total_transfers === "number");
+  assert.ok(typeof body.transfer_rate_percent === "number");
+  await app.close();
+});
+
+// ---------- F-250: Agent workload balance ----------
+test("GET /agents/workload-balance returns balance metrics", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ag-wkbalance-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/workload-balance`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_agents === "number");
+  assert.ok(typeof body.avg_workload === "number");
+  assert.ok(typeof body.imbalance === "number");
+  assert.ok(Array.isArray(body.agents));
+  await app.close();
+});

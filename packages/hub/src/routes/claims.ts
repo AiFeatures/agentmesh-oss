@@ -2143,4 +2143,33 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-249: Claim transfer rate
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/transfer-rate",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const totalClaims = (
+        db.prepare(`SELECT COUNT(*) as c FROM claims WHERE workspace_id = ?`).get(workspace) as {
+          c: number;
+        }
+      ).c;
+
+      const transfers = db
+        .prepare(`SELECT COUNT(*) as c FROM claim_transfer_history WHERE workspace_id = ?`)
+        .get(workspace) as { c: number };
+
+      const transferRate =
+        totalClaims > 0 ? Math.round((transfers.c / totalClaims) * 10000) / 100 : 0;
+
+      return reply.send({
+        workspace,
+        total_claims: totalClaims,
+        total_transfers: transfers.c,
+        transfer_rate_percent: transferRate,
+      });
+    },
+  );
 };
