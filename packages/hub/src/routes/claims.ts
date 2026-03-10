@@ -2061,4 +2061,47 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-240: Claim active summary
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/active-summary",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const active = db
+        .prepare(
+          `SELECT claim_id, agent_id, scope, created_at, expires_at FROM claims WHERE workspace_id = ? AND status = 'active'`,
+        )
+        .all(workspace) as {
+        claim_id: string;
+        agent_id: string;
+        scope: string;
+        created_at: string;
+        expires_at: string | null;
+      }[];
+
+      const now = Date.now();
+      const claims = active.map((c) => {
+        const ageHours =
+          Math.round(((now - new Date(c.created_at).getTime()) / 3600000) * 100) / 100;
+        const remainingHours = c.expires_at
+          ? Math.round(((new Date(c.expires_at).getTime() - now) / 3600000) * 100) / 100
+          : null;
+        return { ...c, age_hours: ageHours, remaining_hours: remainingHours };
+      });
+
+      const byAgent: Record<string, number> = {};
+      for (const c of active) {
+        byAgent[c.agent_id] = (byAgent[c.agent_id] || 0) + 1;
+      }
+
+      return reply.send({
+        workspace,
+        active_count: active.length,
+        by_agent: byAgent,
+        claims: claims.slice(0, 50),
+      });
+    },
+  );
 };

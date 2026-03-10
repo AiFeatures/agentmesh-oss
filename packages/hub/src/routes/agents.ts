@@ -2411,4 +2411,36 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-239: Agent status distribution
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/status-distribution",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const agents = db
+        .prepare(`SELECT status FROM agents WHERE workspace_id = ?`)
+        .all(workspace) as { status: string }[];
+
+      const distribution: Record<string, number> = {};
+      for (const a of agents) {
+        distribution[a.status] = (distribution[a.status] || 0) + 1;
+      }
+
+      const statuses = Object.entries(distribution)
+        .map(([status, count]) => ({
+          status,
+          count,
+          percentage: agents.length > 0 ? Math.round((count / agents.length) * 10000) / 100 : 0,
+        }))
+        .sort((a, b) => b.count - a.count);
+
+      return reply.send({
+        workspace,
+        total_agents: agents.length,
+        statuses,
+      });
+    },
+  );
 };
