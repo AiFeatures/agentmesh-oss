@@ -371,6 +371,69 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  /* ── F-76  bulk deregister ──────────────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/agents/bulk-deregister",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["agent_ids"],
+          additionalProperties: false,
+          properties: {
+            agent_ids: {
+              type: "array",
+              minItems: 1,
+              maxItems: 50,
+              items: { type: "string", minLength: 1, maxLength: 128 },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { agent_ids } = request.body as { agent_ids: string[] };
+
+      const removed: string[] = [];
+      const notFound: string[] = [];
+
+      for (const aid of agent_ids) {
+        const agent = db
+          .prepare("SELECT agent_id FROM agents WHERE agent_id = ? AND workspace_id = ?")
+          .get(aid, workspace);
+        if (!agent) {
+          notFound.push(aid);
+          continue;
+        }
+        db.prepare(
+          "UPDATE claims SET status = 'force_released', released_at = CURRENT_TIMESTAMP WHERE agent_id = ? AND workspace_id = ? AND status = 'active'",
+        ).run(aid, workspace);
+        db.prepare("DELETE FROM agents WHERE agent_id = ? AND workspace_id = ?").run(
+          aid,
+          workspace,
+        );
+        removed.push(aid);
+      }
+
+      if (removed.length > 0) {
+        writeAuditLog({
+          workspaceId: workspace,
+          actorType: "system",
+          action: "agent.bulk_deregister",
+          entityType: "agent",
+          entityId: removed.join(","),
+          requestId: request.id,
+          payload: { removed, not_found: notFound },
+        });
+        broadcast("agents.updated", { workspace, deregistered: removed });
+      }
+
+      return reply.send({ removed, not_found: notFound });
+    },
+  );
+
   app.patch(
     "/api/v1/workspaces/:workspace/agents/:agentId/status",
     {

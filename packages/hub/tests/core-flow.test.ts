@@ -3945,3 +3945,147 @@ test("claim scope validation rejects invalid scopes", async () => {
 
   await app.close();
 });
+
+// --------------- F-75: Workspace export v2 ---------------
+test("workspace export includes new tables", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-exportv2-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `exp-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/export`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(body.workspace);
+  assert.ok(Array.isArray(body.agents));
+  assert.ok(Array.isArray(body.claim_dependencies));
+  assert.ok(Array.isArray(body.handoff_notes));
+  assert.ok(Array.isArray(body.blocker_watchers));
+  assert.ok(Array.isArray(body.agent_status_history));
+  assert.ok(body.exported_at);
+
+  await app.close();
+});
+
+// --------------- F-76: Agent bulk deregister ---------------
+test("bulk deregister removes multiple agents", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-bulkdereg-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `bd-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `bd-a2-${ws}`, display_name: "A2", capabilities: ["review"] },
+  });
+
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/bulk-deregister`,
+    headers: auth,
+    payload: { agent_ids: [`bd-a1-${ws}`, `bd-a2-${ws}`, "nonexistent"] },
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.removed.length, 2);
+  assert.deepEqual(body.not_found, ["nonexistent"]);
+
+  // verify agents are gone
+  const list = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+  });
+  assert.equal(list.json().data.length, 0);
+
+  await app.close();
+});
+
+// --------------- F-77: Handoff accept with note ---------------
+test("handoff accept can include a note", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-acceptnote-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `an-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `an-a2-${ws}`, display_name: "A2", capabilities: ["review"] },
+  });
+
+  // create handoff
+  const h = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: `an-a1-${ws}`, to_agent_id: `an-a2-${ws}`, summary: "review needed" },
+  });
+  assert.equal(h.statusCode, 201);
+  const handoffId = h.json().handoff_id;
+
+  // accept with note
+  const accept = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs/${handoffId}/accept`,
+    headers: auth,
+    payload: { agent_id: `an-a2-${ws}`, note: "On it!" },
+  });
+  assert.equal(accept.statusCode, 200);
+
+  // check that note was recorded
+  const notes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/${handoffId}/notes`,
+    headers: auth,
+  });
+  assert.equal(notes.statusCode, 200);
+  assert.equal(notes.json().data.length, 1);
+  assert.equal(notes.json().data[0].content, "On it!");
+
+  await app.close();
+});

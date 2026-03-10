@@ -282,6 +282,13 @@ export class AgentMeshClient {
     });
   }
 
+  async bulkDeregisterAgents(workspace: string, agentIds: string[]): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/agents/bulk-deregister`, {
+      method: "POST",
+      body: JSON.stringify({ agent_ids: agentIds }),
+    });
+  }
+
   startHeartbeat(workspace: string, agentId: string, intervalMs = 10000): () => void {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {

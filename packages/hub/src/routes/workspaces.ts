@@ -483,6 +483,26 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
           "SELECT blocker_id, agent_id, title, severity, status, deadline_at, created_at, resolved_at FROM blockers WHERE workspace_id = ?",
         )
         .all(workspace);
+      const claimDependencies = db
+        .prepare(
+          "SELECT cd.claim_id, cd.depends_on_claim_id FROM claim_dependencies cd JOIN claims c ON c.claim_id = cd.claim_id WHERE c.workspace_id = ?",
+        )
+        .all(workspace);
+      const handoffNotes = db
+        .prepare(
+          "SELECT handoff_id, author_id, content, created_at FROM handoff_notes WHERE workspace_id = ?",
+        )
+        .all(workspace);
+      const blockerWatchers = db
+        .prepare(
+          "SELECT blocker_id, agent_id, created_at FROM blocker_watchers WHERE workspace_id = ?",
+        )
+        .all(workspace);
+      const statusHistory = db
+        .prepare(
+          "SELECT agent_id, old_status, new_status, created_at FROM agent_status_history WHERE workspace_id = ?",
+        )
+        .all(workspace);
 
       return reply.send({
         workspace: ws,
@@ -490,6 +510,10 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
         claims,
         handoffs,
         blockers,
+        claim_dependencies: claimDependencies,
+        handoff_notes: handoffNotes,
+        blocker_watchers: blockerWatchers,
+        agent_status_history: statusHistory,
         exported_at: new Date().toISOString(),
       });
     },
