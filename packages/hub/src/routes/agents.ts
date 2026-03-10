@@ -2750,4 +2750,24 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+
+  // F-283 agent-model-breakdown
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/model-breakdown",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT COALESCE(model, 'unknown') as model, COUNT(*) as count
+           FROM agents
+           WHERE workspace_id = ?
+           GROUP BY model
+           ORDER BY count DESC`,
+        )
+        .all(req.params.workspace) as { model: string; count: number }[];
+      const total = rows.reduce((s, r) => s + r.count, 0);
+      reply.send({ workspace: req.params.workspace, distribution: rows, total_agents: total });
+    },
+  );
+
 };
