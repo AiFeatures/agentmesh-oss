@@ -12806,3 +12806,31 @@ test("GET /blockers/age-percentiles returns percentiles", async () => {
   assert.ok(typeof body.p50 === "number");
   await app.close();
 });
+
+// F-415 renewal-gap-analysis
+test("GET /claims/renewal-gap-analysis returns claims", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "rnga-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/renewal-gap-analysis`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.claims));
+  await app.close();
+});
+
+// F-416 timeout-utilization
+test("GET /handoffs/timeout-utilization returns handoffs", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "tmut-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/timeout-utilization`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.handoffs));
+  await app.close();
+});

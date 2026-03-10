@@ -2814,4 +2814,35 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, breached: rows });
     },
   );
+
+  // F-416 timeout-utilization
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/timeout-utilization",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT handoff_id, timeout_seconds,
+                  CAST((strftime('%s', updated_at) - strftime('%s', created_at)) AS INTEGER) AS actual_seconds,
+                  CASE WHEN timeout_seconds > 0
+                    THEN ROUND(100.0 * (strftime('%s', updated_at) - strftime('%s', created_at)) / timeout_seconds, 1)
+                    ELSE NULL
+                  END AS utilization_pct
+           FROM handoffs
+           WHERE workspace_id = ?
+             AND timeout_seconds IS NOT NULL
+             AND timeout_seconds > 0
+             AND status IN ('completed', 'rejected')
+           ORDER BY utilization_pct DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        handoff_id: string;
+        timeout_seconds: number;
+        actual_seconds: number;
+        utilization_pct: number | null;
+      }[];
+      reply.send({ workspace: req.params.workspace, handoffs: rows });
+    },
+  );
 };

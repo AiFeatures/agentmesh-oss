@@ -3015,4 +3015,34 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, leaderboard: rows });
     },
   );
+
+  // F-415 renewal-gap-analysis
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/renewal-gap-analysis",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT crh.claim_id,
+                  COUNT(*) AS renewal_count,
+                  CAST(AVG(strftime('%s', crh.new_expires_at) - strftime('%s', crh.old_expires_at)) AS INTEGER) AS avg_extension_seconds,
+                  CAST(MIN(strftime('%s', crh.new_expires_at) - strftime('%s', crh.old_expires_at)) AS INTEGER) AS min_extension_seconds,
+                  CAST(MAX(strftime('%s', crh.new_expires_at) - strftime('%s', crh.old_expires_at)) AS INTEGER) AS max_extension_seconds
+           FROM claim_renewal_history crh
+           JOIN claims c ON c.claim_id = crh.claim_id
+           WHERE c.workspace_id = ?
+           GROUP BY crh.claim_id
+           ORDER BY renewal_count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        claim_id: string;
+        renewal_count: number;
+        avg_extension_seconds: number;
+        min_extension_seconds: number;
+        max_extension_seconds: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, claims: rows });
+    },
+  );
 };
