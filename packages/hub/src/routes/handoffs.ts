@@ -2989,4 +2989,29 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, templates: rows });
     },
   );
+
+  // F-445 handoff-acceptance-lag
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-acceptance-lag",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT handoff_id, from_agent_id, to_agent_id, status,
+                  ROUND((julianday(updated_at) - julianday(created_at)) * 86400, 2) AS lag_seconds
+           FROM handoffs
+           WHERE workspace_id = ? AND status = 'accepted' AND updated_at IS NOT NULL
+           ORDER BY lag_seconds DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        handoff_id: string;
+        from_agent_id: string;
+        to_agent_id: string;
+        status: string;
+        lag_seconds: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, handoffs: rows });
+    },
+  );
 };

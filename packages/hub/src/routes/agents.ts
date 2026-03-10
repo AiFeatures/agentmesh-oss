@@ -3712,4 +3712,25 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, transitions: rows });
     },
   );
+
+  // F-446 agent-model-version
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/agent-model-version",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT COALESCE(model, 'unknown') AS model, COUNT(*) AS agent_count
+           FROM agents
+           WHERE workspace_id = ?
+           GROUP BY model
+           ORDER BY agent_count DESC`,
+        )
+        .all(req.params.workspace) as {
+        model: string;
+        agent_count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, models: rows });
+    },
+  );
 };
