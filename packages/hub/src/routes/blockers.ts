@@ -1889,6 +1889,8 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
 
       const byBlocker: Record<string, { escalation_count: number; last_escalated_at: string }> = {};
       for (const r of rows) {
+        if (!byBlocker[r.blocker_id])
+          byBlocker[r.blocker_id] = { escalation_count: 0, last_escalated_at: r.created_at };
         byBlocker[r.blocker_id].escalation_count++;
       }
 
@@ -1897,6 +1899,31 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
         .sort((a, b) => b.escalation_count - a.escalation_count);
 
       return reply.send({ workspace, total_escalations: rows.length, blockers: chains });
+    },
+  );
+
+  // F-274 blocker-agent-workload
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/agent-workload",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params;
+      const rows = db
+        .prepare(
+          `SELECT agent_id, COUNT(*) AS total,
+                  SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) AS open_count,
+                  SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) AS resolved_count
+           FROM blockers WHERE workspace_id = ?
+           GROUP BY agent_id ORDER BY total DESC`,
+        )
+        .all(workspace) as {
+        agent_id: string;
+        total: number;
+        open_count: number;
+        resolved_count: number;
+      }[];
+
+      return reply.send({ workspace, total_agents: rows.length, agents: rows });
     },
   );
 };

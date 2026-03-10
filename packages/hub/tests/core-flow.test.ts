@@ -10768,3 +10768,37 @@ test("GET /workspaces/:ws/event-stream returns recent events", async () => {
   assert.ok(Array.isArray(body.events));
   await app.close();
 });
+
+// F-273 claim-renewal-heatmap
+test("GET /claims/renewal-heatmap returns daily renewal data", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `ws-crh-${Date.now().toString(36)}`;
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/renewal-heatmap`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.strictEqual(body.workspace, ws);
+  assert.ok(typeof body.total_renewals === "number");
+  assert.ok(Array.isArray(body.daily));
+  await app.close();
+});
+
+// F-274 blocker-agent-workload
+test("GET /blockers/agent-workload returns agent blocker workload", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `ws-baw-${Date.now().toString(36)}`;
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "b1", severity: "medium" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/agent-workload`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.strictEqual(body.workspace, ws);
+  assert.ok(typeof body.total_agents === "number");
+  assert.ok(Array.isArray(body.agents));
+  await app.close();
+});

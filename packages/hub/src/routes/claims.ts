@@ -2304,4 +2304,26 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-273 claim-renewal-heatmap
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/renewal-heatmap",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params;
+      const rows = db
+        .prepare(
+          `SELECT DATE(rh.created_at) AS day, COUNT(*) AS renewals
+           FROM claim_renewal_history rh
+           JOIN claims c ON c.claim_id = rh.claim_id
+           WHERE c.workspace_id = ?
+           GROUP BY DATE(rh.created_at)
+           ORDER BY day DESC LIMIT 30`,
+        )
+        .all(workspace) as { day: string; renewals: number }[];
+
+      const total = rows.reduce((s, r) => s + r.renewals, 0);
+      return reply.send({ workspace, total_renewals: total, daily: rows });
+    },
+  );
 };
