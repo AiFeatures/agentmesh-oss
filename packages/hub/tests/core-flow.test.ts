@@ -9604,3 +9604,44 @@ test("GET /blockers/severity-impact returns weighted impact", async () => {
   assert.ok(body.total_weight >= 10); // critical = 10
   await app.close();
 });
+
+// ---------- F-211: Agent model distribution ----------
+test("GET /agents/model-distribution returns distribution", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ag-modeldist-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"], model: "gpt-4" } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"], model: "claude" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/model-distribution`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total === "number");
+  assert.ok(Array.isArray(body.distribution));
+  assert.equal(body.total, 2);
+  assert.equal(body.distribution.length, 2);
+  await app.close();
+});
+
+// ---------- F-212: Handoff chain summary ----------
+test("GET /handoffs/chain-summary returns chain statistics", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ho-chainsum-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/chain-summary`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_handoffs === "number");
+  assert.ok(typeof body.total_chains === "number");
+  assert.ok(typeof body.max_chain_length === "number");
+  assert.ok(typeof body.avg_chain_length === "number");
+  await app.close();
+});

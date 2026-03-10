@@ -2214,4 +2214,35 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-211: Agent model distribution
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/model-distribution",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const rows = db
+        .prepare(
+          `SELECT COALESCE(model, 'unknown') as model, status, COUNT(*) as count
+           FROM agents WHERE workspace_id = ?
+           GROUP BY model, status`,
+        )
+        .all(workspace) as { model: string; status: string; count: number }[];
+
+      const byModel: Record<string, { total: number; by_status: Record<string, number> }> = {};
+      for (const r of rows) {
+        if (!byModel[r.model]) byModel[r.model] = { total: 0, by_status: {} };
+        byModel[r.model].total += r.count;
+        byModel[r.model].by_status[r.status] = r.count;
+      }
+
+      const distribution = Object.entries(byModel)
+        .map(([model, data]) => ({ model, ...data }))
+        .sort((a, b) => b.total - a.total);
+
+      const total = distribution.reduce((s, d) => s + d.total, 0);
+      return reply.send({ workspace, total, distribution });
+    },
+  );
 };

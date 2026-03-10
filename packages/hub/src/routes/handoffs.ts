@@ -1466,4 +1466,69 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-212: Handoff chain summary
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/chain-summary",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const handoffs = db
+        .prepare(`SELECT handoff_id, parent_handoff_id FROM handoffs WHERE workspace_id = ?`)
+        .all(workspace) as { handoff_id: string; parent_handoff_id: string | null }[];
+
+      // Build parent map
+      const parentMap = new Map<string, string>();
+      for (const h of handoffs) {
+        if (h.parent_handoff_id) parentMap.set(h.handoff_id, h.parent_handoff_id);
+      }
+
+      // Find chain roots (no parent)
+      const roots = handoffs.filter((h) => !h.parent_handoff_id).map((h) => h.handoff_id);
+
+      // Build children map
+      const children = new Map<string, string[]>();
+      for (const h of handoffs) {
+        if (h.parent_handoff_id) {
+          const arr = children.get(h.parent_handoff_id) || [];
+          arr.push(h.handoff_id);
+          children.set(h.parent_handoff_id, arr);
+        }
+      }
+
+      // Measure chain depths from roots
+      const chainLengths: number[] = [];
+      for (const root of roots) {
+        let depth = 1;
+        let queue = children.get(root) || [];
+        while (queue.length > 0) {
+          depth++;
+          const next: string[] = [];
+          for (const c of queue) {
+            next.push(...(children.get(c) || []));
+          }
+          queue = next;
+        }
+        chainLengths.push(depth);
+      }
+
+      const maxLen = chainLengths.length > 0 ? Math.max(...chainLengths) : 0;
+      const avgLen =
+        chainLengths.length > 0
+          ? Math.round((chainLengths.reduce((s, l) => s + l, 0) / chainLengths.length) * 100) / 100
+          : 0;
+
+      return reply.send({
+        workspace,
+        total_handoffs: handoffs.length,
+        total_chains: roots.length,
+        max_chain_length: maxLen,
+        avg_chain_length: avgLen,
+        standalone: handoffs.filter(
+          (h) => !h.parent_handoff_id && !children.get(h.handoff_id)?.length,
+        ).length,
+      });
+    },
+  );
 };
