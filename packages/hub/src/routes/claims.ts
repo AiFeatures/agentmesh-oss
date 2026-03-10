@@ -3345,4 +3345,23 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, renewals: rows });
     },
   );
+
+  // F-488 claim-path-pattern-popularity
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/claim-path-pattern-popularity",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT cp.path_pattern, COUNT(*) AS usage_count
+           FROM claim_paths cp
+           JOIN claims c ON c.claim_id = cp.claim_id AND c.workspace_id = ?
+           GROUP BY cp.path_pattern
+           ORDER BY usage_count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as { path_pattern: string; usage_count: number }[];
+      reply.send({ workspace: req.params.workspace, patterns: rows });
+    },
+  );
 };

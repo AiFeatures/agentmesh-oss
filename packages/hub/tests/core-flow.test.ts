@@ -13808,3 +13808,31 @@ test("GET /blockers/blocker-escalation-level-distribution returns levels", async
   assert.ok(Array.isArray(body.levels));
   await app.close();
 });
+
+// F-487 handoff-timeout-utilization
+test("GET /handoffs/handoff-timeout-utilization returns utilization stats", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "htu-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-timeout-utilization`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.handoffs));
+  await app.close();
+});
+
+// F-488 claim-path-pattern-popularity
+test("GET /claims/claim-path-pattern-popularity returns pattern stats", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "cppp-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-path-pattern-popularity`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.patterns));
+  await app.close();
+});
