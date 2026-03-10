@@ -1721,4 +1721,42 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-247: Blocker watcher stats
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/watcher-stats",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const blockers = db
+        .prepare(`SELECT blocker_id FROM blockers WHERE workspace_id = ?`)
+        .all(workspace) as { blocker_id: string }[];
+
+      let totalWatchers = 0;
+      const watcherCounts: { blocker_id: string; count: number }[] = [];
+
+      for (const b of blockers) {
+        const row = db
+          .prepare(`SELECT COUNT(*) as c FROM blocker_watchers WHERE blocker_id = ?`)
+          .get(b.blocker_id) as { c: number };
+        totalWatchers += row.c;
+        if (row.c > 0) watcherCounts.push({ blocker_id: b.blocker_id, count: row.c });
+      }
+
+      watcherCounts.sort((a, b) => b.count - a.count);
+      const withWatchers = watcherCounts.length;
+      const avgWatchers =
+        blockers.length > 0 ? Math.round((totalWatchers / blockers.length) * 100) / 100 : 0;
+
+      return reply.send({
+        workspace,
+        total_blockers: blockers.length,
+        blockers_with_watchers: withWatchers,
+        total_watchers: totalWatchers,
+        avg_watchers_per_blocker: avgWatchers,
+        most_watched: watcherCounts.slice(0, 10),
+      });
+    },
+  );
 };

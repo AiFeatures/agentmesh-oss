@@ -1792,4 +1792,44 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total_handoffs: handoffs.length, agents });
     },
   );
+
+  // F-248: Handoff completion time
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/completion-time",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const completed = db
+        .prepare(
+          `SELECT handoff_id, created_at, updated_at FROM handoffs WHERE workspace_id = ? AND status IN ('accepted', 'completed')`,
+        )
+        .all(workspace) as { handoff_id: string; created_at: string; updated_at: string }[];
+
+      const times = completed.map((h) => {
+        const hours =
+          Math.round(
+            ((new Date(h.updated_at).getTime() - new Date(h.created_at).getTime()) / 3600000) * 100,
+          ) / 100;
+        return { handoff_id: h.handoff_id, completion_hours: hours };
+      });
+
+      const total = times.length;
+      const avg =
+        total > 0
+          ? Math.round((times.reduce((s, t) => s + t.completion_hours, 0) / total) * 100) / 100
+          : 0;
+      const sorted = [...times].sort((a, b) => a.completion_hours - b.completion_hours);
+      const median = total > 0 ? sorted[Math.floor(total / 2)].completion_hours : 0;
+
+      return reply.send({
+        workspace,
+        completed_handoffs: total,
+        avg_completion_hours: avg,
+        median_completion_hours: median,
+        fastest: sorted.slice(0, 5),
+        slowest: sorted.slice(-5).reverse(),
+      });
+    },
+  );
 };

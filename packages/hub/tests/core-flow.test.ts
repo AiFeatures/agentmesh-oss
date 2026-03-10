@@ -10295,3 +10295,42 @@ test("GET /workspace claim-summary returns claim status breakdown", async () => 
   assert.ok(typeof body.active_rate_percent === "number");
   await app.close();
 });
+
+// ---------- F-247: Blocker watcher stats ----------
+test("GET /blockers/watcher-stats returns watcher metrics", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `bl-watchstat-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "bug", severity: "medium" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/watcher-stats`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_blockers === "number");
+  assert.ok(typeof body.total_watchers === "number");
+  assert.ok(typeof body.avg_watchers_per_blocker === "number");
+  assert.ok(Array.isArray(body.most_watched));
+  await app.close();
+});
+
+// ---------- F-248: Handoff completion time ----------
+test("GET /handoffs/completion-time returns timing metrics", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ho-comptime-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", summary: "task" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/completion-time`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.completed_handoffs === "number");
+  assert.ok(typeof body.avg_completion_hours === "number");
+  assert.ok(typeof body.median_completion_hours === "number");
+  await app.close();
+});
