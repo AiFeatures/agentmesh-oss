@@ -1942,4 +1942,58 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-186: Agent capability coverage
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/capability-coverage",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const agents = db
+        .prepare(
+          `SELECT agent_id, display_name, capabilities, status
+           FROM agents WHERE workspace_id = ?`,
+        )
+        .all(workspace) as Array<{
+        agent_id: string;
+        display_name: string;
+        capabilities: string;
+        status: string;
+      }>;
+
+      const allCaps = new Set<string>();
+      const onlineCaps = new Set<string>();
+      const capAgentCount: Record<string, { total: number; online: number }> = {};
+
+      for (const a of agents) {
+        const caps = JSON.parse(a.capabilities) as string[];
+        for (const cap of caps) {
+          allCaps.add(cap);
+          if (!capAgentCount[cap]) capAgentCount[cap] = { total: 0, online: 0 };
+          capAgentCount[cap].total++;
+          if (a.status === "online") {
+            onlineCaps.add(cap);
+            capAgentCount[cap].online++;
+          }
+        }
+      }
+
+      const uncovered = [...allCaps].filter((c) => !onlineCaps.has(c));
+      const coverageRate =
+        allCaps.size > 0 ? Math.round((onlineCaps.size / allCaps.size) * 10000) / 100 : 100;
+
+      return reply.send({
+        total_capabilities: allCaps.size,
+        covered_capabilities: onlineCaps.size,
+        uncovered_capabilities: uncovered,
+        coverage_rate: coverageRate,
+        capability_details: Object.entries(capAgentCount).map(([cap, counts]) => ({
+          capability: cap,
+          total_agents: counts.total,
+          online_agents: counts.online,
+        })),
+      });
+    },
+  );
 };

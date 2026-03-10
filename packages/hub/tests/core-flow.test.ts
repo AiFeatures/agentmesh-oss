@@ -8960,3 +8960,75 @@ test("GET /handoffs/completion-rate returns completion analytics", async () => {
 
   await app.close();
 });
+
+// F-185: Workspace anomaly detection
+test("GET /workspaces/:workspace/anomaly-detection returns anomalies", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `anom-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "anom-a1", display_name: "ANOM A1", capabilities: ["code"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/anomaly-detection`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.workspace_id, ws);
+  assert.ok(typeof body.anomaly_count === "number");
+  assert.ok(Array.isArray(body.anomalies));
+
+  await app.close();
+});
+
+// F-186: Agent capability coverage
+test("GET /agents/capability-coverage returns coverage stats", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `cc-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "cc-a1", display_name: "CC A1", capabilities: ["code", "review"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/capability-coverage`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.total_capabilities === "number");
+  assert.ok(typeof body.covered_capabilities === "number");
+  assert.ok(Array.isArray(body.uncovered_capabilities));
+  assert.ok(typeof body.coverage_rate === "number");
+  assert.ok(Array.isArray(body.capability_details));
+  assert.equal(body.total_capabilities, 2);
+  assert.equal(body.coverage_rate, 100);
+
+  await app.close();
+});

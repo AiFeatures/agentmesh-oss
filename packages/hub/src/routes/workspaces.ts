@@ -1678,4 +1678,76 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-185: Workspace anomaly detection
+  app.get(
+    "/api/v1/workspaces/:workspace/anomaly-detection",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const anomalies: Array<{ type: string; description: string; value: number }> = [];
+
+      // Check for stale agents (no heartbeat in 30 min)
+      const staleCount = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM agents
+             WHERE workspace_id = ? AND status = 'online'
+                   AND datetime(last_heartbeat_at) < datetime('now', '-30 minutes')`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      if (staleCount > 0) {
+        anomalies.push({
+          type: "stale_agents",
+          description: "Online agents with no heartbeat in 30 min",
+          value: staleCount,
+        });
+      }
+
+      // Check for high blocker count (relative to agents)
+      const agentCount = (
+        db.prepare(`SELECT COUNT(*) as c FROM agents WHERE workspace_id = ?`).get(workspace) as {
+          c: number;
+        }
+      ).c;
+      const openBlockers = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status != 'resolved'`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      if (agentCount > 0 && openBlockers / agentCount > 2) {
+        anomalies.push({
+          type: "high_blocker_ratio",
+          description: "More than 2 open blockers per agent",
+          value: openBlockers,
+        });
+      }
+
+      // Check for high pending handoffs
+      const pendingHandoffs = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND status = 'pending'`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      if (pendingHandoffs > 10) {
+        anomalies.push({
+          type: "high_pending_handoffs",
+          description: "More than 10 pending handoffs",
+          value: pendingHandoffs,
+        });
+      }
+
+      return reply.send({
+        workspace_id: workspace,
+        anomaly_count: anomalies.length,
+        anomalies,
+      });
+    },
+  );
 };
