@@ -9194,3 +9194,46 @@ test("GET /workspaces/:workspace/risk-score returns risk assessment", async () =
 
   await app.close();
 });
+
+// ---------- F-191: Agent utilization timeline ----------
+test("GET /agents/utilization-timeline returns time buckets", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ut-timeline-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, name: ws } });
+  // Register agent and create a handoff to generate activity
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/utilization-timeline?hours=24&bucket_hours=1`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(Array.isArray(body.buckets));
+  assert.ok(body.buckets.length > 0);
+  assert.ok(typeof body.total_activity === "number");
+  assert.ok(body.peak_bucket);
+  await app.close();
+});
+
+// ---------- F-192: Blocker dependency depth ----------
+test("GET /blockers/dependency-depth returns depth analysis", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `blk-depdepth-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  // Create a blocker
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "B1", severity: "medium" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/dependency-depth`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.max_depth === "number");
+  assert.ok(typeof body.avg_depth === "number");
+  assert.ok(typeof body.total_blockers === "number");
+  assert.ok(body.depth_distribution);
+  await app.close();
+});

@@ -1252,4 +1252,75 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-192: Blocker dependency depth — analyze chains of blocker dependencies
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/dependency-depth",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const blockers = db
+        .prepare(`SELECT blocker_id FROM blockers WHERE workspace_id = ?`)
+        .all(workspace) as { blocker_id: string }[];
+
+      const deps = db
+        .prepare(
+          `SELECT bd.blocker_id, bd.depends_on_blocker_id
+           FROM blocker_dependencies bd
+           JOIN blockers b ON b.blocker_id = bd.blocker_id
+           WHERE b.workspace_id = ?`,
+        )
+        .all(workspace) as { blocker_id: string; depends_on_blocker_id: string }[];
+
+      // Build adjacency: blocker -> depends on
+      const adj: Record<string, string[]> = {};
+      for (const d of deps) {
+        if (!adj[d.blocker_id]) adj[d.blocker_id] = [];
+        adj[d.blocker_id].push(d.depends_on_blocker_id);
+      }
+
+      // BFS depth for each blocker
+      const depths: { blocker_id: string; depth: number }[] = [];
+      for (const b of blockers) {
+        const visited = new Set<string>();
+        let depth = 0;
+        let queue = [b.blocker_id];
+        while (queue.length > 0) {
+          const next: string[] = [];
+          for (const id of queue) {
+            if (visited.has(id)) continue;
+            visited.add(id);
+            for (const dep of adj[id] || []) {
+              if (!visited.has(dep)) next.push(dep);
+            }
+          }
+          if (next.length > 0) depth++;
+          queue = next;
+        }
+        depths.push({ blocker_id: b.blocker_id, depth });
+      }
+
+      const maxDepth = depths.reduce((m, d) => Math.max(m, d.depth), 0);
+      const avgDepth =
+        depths.length > 0
+          ? Math.round((depths.reduce((s, d) => s + d.depth, 0) / depths.length) * 100) / 100
+          : 0;
+      const deepest = depths.filter((d) => d.depth === maxDepth).map((d) => d.blocker_id);
+
+      return reply.send({
+        workspace,
+        total_blockers: blockers.length,
+        max_depth: maxDepth,
+        avg_depth: avgDepth,
+        deepest_blockers: deepest,
+        depth_distribution: depths.reduce(
+          (acc, d) => {
+            acc[d.depth] = (acc[d.depth] || 0) + 1;
+            return acc;
+          },
+          {} as Record<number, number>,
+        ),
+      });
+    },
+  );
 };

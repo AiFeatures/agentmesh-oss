@@ -1996,4 +1996,70 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-191: Agent utilization timeline — activity buckets over time
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/utilization-timeline",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { hours = "24", bucket_hours = "1" } = request.query as {
+        hours?: string;
+        bucket_hours?: string;
+      };
+      const totalHours = Math.min(Number.parseInt(hours, 10) || 24, 720);
+      const bucketH = Math.max(Number.parseInt(bucket_hours, 10) || 1, 1);
+      const now = new Date();
+      const since = new Date(now.getTime() - totalHours * 3600000).toISOString();
+
+      // Gather handoff activity per bucket
+      const handoffs = db
+        .prepare(`SELECT created_at FROM handoffs WHERE workspace_id = ? AND created_at >= ?`)
+        .all(workspace, since) as { created_at: string }[];
+
+      const claims = db
+        .prepare(`SELECT created_at FROM claims WHERE workspace_id = ? AND created_at >= ?`)
+        .all(workspace, since) as { created_at: string }[];
+
+      const buckets: {
+        start: string;
+        end: string;
+        handoffs: number;
+        claims: number;
+        total: number;
+      }[] = [];
+      for (let i = 0; i < totalHours; i += bucketH) {
+        const bStart = new Date(now.getTime() - (totalHours - i) * 3600000);
+        const bEnd = new Date(bStart.getTime() + bucketH * 3600000);
+        const hCount = handoffs.filter((h) => {
+          const t = new Date(h.created_at).getTime();
+          return t >= bStart.getTime() && t < bEnd.getTime();
+        }).length;
+        const cCount = claims.filter((c) => {
+          const t = new Date(c.created_at).getTime();
+          return t >= bStart.getTime() && t < bEnd.getTime();
+        }).length;
+        buckets.push({
+          start: bStart.toISOString(),
+          end: bEnd.toISOString(),
+          handoffs: hCount,
+          claims: cCount,
+          total: hCount + cCount,
+        });
+      }
+
+      const peakBucket = buckets.reduce(
+        (max, b) => (b.total > max.total ? b : max),
+        buckets[0] || { start: "", end: "", handoffs: 0, claims: 0, total: 0 },
+      );
+      return reply.send({
+        workspace,
+        period_hours: totalHours,
+        bucket_hours: bucketH,
+        buckets,
+        peak_bucket: peakBucket,
+        total_activity: handoffs.length + claims.length,
+      });
+    },
+  );
 };
