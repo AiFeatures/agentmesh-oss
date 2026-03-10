@@ -3083,4 +3083,27 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ...row });
     },
   );
+
+  // F-461 handoff-from-to-matrix
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-from-to-matrix",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT from_agent_id, to_agent_id, COUNT(*) AS handoff_count
+           FROM handoffs
+           WHERE workspace_id = ?
+           GROUP BY from_agent_id, to_agent_id
+           ORDER BY handoff_count DESC
+           LIMIT 30`,
+        )
+        .all(req.params.workspace) as {
+        from_agent_id: string;
+        to_agent_id: string;
+        handoff_count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, matrix: rows });
+    },
+  );
 };
