@@ -2560,4 +2560,33 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-318 transfer-velocity
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/transfer-velocity",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT DATE(created_at) as transfer_date, COUNT(*) as count
+           FROM claim_transfer_history
+           WHERE workspace_id = ?
+           GROUP BY DATE(created_at)
+           ORDER BY transfer_date DESC
+           LIMIT 30`,
+        )
+        .all(req.params.workspace) as {
+        transfer_date: string;
+        count: number;
+      }[];
+      const total = rows.reduce((s, r) => s + r.count, 0);
+      const avgPerDay = rows.length > 0 ? total / rows.length : 0;
+      reply.send({
+        workspace: req.params.workspace,
+        daily: rows,
+        total_transfers: total,
+        avg_per_day: avgPerDay,
+      });
+    },
+  );
 };

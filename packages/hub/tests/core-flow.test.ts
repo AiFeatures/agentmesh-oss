@@ -11425,3 +11425,33 @@ test("GET /handoffs/orphan-detection returns orphaned handoffs", async () => {
   assert.ok(typeof body.count === "number");
   await app.close();
 });
+
+// F-317 comment-frequency
+test("GET /blockers/comment-frequency returns frequency data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "comfreq-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/comment-frequency`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.blockers));
+  assert.ok(typeof body.avg_comments_per_blocker === "number");
+  await app.close();
+});
+
+// F-318 transfer-velocity
+test("GET /claims/transfer-velocity returns velocity data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "trnvel-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/transfer-velocity`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.daily));
+  assert.ok(typeof body.avg_per_day === "number");
+  await app.close();
+});

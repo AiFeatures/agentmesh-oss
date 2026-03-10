@@ -2169,4 +2169,33 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-317 comment-frequency
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/comment-frequency",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT b.blocker_id, b.title, COUNT(bc.id) as comment_count
+           FROM blockers b
+           LEFT JOIN blocker_comments bc ON bc.blocker_id = b.blocker_id
+           WHERE b.workspace_id = ?
+           GROUP BY b.blocker_id
+           ORDER BY comment_count DESC
+           LIMIT 30`,
+        )
+        .all(req.params.workspace) as {
+        blocker_id: string;
+        title: string;
+        comment_count: number;
+      }[];
+      const avg = rows.length > 0 ? rows.reduce((s, r) => s + r.comment_count, 0) / rows.length : 0;
+      reply.send({
+        workspace: req.params.workspace,
+        blockers: rows,
+        avg_comments_per_blocker: avg,
+      });
+    },
+  );
 };
