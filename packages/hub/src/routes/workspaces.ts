@@ -3250,4 +3250,29 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-482 workspace-age-days
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/workspace-age-days",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT workspace_id, display_name, created_at,
+                  CAST(julianday('now') - julianday(created_at) AS INTEGER) AS age_days
+           FROM workspaces
+           WHERE workspace_id = ?`,
+        )
+        .get(req.params.workspace) as
+        | {
+            workspace_id: string;
+            display_name: string;
+            created_at: string;
+            age_days: number;
+          }
+        | undefined;
+      if (!row) return reply.code(404).send({ error: "workspace not found" });
+      reply.send(row);
+    },
+  );
 };
