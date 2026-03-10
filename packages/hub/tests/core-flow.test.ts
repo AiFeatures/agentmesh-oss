@@ -11569,3 +11569,32 @@ test("GET /operational-status returns status data", async () => {
   assert.ok(typeof body.online_agents === "number");
   await app.close();
 });
+
+// F-327 task-backlog
+test("GET /agents/task-backlog returns backlog data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "taskbl-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/task-backlog`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.agents));
+  await app.close();
+});
+
+// F-328 dependency-chain-length
+test("GET /blockers/dependency-chain-length returns chain data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "depchn-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/dependency-chain-length`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.chains));
+  assert.ok(typeof body.max_depth === "number");
+  await app.close();
+});

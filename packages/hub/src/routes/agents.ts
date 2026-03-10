@@ -3086,4 +3086,28 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-327 task-backlog
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/task-backlog",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT at.agent_id, a.display_name, COUNT(*) as pending_tasks
+           FROM agent_tasks at
+           JOIN agents a ON a.agent_id = at.agent_id AND a.workspace_id = at.workspace_id
+           WHERE at.workspace_id = ? AND at.status = 'pending'
+           GROUP BY at.agent_id
+           ORDER BY pending_tasks DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        pending_tasks: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, agents: rows });
+    },
+  );
 };

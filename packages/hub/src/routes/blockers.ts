@@ -2227,4 +2227,52 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, blockers: rows });
     },
   );
+
+  // F-328 dependency-chain-length
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/dependency-chain-length",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const deps = db
+        .prepare(
+          `SELECT bd.blocker_id, bd.depends_on_blocker_id
+           FROM blocker_dependencies bd
+           JOIN blockers b ON b.blocker_id = bd.blocker_id
+           WHERE b.workspace_id = ?`,
+        )
+        .all(req.params.workspace) as {
+        blocker_id: string;
+        depends_on_blocker_id: string;
+      }[];
+
+      const graph: Record<string, string[]> = {};
+      for (const d of deps) {
+        if (!graph[d.blocker_id]) graph[d.blocker_id] = [];
+        graph[d.blocker_id].push(d.depends_on_blocker_id);
+      }
+
+      const visited = new Set<string>();
+      const getDepth = (id: string): number => {
+        if (visited.has(id)) return 0;
+        visited.add(id);
+        const children = graph[id] || [];
+        const depth = children.length > 0 ? 1 + Math.max(...children.map(getDepth)) : 0;
+        visited.delete(id);
+        return depth;
+      };
+
+      const chains = Object.keys(graph)
+        .map((id) => ({
+          blocker_id: id,
+          chain_depth: getDepth(id),
+        }))
+        .sort((a, b) => b.chain_depth - a.chain_depth);
+
+      reply.send({
+        workspace: req.params.workspace,
+        chains,
+        max_depth: chains.length > 0 ? chains[0].chain_depth : 0,
+      });
+    },
+  );
 };
