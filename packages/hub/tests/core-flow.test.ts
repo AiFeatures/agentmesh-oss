@@ -8757,3 +8757,106 @@ test("GET /workspaces/:workspace/audit-stats returns audit statistics", async ()
 
   await app.close();
 });
+
+// F-181: Agent pair affinity
+test("GET /agents/pair-affinity returns pair collaboration stats", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `pa-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "pa-a1", display_name: "PA A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "pa-a2", display_name: "PA A2", capabilities: ["review"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "pa-a1", to_agent_id: "pa-a2", summary: "Pair affinity test" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/pair-affinity`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.pair_count === "number");
+  assert.ok(Array.isArray(body.pairs));
+  assert.ok(body.pair_count >= 1);
+  const pair = body.pairs[0];
+  assert.equal(pair.from_agent_id, "pa-a1");
+  assert.equal(pair.to_agent_id, "pa-a2");
+  assert.ok(typeof pair.acceptance_rate === "number");
+
+  await app.close();
+});
+
+// F-182: Blocker clustering
+test("GET /blockers/clustering returns blocker groups", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `cl-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "cl-a1", display_name: "CL A1", capabilities: ["debug"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "cl-a1", title: "Cluster B1", severity: "high" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "cl-a1", title: "Cluster B2", severity: "high" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/clustering`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.total_clusters === "number");
+  assert.ok(Array.isArray(body.clusters));
+  assert.ok(Array.isArray(body.by_agent));
+  assert.ok(Array.isArray(body.by_severity));
+  // Should have a cluster for cl-a1 + high with count 2
+  const cluster = body.clusters.find(
+    (c: Record<string, unknown>) => c.agent_id === "cl-a1" && c.severity === "high",
+  );
+  assert.ok(cluster);
+  assert.equal(cluster.count, 2);
+
+  await app.close();
+});

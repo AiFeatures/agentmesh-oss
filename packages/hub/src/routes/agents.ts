@@ -1902,4 +1902,44 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-181: Agent pair affinity
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/pair-affinity",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const pairs = db
+        .prepare(
+          `SELECT from_agent_id, to_agent_id, COUNT(*) as handoff_count,
+                  SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted_count
+           FROM handoffs
+           WHERE workspace_id = ? AND to_agent_id IS NOT NULL
+           GROUP BY from_agent_id, to_agent_id
+           ORDER BY handoff_count DESC
+           LIMIT 50`,
+        )
+        .all(workspace) as Array<{
+        from_agent_id: string;
+        to_agent_id: string;
+        handoff_count: number;
+        accepted_count: number;
+      }>;
+
+      const affinities = pairs.map((p) => ({
+        from_agent_id: p.from_agent_id,
+        to_agent_id: p.to_agent_id,
+        handoff_count: p.handoff_count,
+        accepted_count: p.accepted_count,
+        acceptance_rate:
+          p.handoff_count > 0 ? Math.round((p.accepted_count / p.handoff_count) * 10000) / 100 : 0,
+      }));
+
+      return reply.send({
+        pair_count: affinities.length,
+        pairs: affinities,
+      });
+    },
+  );
 };

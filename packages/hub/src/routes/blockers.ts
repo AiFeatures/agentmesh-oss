@@ -1140,4 +1140,54 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-182: Blocker clustering
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/clustering",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      // Cluster by agent + severity
+      const clusters = db
+        .prepare(
+          `SELECT agent_id, severity, COUNT(*) as count,
+                  MIN(created_at) as earliest, MAX(created_at) as latest
+           FROM blockers WHERE workspace_id = ?
+           GROUP BY agent_id, severity
+           HAVING COUNT(*) > 0
+           ORDER BY count DESC`,
+        )
+        .all(workspace) as Array<{
+        agent_id: string;
+        severity: string;
+        count: number;
+        earliest: string;
+        latest: string;
+      }>;
+
+      const byAgent = db
+        .prepare(
+          `SELECT agent_id, COUNT(*) as count
+           FROM blockers WHERE workspace_id = ?
+           GROUP BY agent_id ORDER BY count DESC`,
+        )
+        .all(workspace) as Array<{ agent_id: string; count: number }>;
+
+      const bySeverity = db
+        .prepare(
+          `SELECT severity, COUNT(*) as count
+           FROM blockers WHERE workspace_id = ?
+           GROUP BY severity ORDER BY count DESC`,
+        )
+        .all(workspace) as Array<{ severity: string; count: number }>;
+
+      return reply.send({
+        total_clusters: clusters.length,
+        clusters,
+        by_agent: byAgent,
+        by_severity: bySeverity,
+      });
+    },
+  );
 };
