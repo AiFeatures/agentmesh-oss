@@ -3135,4 +3135,40 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: rows });
     },
   );
+
+  // F-337 capability-overlap-matrix
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/capability-overlap-matrix",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const agents = db
+        .prepare(
+          `SELECT agent_id, display_name, capabilities
+           FROM agents
+           WHERE workspace_id = ? AND status = 'online'`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        capabilities: string;
+      }[];
+
+      const pairs: { agent_a: string; agent_b: string; shared: string[] }[] = [];
+      for (let i = 0; i < agents.length; i++) {
+        const capsA = new Set<string>(JSON.parse(agents[i].capabilities || "[]"));
+        for (let j = i + 1; j < agents.length; j++) {
+          const capsB: string[] = JSON.parse(agents[j].capabilities || "[]");
+          const shared = capsB.filter((c) => capsA.has(c));
+          if (shared.length > 0) {
+            pairs.push({
+              agent_a: agents[i].agent_id,
+              agent_b: agents[j].agent_id,
+              shared,
+            });
+          }
+        }
+      }
+      reply.send({ workspace: req.params.workspace, overlaps: pairs });
+    },
+  );
 };

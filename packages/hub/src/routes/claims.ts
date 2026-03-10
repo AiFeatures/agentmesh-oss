@@ -2658,4 +2658,29 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, heatmap: rows });
     },
   );
+
+  // F-338 longest-active
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/longest-active",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT claim_id, agent_id, scope, created_at,
+                  CAST((julianday('now') - julianday(created_at)) * 86400 AS INTEGER) AS active_seconds
+           FROM claims
+           WHERE workspace_id = ? AND status = 'active'
+           ORDER BY created_at ASC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        claim_id: string;
+        agent_id: string;
+        scope: string;
+        created_at: string;
+        active_seconds: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, claims: rows });
+    },
+  );
 };

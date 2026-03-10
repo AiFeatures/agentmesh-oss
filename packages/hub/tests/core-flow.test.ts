@@ -11710,3 +11710,31 @@ test("GET /workspaces/blocker-aging-report returns aging data", async () => {
   assert.ok(Array.isArray(body.aging));
   await app.close();
 });
+
+// F-337 capability-overlap-matrix
+test("GET /agents/capability-overlap-matrix returns overlaps", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "capovl-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/capability-overlap-matrix`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.overlaps));
+  await app.close();
+});
+
+// F-338 longest-active
+test("GET /claims/longest-active returns longest active claims", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "lngact-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/longest-active`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.claims));
+  await app.close();
+});
