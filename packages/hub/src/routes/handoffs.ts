@@ -2113,4 +2113,25 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+
+  // F-291 handoff-recipient-stats
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/recipient-stats",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT to_agent_id, COUNT(*) as received_count,
+                  SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted,
+                  SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected
+           FROM handoffs
+           WHERE workspace_id = ? AND to_agent_id IS NOT NULL
+           GROUP BY to_agent_id
+           ORDER BY received_count DESC`,
+        )
+        .all(req.params.workspace) as { to_agent_id: string; received_count: number; accepted: number; rejected: number }[];
+      reply.send({ workspace: req.params.workspace, recipients: rows });
+    },
+  );
+
 };

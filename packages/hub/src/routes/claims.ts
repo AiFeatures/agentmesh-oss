@@ -2383,4 +2383,26 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+
+  // F-292 claim-scope-density
+  app.get<{ Params: { workspace: string }; Querystring: { limit?: number } }>(
+    "/api/v1/workspaces/:workspace/claims/scope-density",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const limit = req.query.limit ?? 20;
+      const rows = db
+        .prepare(
+          `SELECT scope, COUNT(*) as claim_count,
+                  SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_count
+           FROM claims
+           WHERE workspace_id = ?
+           GROUP BY scope
+           ORDER BY claim_count DESC
+           LIMIT ?`,
+        )
+        .all(req.params.workspace, limit) as { scope: string; claim_count: number; active_count: number }[];
+      reply.send({ workspace: req.params.workspace, scopes: rows });
+    },
+  );
+
 };
