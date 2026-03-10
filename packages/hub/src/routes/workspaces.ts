@@ -2774,4 +2774,27 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, distribution: rows });
     },
   );
+
+  // F-353 handoff-completion-rate
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoff-completion-rate",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS total,
+                  SUM(CASE WHEN status IN ('completed','accepted') THEN 1 ELSE 0 END) AS completed
+           FROM handoffs
+           WHERE workspace_id = ?`,
+        )
+        .get(req.params.workspace) as { total: number; completed: number };
+      const rate = row.total > 0 ? row.completed / row.total : 0;
+      reply.send({
+        workspace: req.params.workspace,
+        total: row.total,
+        completed: row.completed,
+        rate: Math.round(rate * 10000) / 100,
+      });
+    },
+  );
 };

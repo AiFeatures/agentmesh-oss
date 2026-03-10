@@ -2738,4 +2738,28 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, risks: rows });
     },
   );
+
+  // F-354 agent-claim-count-ranking
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/agent-claim-count-ranking",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT c.agent_id, a.display_name, COUNT(*) AS active_claims
+           FROM claims c
+           JOIN agents a ON a.agent_id = c.agent_id AND a.workspace_id = c.workspace_id
+           WHERE c.workspace_id = ? AND c.status = 'active'
+           GROUP BY c.agent_id
+           ORDER BY active_claims DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        active_claims: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, ranking: rows });
+    },
+  );
 };
