@@ -3733,4 +3733,31 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, models: rows });
     },
   );
+
+  // F-451 agent-task-completion
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/agent-task-completion",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT agent_id, 
+                  COUNT(*) AS total_tasks,
+                  SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
+                  ROUND(SUM(CASE WHEN status = 'completed' THEN 1.0 ELSE 0 END) / COUNT(*) * 100, 2) AS completion_pct
+           FROM agent_tasks
+           WHERE workspace_id = ?
+           GROUP BY agent_id
+           ORDER BY completion_pct DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        total_tasks: number;
+        completed: number;
+        completion_pct: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, agents: rows });
+    },
+  );
 };

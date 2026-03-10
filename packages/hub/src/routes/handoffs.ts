@@ -3038,4 +3038,25 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ...row });
     },
   );
+
+  // F-452 handoff-route-mode-split
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-route-mode-split",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT COALESCE(route_mode, 'direct') AS route_mode, COUNT(*) AS handoff_count
+           FROM handoffs
+           WHERE workspace_id = ?
+           GROUP BY route_mode
+           ORDER BY handoff_count DESC`,
+        )
+        .all(req.params.workspace) as {
+        route_mode: string;
+        handoff_count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, modes: rows });
+    },
+  );
 };
