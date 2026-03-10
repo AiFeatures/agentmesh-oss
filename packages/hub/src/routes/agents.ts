@@ -394,8 +394,10 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       const { status } = request.body as { status: string };
 
       const agent = db
-        .prepare("SELECT agent_id FROM agents WHERE agent_id = ? AND workspace_id = ?")
-        .get(agentId, workspace);
+        .prepare(
+          "SELECT agent_id, status as current_status FROM agents WHERE agent_id = ? AND workspace_id = ?",
+        )
+        .get(agentId, workspace) as { agent_id: string; current_status: string } | undefined;
       if (!agent) {
         return reply.code(404).send({ error: "Agent not found" });
       }
@@ -403,6 +405,10 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       db.prepare(
         "UPDATE agents SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE agent_id = ?",
       ).run(status, agentId);
+
+      db.prepare(
+        "INSERT INTO agent_status_history (agent_id, workspace_id, old_status, new_status) VALUES (?, ?, ?, ?)",
+      ).run(agentId, workspace, agent.current_status, status);
 
       writeAuditLog({
         workspaceId: workspace,
@@ -627,6 +633,53 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
         blockers: Object.fromEntries(blockers.map((r) => [r.status, r.count])),
         audit_events: auditCount.count,
       });
+    },
+  );
+
+  /* ── F-63  agent status history ─────────────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/:agentId/status-history",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            limit: { type: "string" },
+            offset: { type: "string" },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as {
+        workspace: string;
+        agentId: string;
+      };
+      const agent = db
+        .prepare("SELECT agent_id FROM agents WHERE agent_id = ? AND workspace_id = ?")
+        .get(agentId, workspace);
+      if (!agent) {
+        return reply.code(404).send({ error: "Agent not found" });
+      }
+
+      const { limit, offset } = request.query as { limit?: string; offset?: string };
+      const count = Math.min(200, Math.max(1, Number(limit) || 50));
+      const start = Math.max(0, Number(offset) || 0);
+
+      const rows = db
+        .prepare(
+          "SELECT old_status, new_status, created_at FROM agent_status_history WHERE agent_id = ? AND workspace_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+        )
+        .all(agentId, workspace, count, start) as Array<Record<string, unknown>>;
+      const total = db
+        .prepare(
+          "SELECT COUNT(*) as c FROM agent_status_history WHERE agent_id = ? AND workspace_id = ?",
+        )
+        .get(agentId, workspace) as { c: number };
+
+      return reply.send({ data: rows, total: total.c });
     },
   );
 };

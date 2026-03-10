@@ -1150,7 +1150,13 @@ test("health endpoint includes ws_connections count", async () => {
   const app = buildApp();
   const res = await app.inject({ method: "GET", url: "/health" });
   assert.equal(res.statusCode, 200);
-  const body = res.json() as { ws_connections: number; agents_online: number; active_claims: number; open_blockers: number; version: string };
+  const body = res.json() as {
+    ws_connections: number;
+    agents_online: number;
+    active_claims: number;
+    open_blockers: number;
+    version: string;
+  };
   assert.equal(typeof body.ws_connections, "number");
   assert.equal(body.ws_connections, 0);
   assert.equal(typeof body.agents_online, "number");
@@ -3203,6 +3209,192 @@ test("handoffs list supports sort_by and created_after", async () => {
   });
   assert.equal(res2.statusCode, 200);
   assert.equal(res2.json().data.length, 0);
+
+  await app.close();
+});
+
+// --------------- F-63: Agent status history ---------------
+test("agent status history tracks transitions", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-statushist-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  // create workspace + agent
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+
+  // change status twice
+  await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/agents/a1/status`,
+    headers: auth,
+    payload: { status: "blocked" },
+  });
+  await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/agents/a1/status`,
+    headers: auth,
+    payload: { status: "idle" },
+  });
+
+  // query history
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/a1/status-history`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(body.data.length >= 2);
+  assert.equal(body.data[0].new_status, "idle");
+  assert.equal(body.data[1].new_status, "blocked");
+
+  // pagination
+  const res2 = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/a1/status-history?limit=1`,
+    headers: auth,
+  });
+  assert.equal(res2.json().data.length, 1);
+
+  await app.close();
+});
+
+// --------------- F-64: Workspace list enhanced ---------------
+test("workspace list supports search, archived filter, pagination", async () => {
+  runMigrations();
+  const app = buildApp();
+  const suffix = Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  // create workspaces
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: `alpha-${suffix}`, display_name: `Alpha ${suffix}` },
+  });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: `beta-${suffix}`, display_name: `Beta ${suffix}` },
+  });
+
+  // archive one
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/alpha-${suffix}/archive`,
+    headers: auth,
+  });
+
+  // search by display_name
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces?search=Beta+${suffix}`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(body.data.some((w: any) => w.workspace_id === `beta-${suffix}`));
+
+  // archived=true filter
+  const res2 = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces?archived=true&search=${suffix}`,
+    headers: auth,
+  });
+  const archivedList = res2.json().data;
+  assert.ok(archivedList.some((w: any) => w.workspace_id === `alpha-${suffix}`));
+
+  // pagination with total
+  const res3 = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces?limit=1&search=${suffix}`,
+    headers: auth,
+  });
+  const paginated = res3.json();
+  assert.ok(paginated.total >= 2);
+  assert.equal(paginated.data.length, 1);
+
+  await app.close();
+});
+
+// --------------- F-65: Blocker list sort + date-range ---------------
+test("blocker list supports sort and date-range filters", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-blocksort-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  const wsRes = await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  assert.equal(wsRes.statusCode, 201);
+  const agRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  assert.equal(agRes.statusCode, 201);
+
+  // create two blockers with different severities
+  const b1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "Low blocker", severity: "low" },
+  });
+  assert.equal(b1.statusCode, 201);
+  const b2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "Critical blocker", severity: "critical" },
+  });
+  assert.equal(b2.statusCode, 201);
+
+  // sort by severity asc
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers?sort_by=severity&sort_order=asc`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.ok(res.json().data.length >= 2);
+
+  // date-range: future dates → no results
+  const res2 = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers?created_after=2099-01-01`,
+    headers: auth,
+  });
+  assert.equal(res2.statusCode, 200);
+  assert.equal(res2.json().data.length, 0);
+
+  // sort by created_at desc (default)
+  const res3 = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers?sort_by=created_at&sort_order=desc`,
+    headers: auth,
+  });
+  assert.equal(res3.statusCode, 200);
+  assert.ok(res3.json().data.length >= 2);
 
   await app.close();
 });

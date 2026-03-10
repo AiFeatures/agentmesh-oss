@@ -228,6 +228,10 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
             status: { type: "string", enum: ["open", "resolved"] },
             severity: { type: "string", enum: ["low", "medium", "high", "critical"] },
             agent_id: { type: "string", maxLength: 128 },
+            created_after: { type: "string", maxLength: 30 },
+            created_before: { type: "string", maxLength: 30 },
+            sort_by: { type: "string", enum: ["created_at", "severity"] },
+            sort_order: { type: "string", enum: ["asc", "desc"] },
             limit: { type: "string" },
             offset: { type: "string" },
           },
@@ -236,25 +240,47 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
     },
     async (request, reply) => {
       const { workspace } = request.params as { workspace: string };
-      const { limit, offset, status, severity, agent_id } = request.query as {
+      const q = request.query as {
         limit?: string;
         offset?: string;
         status?: string;
         severity?: string;
         agent_id?: string;
+        created_after?: string;
+        created_before?: string;
+        sort_by?: string;
+        sort_order?: string;
       };
       let all = listBlockers(workspace);
-      if (status) {
-        all = all.filter((b) => b.status === status);
+      if (q.status) {
+        all = all.filter((b) => b.status === q.status);
       }
-      if (severity) {
-        all = all.filter((b) => b.severity === severity);
+      if (q.severity) {
+        all = all.filter((b) => b.severity === q.severity);
       }
-      if (agent_id) {
-        all = all.filter((b) => b.agent_id === agent_id);
+      if (q.agent_id) {
+        all = all.filter((b) => b.agent_id === q.agent_id);
       }
-      const start = Math.max(0, Number(offset) || 0);
-      const count = Math.min(200, Math.max(1, Number(limit) || 50));
+      if (q.created_after) {
+        all = all.filter((b) => String(b.created_at) >= q.created_after!);
+      }
+      if (q.created_before) {
+        all = all.filter((b) => String(b.created_at) <= q.created_before!);
+      }
+      if (q.sort_by) {
+        const sevOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+        const dir = q.sort_order === "asc" ? 1 : -1;
+        all.sort((a, b) => {
+          if (q.sort_by === "severity") {
+            return (
+              dir * ((sevOrder[String(a.severity)] ?? 2) - (sevOrder[String(b.severity)] ?? 2))
+            );
+          }
+          return dir * String(a.created_at ?? "").localeCompare(String(b.created_at ?? ""));
+        });
+      }
+      const start = Math.max(0, Number(q.offset) || 0);
+      const count = Math.min(200, Math.max(1, Number(q.limit) || 50));
       return reply.send({ data: all.slice(start, start + count), total: all.length });
     },
   );

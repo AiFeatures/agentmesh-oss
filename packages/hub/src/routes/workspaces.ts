@@ -4,14 +4,59 @@ import { writeAuditLog } from "../services/audit.js";
 import { workspaceId as generateWorkspaceId } from "../services/ids.js";
 
 export const workspaceRoutes: FastifyPluginAsync = async (app) => {
-  app.get("/api/v1/workspaces", { preHandler: app.authGuard }, async (_request, reply) => {
-    const rows = db
-      .prepare(
-        "SELECT workspace_id, display_name, description, base_path, created_at FROM workspaces ORDER BY created_at ASC",
-      )
-      .all();
-    return reply.send({ data: rows });
-  });
+  app.get(
+    "/api/v1/workspaces",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            search: { type: "string", maxLength: 128 },
+            archived: { type: "string", enum: ["true", "false"] },
+            limit: { type: "string" },
+            offset: { type: "string" },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const q = request.query as {
+        search?: string;
+        archived?: string;
+        limit?: string;
+        offset?: string;
+      };
+
+      let sql =
+        "SELECT workspace_id, display_name, description, base_path, archived, created_at FROM workspaces WHERE 1=1";
+      const params: unknown[] = [];
+
+      if (q.search) {
+        sql += " AND (display_name LIKE ? OR workspace_id LIKE ?)";
+        const term = `%${q.search}%`;
+        params.push(term, term);
+      }
+      if (q.archived === "true") {
+        sql += " AND archived = 1";
+      } else if (q.archived === "false") {
+        sql += " AND archived = 0";
+      }
+
+      const countSql = sql.replace(/^SELECT .+ FROM/, "SELECT COUNT(*) as total FROM");
+      const total = (db.prepare(countSql).get(...params) as { total: number }).total;
+
+      sql += " ORDER BY created_at DESC";
+      const count = Math.min(200, Math.max(1, Number(q.limit) || 50));
+      const start = Math.max(0, Number(q.offset) || 0);
+      sql += " LIMIT ? OFFSET ?";
+      params.push(count, start);
+
+      const rows = db.prepare(sql).all(...params);
+      return reply.send({ data: rows, total });
+    },
+  );
 
   app.get(
     "/api/v1/workspaces/:workspace",
