@@ -1380,4 +1380,29 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows });
     },
   );
+
+  /* ── F-130  agent status transitions ────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/:agentId/status-transitions",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as { workspace: string; agentId: string };
+      const agent = db
+        .prepare("SELECT agent_id FROM agents WHERE agent_id = ? AND workspace_id = ?")
+        .get(agentId, workspace);
+      if (!agent) {
+        return reply.code(404).send({ error: "Agent not found" });
+      }
+      const rows = db
+        .prepare(
+          `SELECT old_status, new_status, COUNT(*) as count
+           FROM agent_status_history
+           WHERE agent_id = ?
+           GROUP BY old_status, new_status
+           ORDER BY count DESC`,
+        )
+        .all(agentId);
+      return reply.send({ agent_id: agentId, data: rows });
+    },
+  );
 };

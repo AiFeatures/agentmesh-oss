@@ -6250,3 +6250,91 @@ test("claim conflict history returns empty when no conflicts", async () => {
 
   await app.close();
 });
+
+/* ── F-129  handoff throughput ─────────────────────── */
+test("handoff throughput returns hourly data", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "tp";
+  const ws = `ws-tp-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Throughput" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/throughput`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().data));
+
+  await app.close();
+});
+
+/* ── F-130  agent status transitions ───────────────── */
+test("agent status transitions returns grouped transitions", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "st";
+  const ws = `ws-st-${suffix}`;
+  const aid = `st-a1-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "StatusTrans" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: aid, display_name: "STAgent", capabilities: ["test"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/${aid}/status-transitions`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().agent_id, aid);
+  assert.ok(Array.isArray(res.json().data));
+
+  await app.close();
+});
+
+/* ── F-131  workspace resource utilization ──────────── */
+test("workspace resource utilization returns metrics", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "ru";
+  const ws = `ws-ru-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "ResUtil" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/resource-utilization`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { active_claims: number; utilization_rate: number };
+  assert.equal(body.active_claims, 0);
+  assert.equal(body.utilization_rate, 0);
+
+  await app.close();
+});

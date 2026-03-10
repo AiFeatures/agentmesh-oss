@@ -1073,6 +1073,23 @@ export class AgentMeshClient {
     });
   }
 
+  /* ── F-129  handoff throughput ──────────────────── */
+  async getHandoffThroughput(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/handoffs/throughput`, { method: "GET" });
+  }
+
+  /* ── F-130  agent status transitions ────────────── */
+  async getAgentStatusTransitions(workspace: string, agentId: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}/status-transitions`, {
+      method: "GET",
+    });
+  }
+
+  /* ── F-131  workspace resource utilization ──────── */
+  async getResourceUtilization(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/resource-utilization`, { method: "GET" });
+  }
+
   private async request<T = unknown>(path: string, init: RequestInit): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);

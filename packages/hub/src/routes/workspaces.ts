@@ -1086,4 +1086,50 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-131  workspace resource utilization ───────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/resource-utilization",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const activeClaims = (
+        db
+          .prepare("SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND status = 'active'")
+          .get(workspace) as { c: number }
+      ).c;
+      const uniqueScopes = (
+        db
+          .prepare(
+            "SELECT COUNT(DISTINCT scope) as c FROM claims WHERE workspace_id = ? AND status = 'active'",
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const totalAgents = (
+        db.prepare("SELECT COUNT(*) as c FROM agents WHERE workspace_id = ?").get(workspace) as {
+          c: number;
+        }
+      ).c;
+      const agentsWithClaims = (
+        db
+          .prepare(
+            "SELECT COUNT(DISTINCT agent_id) as c FROM claims WHERE workspace_id = ? AND status = 'active'",
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      return reply.send({
+        active_claims: activeClaims,
+        unique_scopes: uniqueScopes,
+        total_agents: totalAgents,
+        agents_with_claims: agentsWithClaims,
+        utilization_rate: totalAgents > 0 ? Math.round((agentsWithClaims / totalAgents) * 100) : 0,
+      });
+    },
+  );
 };

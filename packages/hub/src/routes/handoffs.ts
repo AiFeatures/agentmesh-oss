@@ -646,4 +646,31 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-129  handoff throughput ──────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/throughput",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const rows = db
+        .prepare(
+          `SELECT strftime('%Y-%m-%d %H:00:00', updated_at) as hour,
+                  COUNT(*) as completed
+           FROM handoffs
+           WHERE workspace_id = ? AND status = 'accepted'
+             AND updated_at >= datetime('now', '-1 day')
+           GROUP BY hour
+           ORDER BY hour ASC`,
+        )
+        .all(workspace);
+      return reply.send({ data: rows });
+    },
+  );
 };
