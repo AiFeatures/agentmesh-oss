@@ -1040,4 +1040,58 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-171: Blocker SLA compliance
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/sla-compliance",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const resolved = db
+        .prepare(
+          `SELECT blocker_id, title, severity, deadline_at, resolved_at,
+                  CASE WHEN deadline_at IS NOT NULL AND resolved_at IS NOT NULL
+                       AND datetime(resolved_at) <= datetime(deadline_at) THEN 1 ELSE 0 END as met_sla
+           FROM blockers
+           WHERE workspace_id = ? AND status = 'resolved' AND deadline_at IS NOT NULL`,
+        )
+        .all(workspace) as Array<{
+        blocker_id: string;
+        title: string;
+        severity: string;
+        deadline_at: string;
+        resolved_at: string;
+        met_sla: number;
+      }>;
+
+      const overdue = db
+        .prepare(
+          `SELECT blocker_id, title, severity, deadline_at
+           FROM blockers
+           WHERE workspace_id = ? AND status != 'resolved'
+                 AND deadline_at IS NOT NULL AND datetime(deadline_at) < datetime('now')`,
+        )
+        .all(workspace) as Array<{
+        blocker_id: string;
+        title: string;
+        severity: string;
+        deadline_at: string;
+      }>;
+
+      const metCount = resolved.filter((r) => r.met_sla === 1).length;
+      const complianceRate =
+        resolved.length > 0 ? Math.round((metCount / resolved.length) * 10000) / 100 : 100;
+
+      return reply.send({
+        total_with_deadline: resolved.length + overdue.length,
+        resolved_with_deadline: resolved.length,
+        met_sla: metCount,
+        missed_sla: resolved.length - metCount,
+        currently_overdue: overdue.length,
+        compliance_rate: complianceRate,
+        overdue_blockers: overdue,
+      });
+    },
+  );
 };

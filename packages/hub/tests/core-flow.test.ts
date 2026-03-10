@@ -8344,3 +8344,84 @@ test("GET /workspaces/:workspace/growth-trend returns daily trends", async () =>
 
   await app.close();
 });
+
+// F-171: Blocker SLA compliance
+test("GET /blockers/sla-compliance returns compliance stats", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `sla-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "sla-a1", display_name: "SLA A1", capabilities: ["debug"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/sla-compliance`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.total_with_deadline === "number");
+  assert.ok(typeof body.compliance_rate === "number");
+  assert.ok(typeof body.currently_overdue === "number");
+  assert.ok(typeof body.met_sla === "number");
+  assert.ok(Array.isArray(body.overdue_blockers));
+
+  await app.close();
+});
+
+// F-172: Claim aging analysis
+test("GET /claims/aging returns age distribution", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `age-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "age-a1", display_name: "AGE A1", capabilities: ["code"] },
+  });
+
+  // Create a claim so we have data
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "age-a1", scope: "fileA", paths: ["src/a.ts"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/aging`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.total_active === "number");
+  assert.ok(typeof body.avg_age_hours === "number");
+  assert.ok(body.distribution);
+  assert.ok(typeof body.distribution.under_1h === "number");
+  assert.ok(Array.isArray(body.oldest));
+  assert.equal(body.total_active, 1);
+
+  await app.close();
+});

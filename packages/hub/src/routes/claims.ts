@@ -1382,4 +1382,57 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-172: Claim aging analysis
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/aging",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const claims = db
+        .prepare(
+          `SELECT claim_id, agent_id, scope, status, created_at, expires_at,
+                  ROUND((julianday('now') - julianday(created_at)) * 24, 1) as age_hours
+           FROM claims
+           WHERE workspace_id = ? AND status = 'active'
+           ORDER BY created_at ASC`,
+        )
+        .all(workspace) as Array<{
+        claim_id: string;
+        agent_id: string;
+        scope: string;
+        status: string;
+        created_at: string;
+        expires_at: string;
+        age_hours: number;
+      }>;
+
+      // Bucket into age ranges
+      const buckets = { under_1h: 0, "1h_to_6h": 0, "6h_to_24h": 0, over_24h: 0 };
+      for (const c of claims) {
+        if (c.age_hours < 1) buckets.under_1h++;
+        else if (c.age_hours < 6) buckets["1h_to_6h"]++;
+        else if (c.age_hours < 24) buckets["6h_to_24h"]++;
+        else buckets.over_24h++;
+      }
+
+      const avgAge =
+        claims.length > 0
+          ? Math.round((claims.reduce((s, c) => s + c.age_hours, 0) / claims.length) * 10) / 10
+          : 0;
+
+      return reply.send({
+        total_active: claims.length,
+        avg_age_hours: avgAge,
+        distribution: buckets,
+        oldest: claims.slice(0, 10).map((c) => ({
+          claim_id: c.claim_id,
+          agent_id: c.agent_id,
+          scope: c.scope,
+          age_hours: c.age_hours,
+        })),
+      });
+    },
+  );
 };
