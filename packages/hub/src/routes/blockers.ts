@@ -419,4 +419,57 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: watchers });
     },
   );
+
+  /* ── F-81  blocker comments ─────────────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/blockers/:blockerId/comments",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["author_id", "content"],
+          additionalProperties: false,
+          properties: {
+            author_id: { type: "string", minLength: 1, maxLength: 128 },
+            content: { type: "string", minLength: 1, maxLength: 4096 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, blockerId } = request.params as { workspace: string; blockerId: string };
+      const body = request.body as { author_id: string; content: string };
+      const exists = db
+        .prepare("SELECT blocker_id FROM blockers WHERE blocker_id = ? AND workspace_id = ?")
+        .get(blockerId, workspace);
+      if (!exists) {
+        return reply.code(404).send({ error: "Blocker not found" });
+      }
+      db.prepare(
+        "INSERT INTO blocker_comments (blocker_id, workspace_id, author_id, content) VALUES (?, ?, ?, ?)",
+      ).run(blockerId, workspace, body.author_id, body.content);
+      return reply.code(201).send({ ok: true });
+    },
+  );
+
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/:blockerId/comments",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, blockerId } = request.params as { workspace: string; blockerId: string };
+      const exists = db
+        .prepare("SELECT blocker_id FROM blockers WHERE blocker_id = ? AND workspace_id = ?")
+        .get(blockerId, workspace);
+      if (!exists) {
+        return reply.code(404).send({ error: "Blocker not found" });
+      }
+      const comments = db
+        .prepare(
+          "SELECT id, author_id, content, created_at FROM blocker_comments WHERE blocker_id = ? AND workspace_id = ? ORDER BY id ASC",
+        )
+        .all(blockerId, workspace);
+      return reply.send({ data: comments });
+    },
+  );
 };

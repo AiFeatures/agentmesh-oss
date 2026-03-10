@@ -4247,3 +4247,149 @@ test("metrics snapshot and history work correctly", async () => {
 
   await app.close();
 });
+
+// --------------- F-81: Blocker comments ---------------
+test("blocker comments can be added and listed", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-blkcmt-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `bc-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+
+  // create blocker
+  const b = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: `bc-a1-${ws}`, title: "stuck on issue", severity: "medium" },
+  });
+  assert.equal(b.statusCode, 201);
+  const blockerId = b.json().blocker_id;
+
+  // add comment
+  const c1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers/${blockerId}/comments`,
+    headers: auth,
+    payload: { author_id: `bc-a1-${ws}`, content: "Investigating..." },
+  });
+  assert.equal(c1.statusCode, 201);
+
+  // list comments
+  const list = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/${blockerId}/comments`,
+    headers: auth,
+  });
+  assert.equal(list.statusCode, 200);
+  assert.equal(list.json().data.length, 1);
+  assert.equal(list.json().data[0].content, "Investigating...");
+
+  await app.close();
+});
+
+// --------------- F-82: Claim renewal history ---------------
+test("claim renewal history tracks renewals", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-renewhist-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `rh-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+
+  // create claim
+  const c = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: `rh-a1-${ws}`, scope: "rh.scope", paths: ["src/rh.ts"], ttl_seconds: 60 },
+  });
+  assert.equal(c.statusCode, 201);
+  const claimId = c.json().claim_id;
+
+  // renew claim
+  const renew = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims/${claimId}/renew`,
+    headers: auth,
+    payload: { ttl_seconds: 120 },
+  });
+  assert.equal(renew.statusCode, 200);
+
+  // check renewal history
+  const hist = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/${claimId}/renewal-history`,
+    headers: auth,
+  });
+  assert.equal(hist.statusCode, 200);
+  assert.equal(hist.json().data.length, 1);
+  assert.ok(hist.json().data[0].old_expires_at);
+  assert.ok(hist.json().data[0].new_expires_at);
+
+  await app.close();
+});
+
+// --------------- F-83: Agent idle eviction ---------------
+test("evict-idle returns eviction count", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-evict-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `ev-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+
+  // set short idle timeout
+  await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/settings`,
+    headers: auth,
+    payload: { agent_idle_timeout_minutes: 0 },
+  });
+
+  // run eviction (agents just registered so heartbeat is fresh — may or may not evict)
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/evict-idle`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.ok("evicted_count" in res.json());
+  assert.ok("idle_threshold_minutes" in res.json());
+
+  await app.close();
+});

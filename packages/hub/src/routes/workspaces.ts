@@ -657,4 +657,29 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows, total: rows.length });
     },
   );
+
+  /* ── F-83  agent idle eviction ──────────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/agents/evict-idle",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const row = db
+        .prepare("SELECT settings FROM workspaces WHERE workspace_id = ?")
+        .get(workspace) as { settings: string } | undefined;
+      if (!row) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const settings = JSON.parse(row.settings || "{}");
+      const idleMinutes = Number(settings.agent_idle_timeout_minutes) || 30;
+      const evicted = db
+        .prepare(
+          `UPDATE agents SET status = 'evicted', updated_at = CURRENT_TIMESTAMP
+           WHERE workspace_id = ? AND status IN ('online', 'idle')
+           AND last_heartbeat_at < datetime('now', '-' || ? || ' minutes')`,
+        )
+        .run(workspace, idleMinutes);
+      return reply.send({ evicted_count: evicted.changes, idle_threshold_minutes: idleMinutes });
+    },
+  );
 };

@@ -346,9 +346,27 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const body = request.body as { ttl_seconds?: number };
+      // capture old expiry for renewal history
+      const claimDetail = db
+        .prepare("SELECT agent_id, expires_at FROM claims WHERE claim_id = ? AND status = 'active'")
+        .get(claimId) as { agent_id: string; expires_at: string } | undefined;
+      const oldExpiry = claimDetail?.expires_at;
+
       const ok = renewClaim(claimId, body?.ttl_seconds ?? 1800);
       if (!ok) {
         return reply.code(404).send({ error: "Active claim not found" });
+      }
+
+      // record renewal history
+      if (oldExpiry && claimDetail) {
+        const newExpiry = (
+          db.prepare("SELECT expires_at FROM claims WHERE claim_id = ?").get(claimId) as {
+            expires_at: string;
+          }
+        ).expires_at;
+        db.prepare(
+          "INSERT INTO claim_renewal_history (claim_id, workspace_id, renewed_by, old_expires_at, new_expires_at) VALUES (?, ?, ?, ?, ?)",
+        ).run(claimId, workspace, claimDetail.agent_id, oldExpiry, newExpiry);
       }
 
       writeAuditLog({
@@ -788,6 +806,27 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
         }
       }
       return reply.send({ data: conflicts, total: conflicts.length });
+    },
+  );
+
+  /* ── F-82  claim renewal history ────────────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/:claimId/renewal-history",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, claimId } = request.params as { workspace: string; claimId: string };
+      const exists = db
+        .prepare("SELECT claim_id FROM claims WHERE claim_id = ? AND workspace_id = ?")
+        .get(claimId, workspace);
+      if (!exists) {
+        return reply.code(404).send({ error: "Claim not found" });
+      }
+      const rows = db
+        .prepare(
+          "SELECT renewed_by, old_expires_at, new_expires_at, created_at FROM claim_renewal_history WHERE claim_id = ? AND workspace_id = ? ORDER BY id ASC",
+        )
+        .all(claimId, workspace);
+      return reply.send({ data: rows });
     },
   );
 };
