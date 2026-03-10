@@ -1034,4 +1034,32 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-98  agent capability matrix ──────────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/capability-matrix",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const agents = db
+        .prepare("SELECT agent_id, display_name, capabilities FROM agents WHERE workspace_id = ?")
+        .all(workspace) as Array<{ agent_id: string; display_name: string; capabilities: string }>;
+
+      const capSet = new Set<string>();
+      const parsed = agents.map((a) => {
+        const caps: string[] = JSON.parse(a.capabilities);
+        for (const c of caps) capSet.add(c);
+        return { agent_id: a.agent_id, display_name: a.display_name, capabilities: caps };
+      });
+
+      const allCaps = [...capSet].sort();
+      const matrix = parsed.map((a) => ({
+        agent_id: a.agent_id,
+        display_name: a.display_name,
+        ...Object.fromEntries(allCaps.map((c) => [c, a.capabilities.includes(c)])),
+      }));
+
+      return reply.send({ capabilities: allCaps, matrix });
+    },
+  );
 };

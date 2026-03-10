@@ -494,4 +494,49 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows, total: rows.length });
     },
   );
+
+  /* ── F-96  handoff chain analytics ──────────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/chain-analytics",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      // Find root handoffs (no parent) and compute chain depth
+      const roots = db
+        .prepare(
+          "SELECT handoff_id FROM handoffs WHERE workspace_id = ? AND parent_handoff_id IS NULL",
+        )
+        .all(workspace) as Array<{ handoff_id: string }>;
+
+      let totalChains = 0;
+      let maxDepth = 0;
+      let totalDepth = 0;
+
+      for (const root of roots) {
+        totalChains++;
+        let depth = 1;
+        let current = root.handoff_id;
+        // Walk children
+        // biome-ignore lint: loop is intentional
+        while (true) {
+          const child = db
+            .prepare(
+              "SELECT handoff_id FROM handoffs WHERE parent_handoff_id = ? AND workspace_id = ? LIMIT 1",
+            )
+            .get(current, workspace) as { handoff_id: string } | undefined;
+          if (!child) break;
+          depth++;
+          current = child.handoff_id;
+        }
+        totalDepth += depth;
+        if (depth > maxDepth) maxDepth = depth;
+      }
+
+      return reply.send({
+        total_chains: totalChains,
+        max_depth: maxDepth,
+        avg_depth: totalChains > 0 ? +(totalDepth / totalChains).toFixed(2) : 0,
+      });
+    },
+  );
 };

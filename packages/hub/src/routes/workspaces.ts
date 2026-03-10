@@ -762,4 +762,54 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows, total, limit: lim, offset: off });
     },
   );
+
+  /* ── F-97  workspace rate-limit config ──────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/rate-limit",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const row = db
+        .prepare("SELECT settings FROM workspaces WHERE workspace_id = ?")
+        .get(workspace) as { settings: string } | undefined;
+      if (!row) return reply.code(404).send({ error: "Workspace not found" });
+      const settings = JSON.parse(row.settings || "{}");
+      const config = settings.rate_limit ?? { max_requests_per_minute: 60, burst: 10 };
+      return reply.send(config);
+    },
+  );
+
+  app.patch(
+    "/api/v1/workspaces/:workspace/rate-limit",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            max_requests_per_minute: { type: "integer", minimum: 1, maximum: 10000 },
+            burst: { type: "integer", minimum: 1, maximum: 1000 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const body = request.body as { max_requests_per_minute?: number; burst?: number };
+      const row = db
+        .prepare("SELECT settings FROM workspaces WHERE workspace_id = ?")
+        .get(workspace) as { settings: string } | undefined;
+      if (!row) return reply.code(404).send({ error: "Workspace not found" });
+      const settings = JSON.parse(row.settings || "{}");
+      const current = settings.rate_limit ?? { max_requests_per_minute: 60, burst: 10 };
+      const merged = { ...current, ...body };
+      settings.rate_limit = merged;
+      db.prepare("UPDATE workspaces SET settings = ? WHERE workspace_id = ?").run(
+        JSON.stringify(settings),
+        workspace,
+      );
+      return reply.send(merged);
+    },
+  );
 };

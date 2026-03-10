@@ -4934,3 +4934,135 @@ test("agent online streak returns streak data", async () => {
 
   await app.close();
 });
+
+// --------------- F-96: Handoff chain analytics ---------------
+test("handoff chain analytics returns depth stats", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-chanal-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `ca-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `ca-a2-${ws}`, display_name: "A2", capabilities: ["review"] },
+  });
+
+  // create a root handoff
+  const h1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: `ca-a1-${ws}`, to_agent_id: `ca-a2-${ws}`, summary: "root" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/chain-analytics`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().total_chains, 1);
+  assert.equal(res.json().max_depth, 1);
+
+  await app.close();
+});
+
+// --------------- F-97: Workspace rate limit config ---------------
+test("workspace rate limit config get and patch", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-ratelim-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+
+  // get default
+  const def = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/rate-limit`,
+    headers: auth,
+  });
+  assert.equal(def.statusCode, 200);
+  assert.equal(def.json().max_requests_per_minute, 60);
+
+  // patch
+  const upd = await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/rate-limit`,
+    headers: auth,
+    payload: { max_requests_per_minute: 120, burst: 20 },
+  });
+  assert.equal(upd.statusCode, 200);
+  assert.equal(upd.json().max_requests_per_minute, 120);
+  assert.equal(upd.json().burst, 20);
+
+  // verify persisted
+  const check = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/rate-limit`,
+    headers: auth,
+  });
+  assert.equal(check.json().max_requests_per_minute, 120);
+
+  await app.close();
+});
+
+// --------------- F-98: Agent capability matrix ---------------
+test("agent capability matrix returns structured matrix", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-capmat-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `cm-a1-${ws}`, display_name: "A1", capabilities: ["code", "review"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `cm-a2-${ws}`, display_name: "A2", capabilities: ["code", "test"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/capability-matrix`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(body.capabilities.includes("code"));
+  assert.ok(body.capabilities.includes("review"));
+  assert.ok(body.capabilities.includes("test"));
+  assert.equal(body.matrix.length, 2);
+
+  await app.close();
+});

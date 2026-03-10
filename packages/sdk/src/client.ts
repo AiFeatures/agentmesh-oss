@@ -464,6 +464,34 @@ export class AgentMeshClient {
     });
   }
 
+  async getHandoffChainAnalytics(workspace: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/handoffs/chain-analytics`, {
+      method: "GET",
+    });
+  }
+
+  async getWorkspaceRateLimit(workspace: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/rate-limit`, {
+      method: "GET",
+    });
+  }
+
+  async updateWorkspaceRateLimit(
+    workspace: string,
+    body: { max_requests_per_minute?: number; burst?: number },
+  ): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/rate-limit`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async getCapabilityMatrix(workspace: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/agents/capability-matrix`, {
+      method: "GET",
+    });
+  }
+
   startHeartbeat(workspace: string, agentId: string, intervalMs = 10000): () => void {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {
