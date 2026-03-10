@@ -2478,4 +2478,28 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, streaks: rows });
     },
   );
+
+  // F-305 scope-length-stats
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/scope-length-stats",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) as total,
+                  AVG(LENGTH(scope)) as avg_length,
+                  MIN(LENGTH(scope)) as min_length,
+                  MAX(LENGTH(scope)) as max_length
+           FROM claims
+           WHERE workspace_id = ?`,
+        )
+        .get(req.params.workspace) as {
+        total: number;
+        avg_length: number | null;
+        min_length: number | null;
+        max_length: number | null;
+      };
+      reply.send({ workspace: req.params.workspace, ...row });
+    },
+  );
 };

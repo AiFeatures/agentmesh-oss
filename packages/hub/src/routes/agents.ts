@@ -2922,4 +2922,28 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: stale });
     },
   );
+
+  // F-306 multi-workspace
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/multi-workspace",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT a1.agent_id, a1.display_name, COUNT(DISTINCT a2.workspace_id) as workspace_count
+           FROM agents a1
+           JOIN agents a2 ON a1.agent_id = a2.agent_id
+           WHERE a1.workspace_id = ?
+           GROUP BY a1.agent_id
+           HAVING workspace_count > 1
+           ORDER BY workspace_count DESC`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        workspace_count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, agents: rows });
+    },
+  );
 };
