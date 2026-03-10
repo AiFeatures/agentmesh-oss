@@ -1832,4 +1832,52 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-252: Handoff SLA summary
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/sla-summary",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const handoffs = db
+        .prepare(
+          `SELECT handoff_id, status, sla_deadline, created_at, updated_at FROM handoffs WHERE workspace_id = ? AND sla_deadline IS NOT NULL`,
+        )
+        .all(workspace) as {
+        handoff_id: string;
+        status: string;
+        sla_deadline: string;
+        created_at: string;
+        updated_at: string;
+      }[];
+
+      let withinSla = 0;
+      let breached = 0;
+      let pending = 0;
+
+      const now = new Date().toISOString();
+      for (const h of handoffs) {
+        if (h.status === "accepted" || h.status === "completed") {
+          if (h.updated_at <= h.sla_deadline) withinSla++;
+          else breached++;
+        } else if (h.status === "pending") {
+          if (now > h.sla_deadline) breached++;
+          else pending++;
+        }
+      }
+
+      const resolved = withinSla + breached;
+      const complianceRate = resolved > 0 ? Math.round((withinSla / resolved) * 10000) / 100 : 100;
+
+      return reply.send({
+        workspace,
+        handoffs_with_sla: handoffs.length,
+        within_sla: withinSla,
+        breached,
+        pending_with_sla: pending,
+        compliance_rate_percent: complianceRate,
+      });
+    },
+  );
 };

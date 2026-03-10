@@ -2247,4 +2247,33 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-251: Workspace agent summary
+  app.get(
+    "/api/v1/workspaces/:workspace/agent-summary",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const agents = db
+        .prepare(`SELECT status, capabilities FROM agents WHERE workspace_id = ?`)
+        .all(workspace) as { status: string; capabilities: string }[];
+
+      const byStatus: Record<string, number> = {};
+      const allCaps = new Set<string>();
+      for (const a of agents) {
+        byStatus[a.status] = (byStatus[a.status] || 0) + 1;
+        const caps = JSON.parse(a.capabilities || "[]") as string[];
+        for (const c of caps) allCaps.add(c);
+      }
+
+      return reply.send({
+        workspace,
+        total_agents: agents.length,
+        by_status: byStatus,
+        unique_capabilities: allCaps.size,
+        capabilities: [...allCaps].sort(),
+      });
+    },
+  );
 };

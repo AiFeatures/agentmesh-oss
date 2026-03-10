@@ -10372,3 +10372,41 @@ test("GET /agents/workload-balance returns balance metrics", async () => {
   assert.ok(Array.isArray(body.agents));
   await app.close();
 });
+
+// ---------- F-251: Workspace agent summary ----------
+test("GET /workspace agent-summary returns agent overview", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ws-agsumm-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code", "review"] } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agent-summary`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_agents === "number");
+  assert.ok(body.by_status);
+  assert.ok(typeof body.unique_capabilities === "number");
+  assert.ok(Array.isArray(body.capabilities));
+  await app.close();
+});
+
+// ---------- F-252: Handoff SLA summary ----------
+test("GET /handoffs/sla-summary returns SLA compliance overview", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ho-slasumm-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", summary: "task" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/sla-summary`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.handoffs_with_sla === "number");
+  assert.ok(typeof body.within_sla === "number");
+  assert.ok(typeof body.compliance_rate_percent === "number");
+  await app.close();
+});
