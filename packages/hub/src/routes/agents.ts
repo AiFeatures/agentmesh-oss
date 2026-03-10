@@ -2946,4 +2946,42 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: rows });
     },
   );
+
+  // F-311 capability-rarity
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/capability-rarity",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const agents = db
+        .prepare("SELECT agent_id, capabilities FROM agents WHERE workspace_id = ?")
+        .all(req.params.workspace) as {
+        agent_id: string;
+        capabilities: string | null;
+      }[];
+
+      const capCount: Record<string, string[]> = {};
+      for (const a of agents) {
+        let caps: string[] = [];
+        try {
+          caps = JSON.parse(a.capabilities || "[]") as string[];
+        } catch {
+          /* skip */
+        }
+        for (const c of caps) {
+          if (!capCount[c]) capCount[c] = [];
+          capCount[c].push(a.agent_id);
+        }
+      }
+
+      const rare = Object.entries(capCount)
+        .map(([capability, agentIds]) => ({
+          capability,
+          agent_count: agentIds.length,
+          agents: agentIds,
+        }))
+        .sort((a, b) => a.agent_count - b.agent_count);
+
+      reply.send({ workspace: req.params.workspace, capabilities: rare });
+    },
+  );
 };

@@ -2262,4 +2262,32 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-312 acceptance-lag
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/acceptance-lag",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT to_agent_id,
+                  COUNT(*) as accepted_count,
+                  AVG((julianday(updated_at) - julianday(created_at)) * 86400) as avg_lag_seconds,
+                  MIN((julianday(updated_at) - julianday(created_at)) * 86400) as min_lag_seconds,
+                  MAX((julianday(updated_at) - julianday(created_at)) * 86400) as max_lag_seconds
+           FROM handoffs
+           WHERE workspace_id = ? AND status = 'accepted' AND updated_at IS NOT NULL
+           GROUP BY to_agent_id
+           ORDER BY avg_lag_seconds DESC`,
+        )
+        .all(req.params.workspace) as {
+        to_agent_id: string | null;
+        accepted_count: number;
+        avg_lag_seconds: number | null;
+        min_lag_seconds: number | null;
+        max_lag_seconds: number | null;
+      }[];
+      reply.send({ workspace: req.params.workspace, agents: rows });
+    },
+  );
 };
