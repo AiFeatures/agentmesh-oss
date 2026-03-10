@@ -3281,4 +3281,29 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ...row });
     },
   );
+
+  // F-473 claim-dependency-chain
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/claim-dependency-chain",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT cd.claim_id, cd.depends_on_claim_id,
+                  c1.scope AS claim_scope,
+                  c2.scope AS depends_on_scope
+           FROM claim_dependencies cd
+           JOIN claims c1 ON c1.claim_id = cd.claim_id AND c1.workspace_id = ?
+           JOIN claims c2 ON c2.claim_id = cd.depends_on_claim_id
+           LIMIT 50`,
+        )
+        .all(req.params.workspace) as {
+        claim_id: string;
+        depends_on_claim_id: string;
+        claim_scope: string;
+        depends_on_scope: string;
+      }[];
+      reply.send({ workspace: req.params.workspace, chains: rows });
+    },
+  );
 };

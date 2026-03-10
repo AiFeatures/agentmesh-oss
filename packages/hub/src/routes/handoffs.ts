@@ -3183,4 +3183,23 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ...row });
     },
   );
+
+  // F-474 handoff-completion-by-hour
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-completion-by-hour",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT CAST(strftime('%H', updated_at) AS INTEGER) AS hour,
+                  COUNT(*) AS completed_count
+           FROM handoffs
+           WHERE workspace_id = ? AND status = 'completed' AND updated_at IS NOT NULL
+           GROUP BY hour
+           ORDER BY hour`,
+        )
+        .all(req.params.workspace) as { hour: number; completed_count: number }[];
+      reply.send({ workspace: req.params.workspace, hours: rows });
+    },
+  );
 };

@@ -13612,3 +13612,31 @@ test("GET /handoffs/handoff-retry-success-rate returns retry stats", async () =>
   assert.ok(typeof body.total_retried === "number");
   await app.close();
 });
+
+// F-473 claim-dependency-chain
+test("GET /claims/claim-dependency-chain returns dependency chains", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "cdc-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-dependency-chain`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.chains));
+  await app.close();
+});
+
+// F-474 handoff-completion-by-hour
+test("GET /handoffs/handoff-completion-by-hour returns hourly completions", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "hcbh-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-completion-by-hour`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.hours));
+  await app.close();
+});
