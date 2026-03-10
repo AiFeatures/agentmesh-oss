@@ -2245,4 +2245,57 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total, distribution });
     },
   );
+
+  // F-216: Agent inactive report
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/inactive-report",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { hours = "24" } = request.query as { hours?: string };
+      const threshold = (Number.parseInt(hours, 10) || 24) * 3600000;
+      const since = new Date(Date.now() - threshold).toISOString();
+
+      const agents = db
+        .prepare(
+          `SELECT agent_id, display_name, status, created_at FROM agents WHERE workspace_id = ?`,
+        )
+        .all(workspace) as {
+        agent_id: string;
+        display_name: string;
+        status: string;
+        created_at: string;
+      }[];
+
+      // Agents with recent handoffs or claims
+      const activeFromHandoffs = db
+        .prepare(
+          `SELECT DISTINCT from_agent_id as agent_id FROM handoffs WHERE workspace_id = ? AND created_at >= ?
+           UNION SELECT DISTINCT to_agent_id as agent_id FROM handoffs WHERE workspace_id = ? AND created_at >= ? AND to_agent_id IS NOT NULL`,
+        )
+        .all(workspace, since, workspace, since) as { agent_id: string }[];
+
+      const activeFromClaims = db
+        .prepare(`SELECT DISTINCT agent_id FROM claims WHERE workspace_id = ? AND created_at >= ?`)
+        .all(workspace, since) as { agent_id: string }[];
+
+      const activeIds = new Set([
+        ...activeFromHandoffs.map((a) => a.agent_id),
+        ...activeFromClaims.map((a) => a.agent_id),
+      ]);
+
+      const inactive = agents
+        .filter((a) => !activeIds.has(a.agent_id))
+        .map((a) => ({ agent_id: a.agent_id, display_name: a.display_name, status: a.status }));
+
+      return reply.send({
+        workspace,
+        threshold_hours: Number.parseInt(hours, 10) || 24,
+        total_agents: agents.length,
+        active_agents: activeIds.size,
+        inactive_agents: inactive.length,
+        inactive: inactive,
+      });
+    },
+  );
 };

@@ -9683,3 +9683,42 @@ test("GET /workspaces/:workspace/claim-trend returns trend", async () => {
   assert.ok(body.trend.length > 0);
   await app.close();
 });
+
+// ---------- F-215: Blocker open duration ----------
+test("GET /blockers/open-duration returns duration stats", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `blk-opendur-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "open bug", severity: "high" } });
+  const res2 = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/open-duration`, headers: auth });
+  assert.equal(res2.statusCode, 200);
+  const body2 = JSON.parse(res2.payload);
+  assert.ok(typeof body2.open_blockers === "number");
+  assert.ok(typeof body2.avg_open_hours === "number");
+  assert.ok(typeof body2.max_open_hours === "number");
+  assert.ok(Array.isArray(body2.longest_open));
+  await app.close();
+});
+
+// ---------- F-216: Agent inactive report ----------
+test("GET /agents/inactive-report returns inactive agents", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ag-inactive-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  const res2 = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/inactive-report?hours=24`, headers: auth });
+  assert.equal(res2.statusCode, 200);
+  const body2 = JSON.parse(res2.payload);
+  assert.ok(typeof body2.total_agents === "number");
+  assert.ok(typeof body2.active_agents === "number");
+  assert.ok(typeof body2.inactive_agents === "number");
+  assert.ok(Array.isArray(body2.inactive));
+  await app.close();
+});

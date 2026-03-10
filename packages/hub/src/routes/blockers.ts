@@ -1462,4 +1462,45 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-215: Blocker open duration statistics
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/open-duration",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const openBlockers = db
+        .prepare(
+          `SELECT blocker_id, created_at, severity FROM blockers WHERE workspace_id = ? AND status = 'open'`,
+        )
+        .all(workspace) as { blocker_id: string; created_at: string; severity: string }[];
+
+      const now = Date.now();
+      const durations = openBlockers.map((b) => {
+        const hours = (now - new Date(b.created_at).getTime()) / 3600000;
+        return {
+          blocker_id: b.blocker_id,
+          severity: b.severity,
+          open_hours: Math.round(hours * 100) / 100,
+        };
+      });
+
+      durations.sort((a, b) => b.open_hours - a.open_hours);
+      const hours = durations.map((d) => d.open_hours);
+      const avg =
+        hours.length > 0
+          ? Math.round((hours.reduce((s, h) => s + h, 0) / hours.length) * 100) / 100
+          : 0;
+      const max = hours.length > 0 ? Math.max(...hours) : 0;
+
+      return reply.send({
+        workspace,
+        open_blockers: openBlockers.length,
+        avg_open_hours: avg,
+        max_open_hours: Math.round(max * 100) / 100,
+        longest_open: durations.slice(0, 10),
+      });
+    },
+  );
 };
