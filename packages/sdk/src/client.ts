@@ -363,6 +363,37 @@ export class AgentMeshClient {
     });
   }
 
+  async getBlockerDependencies(workspace: string, blockerId: string): Promise<unknown> {
+    return await this.request(
+      `/api/v1/workspaces/${workspace}/blockers/${blockerId}/dependencies`,
+      { method: "GET" },
+    );
+  }
+
+  async setAgentLabels(
+    workspace: string,
+    agentId: string,
+    labels: Record<string, string>,
+  ): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}/labels`, {
+      method: "PUT",
+      body: JSON.stringify(labels),
+    });
+  }
+
+  async getAgentLabels(workspace: string, agentId: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}/labels`, {
+      method: "GET",
+    });
+  }
+
+  async getClaimTransferHistory(workspace: string, claimId: string): Promise<unknown> {
+    return await this.request(
+      `/api/v1/workspaces/${workspace}/claims/${claimId}/transfer-history`,
+      { method: "GET" },
+    );
+  }
+
   startHeartbeat(workspace: string, agentId: string, intervalMs = 10000): () => void {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {

@@ -481,6 +481,11 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
 
       db.prepare("UPDATE claims SET agent_id = ? WHERE claim_id = ?").run(to_agent_id, claimId);
 
+      // record transfer history
+      db.prepare(
+        "INSERT INTO claim_transfer_history (claim_id, workspace_id, from_agent_id, to_agent_id) VALUES (?, ?, ?, ?)",
+      ).run(claimId, workspace, String(claim.agent_id), to_agent_id);
+
       writeAuditLog({
         workspaceId: workspace,
         actorType: "agent",
@@ -824,6 +829,27 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       const rows = db
         .prepare(
           "SELECT renewed_by, old_expires_at, new_expires_at, created_at FROM claim_renewal_history WHERE claim_id = ? AND workspace_id = ? ORDER BY id ASC",
+        )
+        .all(claimId, workspace);
+      return reply.send({ data: rows });
+    },
+  );
+
+  /* ── F-89  claim transfer history ───────────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/:claimId/transfer-history",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, claimId } = request.params as { workspace: string; claimId: string };
+      const exists = db
+        .prepare("SELECT claim_id FROM claims WHERE claim_id = ? AND workspace_id = ?")
+        .get(claimId, workspace);
+      if (!exists) {
+        return reply.code(404).send({ error: "Claim not found" });
+      }
+      const rows = db
+        .prepare(
+          "SELECT from_agent_id, to_agent_id, created_at FROM claim_transfer_history WHERE claim_id = ? AND workspace_id = ? ORDER BY id ASC",
         )
         .all(claimId, workspace);
       return reply.send({ data: rows });

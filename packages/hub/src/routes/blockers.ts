@@ -20,6 +20,11 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
             details: { type: "string", maxLength: 5000 },
             severity: { type: "string", enum: ["low", "medium", "high", "critical"] },
             deadline_seconds: { type: "integer", minimum: 60, maximum: 604800 },
+            depends_on: {
+              type: "array",
+              maxItems: 20,
+              items: { type: "string", minLength: 1, maxLength: 128 },
+            },
           },
         },
       },
@@ -32,6 +37,7 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
         details?: string;
         severity: "low" | "medium" | "high" | "critical";
         deadline_seconds?: number;
+        depends_on?: string[];
       };
 
       const agentExists = db
@@ -49,6 +55,15 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
         severity: body.severity,
         deadlineSeconds: body.deadline_seconds,
       });
+
+      if (body.depends_on?.length) {
+        const insertDep = db.prepare(
+          "INSERT OR IGNORE INTO blocker_dependencies (blocker_id, depends_on_blocker_id) VALUES (?, ?)",
+        );
+        for (const depId of body.depends_on) {
+          insertDep.run(id, depId);
+        }
+      }
 
       writeAuditLog({
         workspaceId: workspace,
@@ -470,6 +485,25 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
         )
         .all(blockerId, workspace);
       return reply.send({ data: comments });
+    },
+  );
+
+  /* ── F-87  blocker dependencies GET ─────────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/:blockerId/dependencies",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, blockerId } = request.params as { workspace: string; blockerId: string };
+      const exists = db
+        .prepare("SELECT blocker_id FROM blockers WHERE blocker_id = ? AND workspace_id = ?")
+        .get(blockerId, workspace);
+      if (!exists) {
+        return reply.code(404).send({ error: "Blocker not found" });
+      }
+      const deps = db
+        .prepare("SELECT depends_on_blocker_id FROM blocker_dependencies WHERE blocker_id = ?")
+        .all(blockerId) as Array<{ depends_on_blocker_id: string }>;
+      return reply.send({ data: deps.map((d) => d.depends_on_blocker_id) });
     },
   );
 };

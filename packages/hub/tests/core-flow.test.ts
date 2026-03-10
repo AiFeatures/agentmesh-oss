@@ -4524,3 +4524,165 @@ test("workspace clone copies settings", async () => {
 
   await app.close();
 });
+
+// --------------- F-87: Blocker dependencies ---------------
+test("blocker dependencies can be set and retrieved", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-blkdep-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `bd-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+
+  // create parent blocker
+  const b1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: `bd-a1-${ws}`, title: "upstream issue", severity: "high" },
+  });
+  assert.equal(b1.statusCode, 201);
+  const parentId = b1.json().blocker_id;
+
+  // create child blocker depending on parent
+  const b2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: {
+      agent_id: `bd-a1-${ws}`,
+      title: "downstream",
+      severity: "medium",
+      depends_on: [parentId],
+    },
+  });
+  assert.equal(b2.statusCode, 201);
+  const childId = b2.json().blocker_id;
+
+  // get dependencies
+  const deps = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/${childId}/dependencies`,
+    headers: auth,
+  });
+  assert.equal(deps.statusCode, 200);
+  assert.deepEqual(deps.json().data, [parentId]);
+
+  await app.close();
+});
+
+// --------------- F-88: Agent labels ---------------
+test("agent labels can be set and retrieved", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-labels-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `lb-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+
+  // set labels
+  const put = await app.inject({
+    method: "PUT",
+    url: `/api/v1/workspaces/${ws}/agents/lb-a1-${ws}/labels`,
+    headers: auth,
+    payload: { env: "production", team: "backend" },
+  });
+  assert.equal(put.statusCode, 200);
+
+  // get labels
+  const get = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/lb-a1-${ws}/labels`,
+    headers: auth,
+  });
+  assert.equal(get.statusCode, 200);
+  assert.equal(get.json().labels.env, "production");
+  assert.equal(get.json().labels.team, "backend");
+
+  await app.close();
+});
+
+// --------------- F-89: Claim transfer history ---------------
+test("claim transfer history tracks transfers", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-xferhist-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `xf-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `xf-a2-${ws}`, display_name: "A2", capabilities: ["code"] },
+  });
+
+  // create claim
+  const c = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: {
+      agent_id: `xf-a1-${ws}`,
+      scope: "xfer.scope",
+      paths: ["src/xf.ts"],
+      ttl_seconds: 300,
+    },
+  });
+  assert.equal(c.statusCode, 201);
+  const claimId = c.json().claim_id;
+
+  // transfer claim
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims/${claimId}/transfer`,
+    headers: auth,
+    payload: { to_agent_id: `xf-a2-${ws}` },
+  });
+
+  // check transfer history
+  const hist = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/${claimId}/transfer-history`,
+    headers: auth,
+  });
+  assert.equal(hist.statusCode, 200);
+  assert.equal(hist.json().data.length, 1);
+  assert.equal(hist.json().data[0].from_agent_id, `xf-a1-${ws}`);
+  assert.equal(hist.json().data[0].to_agent_id, `xf-a2-${ws}`);
+
+  await app.close();
+});

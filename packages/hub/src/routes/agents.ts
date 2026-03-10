@@ -885,4 +885,62 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows, total: rows.length });
     },
   );
+
+  /* ── F-88  agent labels ─────────────────────────────────────── */
+  app.put(
+    "/api/v1/workspaces/:workspace/agents/:agentId/labels",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          additionalProperties: { type: "string", maxLength: 256 },
+          maxProperties: 50,
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as { workspace: string; agentId: string };
+      const labels = request.body as Record<string, string>;
+      const agent = db
+        .prepare("SELECT agent_id FROM agents WHERE agent_id = ? AND workspace_id = ?")
+        .get(agentId, workspace);
+      if (!agent) {
+        return reply.code(404).send({ error: "Agent not found" });
+      }
+      const txn = db.transaction(() => {
+        db.prepare("DELETE FROM agent_labels WHERE agent_id = ?").run(agentId);
+        const insert = db.prepare(
+          "INSERT INTO agent_labels (agent_id, label_key, label_value) VALUES (?, ?, ?)",
+        );
+        for (const [key, value] of Object.entries(labels)) {
+          insert.run(agentId, key, value);
+        }
+      });
+      txn();
+      return reply.send({ ok: true });
+    },
+  );
+
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/:agentId/labels",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as { workspace: string; agentId: string };
+      const agent = db
+        .prepare("SELECT agent_id FROM agents WHERE agent_id = ? AND workspace_id = ?")
+        .get(agentId, workspace);
+      if (!agent) {
+        return reply.code(404).send({ error: "Agent not found" });
+      }
+      const rows = db
+        .prepare("SELECT label_key, label_value FROM agent_labels WHERE agent_id = ?")
+        .all(agentId) as Array<{ label_key: string; label_value: string }>;
+      const labels: Record<string, string> = {};
+      for (const r of rows) {
+        labels[r.label_key] = r.label_value;
+      }
+      return reply.send({ labels });
+    },
+  );
 };
