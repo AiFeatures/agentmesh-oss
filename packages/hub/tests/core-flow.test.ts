@@ -7849,3 +7849,95 @@ test("blocker resolution timeline returns daily resolution stats", async () => {
 
   await app.close();
 });
+
+/* ── F-159  workspace activity feed (enhanced test) ──── */
+test("workspace activity feed returns audit events", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `feed_${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "feed-a1", display_name: "Feed A1", capabilities: ["ts"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/activity-feed?limit=10`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(Array.isArray(body.data));
+  assert.ok(body.data.length >= 1);
+  assert.ok(body.data[0].action);
+  assert.ok(body.data[0].created_at);
+
+  await app.close();
+});
+
+/* ── F-160  handoff priority queue ─────────────────── */
+test("handoff priority queue returns pending handoffs sorted by priority", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `pq_${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "pq-a1", display_name: "PQ A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "pq-a2", display_name: "PQ A2", capabilities: ["code"] },
+  });
+
+  // low priority handoff
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "pq-a1", to_agent_id: "pq-a2", summary: "low task", priority: "low" },
+  });
+  // critical priority handoff
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "pq-a1", to_agent_id: "pq-a2", summary: "critical task", priority: "critical" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/priority-queue`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(body.count >= 2);
+  assert.ok(Array.isArray(body.queue));
+  // critical should come first
+  assert.equal(body.queue[0].priority, "critical");
+  assert.equal(body.queue[1].priority, "low");
+
+  await app.close();
+});

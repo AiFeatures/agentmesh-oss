@@ -919,4 +919,58 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-160  handoff priority queue ──────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/priority-queue",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { limit = "20" } = request.query as { limit?: string };
+      const max = Math.min(Math.max(Number.parseInt(limit, 10) || 20, 1), 100);
+
+      const priorityOrder: Record<string, number> = {
+        critical: 0,
+        high: 1,
+        normal: 2,
+        low: 3,
+      };
+
+      const pending = db
+        .prepare(
+          `SELECT handoff_id, from_agent_id, to_agent_id, summary,
+             priority, created_at, expires_at,
+             CASE WHEN expires_at IS NOT NULL
+                  THEN CAST((julianday(expires_at) - julianday('now')) * 24 * 60 AS INTEGER)
+                  ELSE NULL END as minutes_until_timeout
+           FROM handoffs
+           WHERE workspace_id = ? AND status = 'pending'
+           ORDER BY
+             CASE priority
+               WHEN 'critical' THEN 0
+               WHEN 'high' THEN 1
+               WHEN 'normal' THEN 2
+               WHEN 'low' THEN 3
+               ELSE 2
+             END ASC,
+             created_at ASC
+           LIMIT ?`,
+        )
+        .all(workspace, max) as Array<{
+        handoff_id: string;
+        from_agent_id: string;
+        to_agent_id: string | null;
+        summary: string;
+        priority: string;
+        created_at: string;
+        expires_at: string | null;
+        minutes_until_timeout: number | null;
+      }>;
+
+      return reply.send({
+        count: pending.length,
+        queue: pending,
+      });
+    },
+  );
 };
