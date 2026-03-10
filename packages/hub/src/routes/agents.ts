@@ -1405,4 +1405,25 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ agent_id: agentId, data: rows });
     },
   );
+
+  /* ── F-133  agent capability utilization ─────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/capability-utilization",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const handoffCaps = db
+        .prepare(
+          "SELECT capability_tag, COUNT(*) as usage_count FROM handoffs WHERE workspace_id = ? AND route_mode = 'capability' AND capability_tag IS NOT NULL GROUP BY capability_tag ORDER BY usage_count DESC",
+        )
+        .all(workspace) as Array<{ capability_tag: string; usage_count: number }>;
+      return reply.send({ data: handoffCaps });
+    },
+  );
 };

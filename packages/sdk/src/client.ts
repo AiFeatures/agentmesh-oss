@@ -1090,6 +1090,28 @@ export class AgentMeshClient {
     return this.request(`/api/v1/workspaces/${workspace}/resource-utilization`, { method: "GET" });
   }
 
+  /* ── F-132  workspace export diff ──────────────── */
+  async getExportDiff(workspace: string, since: string): Promise<unknown> {
+    return this.request(
+      `/api/v1/workspaces/${workspace}/export-diff?since=${encodeURIComponent(since)}`,
+      { method: "GET" },
+    );
+  }
+
+  /* ── F-133  agent capability utilization ────────── */
+  async getCapabilityUtilization(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/agents/capability-utilization`, {
+      method: "GET",
+    });
+  }
+
+  /* ── F-134  blocker escalation rate ────────────── */
+  async getBlockerEscalationRate(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/blockers/escalation-rate`, {
+      method: "GET",
+    });
+  }
+
   private async request<T = unknown>(path: string, init: RequestInit): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);

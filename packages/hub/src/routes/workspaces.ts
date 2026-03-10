@@ -1132,4 +1132,50 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-132  workspace export diff ──────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/export-diff",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const qs = request.query as { since?: string };
+      if (!qs.since) {
+        return reply.code(400).send({ error: "since query parameter required" });
+      }
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const newAgents = db
+        .prepare(
+          "SELECT agent_id, display_name, created_at FROM agents WHERE workspace_id = ? AND created_at > ?",
+        )
+        .all(workspace, qs.since);
+      const newBlockers = db
+        .prepare(
+          "SELECT blocker_id, title, severity, created_at FROM blockers WHERE workspace_id = ? AND created_at > ?",
+        )
+        .all(workspace, qs.since);
+      const newHandoffs = db
+        .prepare(
+          "SELECT handoff_id, from_agent_id, to_agent_id, status, created_at FROM handoffs WHERE workspace_id = ? AND created_at > ?",
+        )
+        .all(workspace, qs.since);
+      const newClaims = db
+        .prepare(
+          "SELECT claim_id, agent_id, scope, created_at FROM claims WHERE workspace_id = ? AND created_at > ?",
+        )
+        .all(workspace, qs.since);
+      return reply.send({
+        since: qs.since,
+        agents: newAgents,
+        blockers: newBlockers,
+        handoffs: newHandoffs,
+        claims: newClaims,
+      });
+    },
+  );
 };

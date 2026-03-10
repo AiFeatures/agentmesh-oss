@@ -732,4 +732,33 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows });
     },
   );
+
+  /* ── F-134  blocker escalation rate ──────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/escalation-rate",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const total = (
+        db.prepare("SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ?").get(workspace) as {
+          c: number;
+        }
+      ).c;
+      const escalated = (
+        db
+          .prepare(
+            "SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND escalation_level > 0",
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const rate = total > 0 ? Math.round((escalated / total) * 10000) / 100 : 0;
+      return reply.send({ total, escalated, escalation_rate: rate });
+    },
+  );
 };

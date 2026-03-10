@@ -6338,3 +6338,87 @@ test("workspace resource utilization returns metrics", async () => {
 
   await app.close();
 });
+
+/* ── F-132  workspace export diff ──────────────────────── */
+test("GET /workspaces/:workspace/export-diff", async () => {
+  runMigrations();
+  const app = buildApp();
+  const suffix = Date.now().toString(36);
+  const ws = `ws-ed-${suffix}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "ExportDiff" },
+  });
+
+  const since = new Date(Date.now() - 60000).toISOString();
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/export-diff?since=${since}`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { agents: unknown[]; blockers: unknown[]; handoffs: unknown[]; claims: unknown[] };
+  assert.ok(Array.isArray(body.agents));
+  assert.ok(Array.isArray(body.blockers));
+
+  await app.close();
+});
+
+/* ── F-133  agent capability utilization ───────────────── */
+test("GET /workspaces/:workspace/agents/capability-utilization", async () => {
+  runMigrations();
+  const app = buildApp();
+  const suffix = Date.now().toString(36);
+  const ws = `ws-cu-${suffix}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "CapUtil" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/capability-utilization`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { data: unknown[] };
+  assert.ok(Array.isArray(body.data));
+
+  await app.close();
+});
+
+/* ── F-134  blocker escalation rate ────────────────────── */
+test("GET /workspaces/:workspace/blockers/escalation-rate", async () => {
+  runMigrations();
+  const app = buildApp();
+  const suffix = Date.now().toString(36);
+  const ws = `ws-er-${suffix}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "EscRate" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/escalation-rate`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { total: number; escalated: number; escalation_rate: number };
+  assert.equal(body.total, 0);
+  assert.equal(body.escalation_rate, 0);
+
+  await app.close();
+});
