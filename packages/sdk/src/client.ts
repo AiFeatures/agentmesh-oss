@@ -1,12 +1,22 @@
 import WebSocket, { type RawData } from "ws";
 import type {
   BlockerPayload,
+  BlockerResponse,
   ClaimPayload,
+  ClaimResponse,
+  GcResponse,
   HandoffPayload,
+  HandoffResponse,
   MeshClientOptions,
   MeshEvent,
+  OkResponse,
+  OverlapCheckResponse,
   RegisterPayload,
+  RegisterResponse,
   RoutePayload,
+  RouteResponse,
+  WorkspaceListResponse,
+  WorkspaceResponse,
 } from "./types.js";
 
 export class AgentMeshClient {
@@ -30,27 +40,27 @@ export class AgentMeshClient {
     this.maxReconnectAttempts = options.maxReconnectAttempts ?? 20;
   }
 
-  async register(payload: RegisterPayload): Promise<unknown> {
+  async register(payload: RegisterPayload): Promise<RegisterResponse> {
     return await this.request(`/api/v1/workspaces/${payload.workspace}/agents/register`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
   }
 
-  async heartbeat(workspace: string, agentId: string): Promise<unknown> {
+  async heartbeat(workspace: string, agentId: string): Promise<OkResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/agents/heartbeat`, {
       method: "POST",
       body: JSON.stringify({ agent_id: agentId }),
     });
   }
 
-  async getWorkspace(workspace: string): Promise<unknown> {
+  async getWorkspace(workspace: string): Promise<WorkspaceResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}`, {
       method: "GET",
     });
   }
 
-  async listWorkspaces(): Promise<unknown> {
+  async listWorkspaces(): Promise<WorkspaceListResponse> {
     return await this.request("/api/v1/workspaces", { method: "GET" });
   }
 
@@ -58,7 +68,7 @@ export class AgentMeshClient {
     workspace: string,
     displayName: string,
     basePath?: string,
-  ): Promise<unknown> {
+  ): Promise<{ workspace_id: string }> {
     return await this.request("/api/v1/workspaces", {
       method: "POST",
       body: JSON.stringify({
@@ -176,20 +186,20 @@ export class AgentMeshClient {
     }
   }
 
-  async claim(payload: ClaimPayload): Promise<unknown> {
+  async claim(payload: ClaimPayload): Promise<ClaimResponse> {
     return await this.request(`/api/v1/workspaces/${payload.workspace}/claims`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
   }
 
-  async releaseClaim(workspace: string, claimId: string): Promise<unknown> {
+  async releaseClaim(workspace: string, claimId: string): Promise<OkResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/claims/${claimId}/release`, {
       method: "POST",
     });
   }
 
-  async renewClaim(workspace: string, claimId: string, ttlSeconds = 1800): Promise<unknown> {
+  async renewClaim(workspace: string, claimId: string, ttlSeconds = 1800): Promise<OkResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/claims/${claimId}/renew`, {
       method: "POST",
       body: JSON.stringify({ ttl_seconds: ttlSeconds }),
@@ -203,20 +213,20 @@ export class AgentMeshClient {
     });
   }
 
-  async handoff(payload: HandoffPayload): Promise<unknown> {
+  async handoff(payload: HandoffPayload): Promise<HandoffResponse> {
     return await this.request(`/api/v1/workspaces/${payload.workspace}/handoffs`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
   }
 
-  async acceptHandoff(workspace: string, handoffId: string): Promise<unknown> {
+  async acceptHandoff(workspace: string, handoffId: string): Promise<OkResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/handoffs/${handoffId}/accept`, {
       method: "POST",
     });
   }
 
-  async rejectHandoff(workspace: string, handoffId: string): Promise<unknown> {
+  async rejectHandoff(workspace: string, handoffId: string): Promise<OkResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/handoffs/${handoffId}/reject`, {
       method: "POST",
     });
@@ -242,7 +252,7 @@ export class AgentMeshClient {
     });
   }
 
-  async blocker(payload: BlockerPayload): Promise<unknown> {
+  async blocker(payload: BlockerPayload): Promise<BlockerResponse> {
     return await this.request(`/api/v1/workspaces/${payload.workspace}/blockers`, {
       method: "POST",
       body: JSON.stringify(payload),
@@ -318,7 +328,7 @@ export class AgentMeshClient {
     });
   }
 
-  async route(payload: RoutePayload): Promise<unknown> {
+  async route(payload: RoutePayload): Promise<RouteResponse> {
     return await this.request(`/api/v1/workspaces/${payload.workspace}/route`, {
       method: "POST",
       body: JSON.stringify({ capability: payload.capability }),
@@ -401,13 +411,13 @@ export class AgentMeshClient {
     }
   }
 
-  async garbageCollectClaims(workspace: string): Promise<unknown> {
+  async garbageCollectClaims(workspace: string): Promise<GcResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/claims/gc`, {
       method: "POST",
     });
   }
 
-  async checkClaimOverlap(workspace: string, paths: string[]): Promise<unknown> {
+  async checkClaimOverlap(workspace: string, paths: string[]): Promise<OverlapCheckResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/claims/check-overlap`, {
       method: "POST",
       body: JSON.stringify({ paths }),
@@ -417,7 +427,7 @@ export class AgentMeshClient {
   async forceReleaseAllClaims(
     workspace: string,
     opts?: { agent_id?: string; scope?: string },
-  ): Promise<unknown> {
+  ): Promise<GcResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/claims/force-release-all`, {
       method: "POST",
       body: JSON.stringify(opts ?? {}),
@@ -430,7 +440,7 @@ export class AgentMeshClient {
     });
   }
 
-  private async request(path: string, init: RequestInit): Promise<unknown> {
+  private async request<T = unknown>(path: string, init: RequestInit): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
     try {

@@ -68,3 +68,71 @@ export type MeshClientOptions = {
   requestTimeoutMs?: number;
   maxReconnectAttempts?: number;
 };
+
+// ---- Response types ----
+
+export type OkResponse = { ok: true };
+
+export type RegisterResponse = { ok: true; agent_id: string; workspace_id: string };
+
+export type ClaimResponse = { claim_id: string };
+
+export type HandoffResponse = { handoff_id: string; to_agent_id: string | null };
+
+export type BlockerResponse = { blocker_id: string };
+
+export type WorkspaceResponse = {
+  workspace_id: string;
+  display_name: string;
+  base_path: string | null;
+  created_at: string;
+};
+
+export type WorkspaceListResponse = { data: WorkspaceResponse[] };
+
+export type AgentResponse = {
+  agent_id: string;
+  workspace_id: string;
+  display_name: string;
+  model: string;
+  capabilities: string[];
+  status: string;
+  last_heartbeat_at: string;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PaginatedResponse<T> = { data: T[]; total: number };
+
+export type RouteResponse = { agent_id: string };
+
+export type GcResponse = { released_count: number; released_ids: string[] };
+
+export type OverlapCheckResponse =
+  | { overlaps: false }
+  | {
+      overlaps: true;
+      conflicting_claim_id: string;
+      conflicting_agent_id: string;
+      conflicting_pattern: string;
+    };
+
+export type HealthResponse = {
+  status: string;
+  service: string;
+  version: string;
+  uptime: number;
+  db: string;
+  ws_connections: number;
+  agents_online: number;
+  active_claims: number;
+  open_blockers: number;
+};
+
+export type MaintenanceResponse = {
+  integrity: string;
+  page_count: number;
+  freelist_count: number;
+  vacuumed: boolean;
+};
