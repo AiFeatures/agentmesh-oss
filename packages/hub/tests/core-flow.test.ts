@@ -6161,3 +6161,92 @@ test("blocker age distribution returns buckets", async () => {
 
   await app.close();
 });
+
+/* ── F-126  workspace daily digest ─────────────────── */
+test("workspace daily digest returns 24h summary", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "dd";
+  const ws = `ws-dd-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Digest" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/daily-digest`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { period: string; new_agents: number };
+  assert.equal(body.period, "24h");
+  assert.equal(typeof body.new_agents, "number");
+
+  await app.close();
+});
+
+/* ── F-127  agent peer ranking ─────────────────────── */
+test("agent peer ranking returns scored agents", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "pr";
+  const ws = `ws-pr-${suffix}`;
+  const aid = `pr-a1-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "PeerRank" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: aid, display_name: "PRAgent", capabilities: ["test"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/peer-ranking`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const data = res.json().data as Array<{ agent_id: string; score: number }>;
+  assert.equal(data.length, 1);
+  assert.equal(data[0].agent_id, aid);
+
+  await app.close();
+});
+
+/* ── F-128  claim conflict history ─────────────────── */
+test("claim conflict history returns empty when no conflicts", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "ch";
+  const ws = `ws-ch-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "ConflictHist" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/conflict-history`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.deepStrictEqual(res.json().data, []);
+
+  await app.close();
+});

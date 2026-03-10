@@ -1092,4 +1092,29 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ total_renewals: total, data: rows });
     },
   );
+
+  /* ── F-128  claim conflict history ───────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/conflict-history",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const qs = request.query as { limit?: string };
+      const limit = Math.min(Math.max(Number.parseInt(qs.limit || "50", 10) || 50, 1), 200);
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const rows = db
+        .prepare(
+          `SELECT * FROM audit_log
+           WHERE workspace_id = ? AND action LIKE 'claim.conflict%'
+           ORDER BY created_at DESC LIMIT ?`,
+        )
+        .all(workspace, limit);
+      return reply.send({ data: rows });
+    },
+  );
 };

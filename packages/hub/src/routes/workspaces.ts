@@ -1027,4 +1027,63 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-126  workspace daily digest ─────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/daily-digest",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const since = "datetime('now', '-1 day')";
+      const newAgents = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM agents WHERE workspace_id = ? AND created_at >= ${since}`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const newBlockers = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND created_at >= ${since}`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const resolvedBlockers = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND resolved_at >= ${since}`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const newHandoffs = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND created_at >= ${since}`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const newClaims = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND created_at >= ${since}`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      return reply.send({
+        period: "24h",
+        new_agents: newAgents,
+        new_blockers: newBlockers,
+        resolved_blockers: resolvedBlockers,
+        new_handoffs: newHandoffs,
+        new_claims: newClaims,
+      });
+    },
+  );
 };

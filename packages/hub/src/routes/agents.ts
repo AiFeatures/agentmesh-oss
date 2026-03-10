@@ -1352,4 +1352,32 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows });
     },
   );
+
+  /* ── F-127  agent peer ranking ─────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/peer-ranking",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const rows = db
+        .prepare(
+          `SELECT a.agent_id, a.display_name,
+                  (SELECT COUNT(*) FROM handoffs h WHERE h.from_agent_id = a.agent_id AND h.status = 'accepted') as completed_handoffs,
+                  (SELECT COUNT(*) FROM blockers b WHERE b.agent_id = a.agent_id AND b.status = 'resolved') as resolved_blockers,
+                  (SELECT COUNT(*) FROM handoffs h WHERE h.from_agent_id = a.agent_id AND h.status = 'accepted') +
+                  (SELECT COUNT(*) FROM blockers b WHERE b.agent_id = a.agent_id AND b.status = 'resolved') as score
+           FROM agents a
+           WHERE a.workspace_id = ?
+           ORDER BY score DESC`,
+        )
+        .all(workspace);
+      return reply.send({ data: rows });
+    },
+  );
 };

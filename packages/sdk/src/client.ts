@@ -1055,6 +1055,24 @@ export class AgentMeshClient {
     });
   }
 
+  /* ── F-126  workspace daily digest ──────────────── */
+  async getDailyDigest(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/daily-digest`, { method: "GET" });
+  }
+
+  /* ── F-127  agent peer ranking ──────────────────── */
+  async getAgentPeerRanking(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/agents/peer-ranking`, { method: "GET" });
+  }
+
+  /* ── F-128  claim conflict history ──────────────── */
+  async getClaimConflictHistory(workspace: string, limit?: number): Promise<unknown> {
+    const qs = limit ? `?limit=${limit}` : "";
+    return this.request(`/api/v1/workspaces/${workspace}/claims/conflict-history${qs}`, {
+      method: "GET",
+    });
+  }
+
   private async request<T = unknown>(path: string, init: RequestInit): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
