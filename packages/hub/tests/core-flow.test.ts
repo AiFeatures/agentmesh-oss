@@ -8255,3 +8255,92 @@ test("GET /claims/contention returns contention analysis", async () => {
 
   await app.close();
 });
+
+// F-169: Handoff bottleneck agents
+test("GET /handoffs/bottleneck-agents returns bottleneck analysis", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `bn-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "bn-a1", display_name: "BN A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "bn-a2", display_name: "BN A2", capabilities: ["review"] },
+  });
+
+  // Create a handoff to bn-a2
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "bn-a1", to_agent_id: "bn-a2", summary: "Review code" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/bottleneck-agents`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.agent_count === "number");
+  assert.ok(typeof body.bottleneck_count === "number");
+  assert.ok(Array.isArray(body.agents));
+  assert.equal(body.agent_count, 2);
+  const a2 = body.agents.find((a: Record<string, unknown>) => a.agent_id === "bn-a2");
+  assert.ok(a2);
+  assert.equal(a2.pending_count, 1);
+
+  await app.close();
+});
+
+// F-170: Workspace growth trend
+test("GET /workspaces/:workspace/growth-trend returns daily trends", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `gt-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "gt-a1", display_name: "GT A1", capabilities: ["code"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/growth-trend?days=7`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.workspace_id, ws);
+  assert.equal(body.period_days, 7);
+  assert.ok(Array.isArray(body.agents));
+  assert.ok(Array.isArray(body.claims));
+  assert.ok(Array.isArray(body.handoffs));
+  assert.ok(Array.isArray(body.blockers));
+
+  await app.close();
+});

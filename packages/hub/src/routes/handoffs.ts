@@ -1045,4 +1045,58 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-169: Handoff bottleneck agents
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/bottleneck-agents",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const agents = db
+        .prepare(
+          `SELECT a.agent_id, a.display_name,
+                  COUNT(CASE WHEN h.status = 'pending' THEN 1 END) as pending_count,
+                  COUNT(CASE WHEN h.status = 'accepted' THEN 1 END) as accepted_count,
+                  COUNT(CASE WHEN h.status = 'rejected' THEN 1 END) as rejected_count,
+                  COUNT(h.handoff_id) as total_received
+           FROM agents a
+           LEFT JOIN handoffs h ON h.to_agent_id = a.agent_id AND h.workspace_id = a.workspace_id
+           WHERE a.workspace_id = ?
+           GROUP BY a.agent_id
+           ORDER BY pending_count DESC`,
+        )
+        .all(workspace) as Array<{
+        agent_id: string;
+        display_name: string;
+        pending_count: number;
+        accepted_count: number;
+        rejected_count: number;
+        total_received: number;
+      }>;
+
+      const bottlenecks = agents.map((a) => {
+        const acceptanceRate =
+          a.total_received > 0
+            ? Math.round((a.accepted_count / a.total_received) * 10000) / 100
+            : 0;
+        return {
+          agent_id: a.agent_id,
+          display_name: a.display_name,
+          pending_count: a.pending_count,
+          accepted_count: a.accepted_count,
+          rejected_count: a.rejected_count,
+          total_received: a.total_received,
+          acceptance_rate: acceptanceRate,
+          is_bottleneck: a.pending_count > 0 && acceptanceRate < 50,
+        };
+      });
+
+      return reply.send({
+        agent_count: bottlenecks.length,
+        bottleneck_count: bottlenecks.filter((b) => b.is_bottleneck).length,
+        agents: bottlenecks,
+      });
+    },
+  );
 };

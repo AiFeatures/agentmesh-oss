@@ -1532,4 +1532,60 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-170: Workspace growth trend
+  app.get(
+    "/api/v1/workspaces/:workspace/growth-trend",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { days = "7" } = request.query as { days?: string };
+      const numDays = Math.max(Number.parseInt(days, 10) || 7, 1);
+
+      const agentsByDay = db
+        .prepare(
+          `SELECT date(created_at) as day, COUNT(*) as count
+           FROM agents WHERE workspace_id = ? AND created_at >= datetime('now', ?)
+           GROUP BY date(created_at)
+           ORDER BY day`,
+        )
+        .all(workspace, `-${numDays} days`) as Array<{ day: string; count: number }>;
+
+      const claimsByDay = db
+        .prepare(
+          `SELECT date(created_at) as day, COUNT(*) as count
+           FROM claims WHERE workspace_id = ? AND created_at >= datetime('now', ?)
+           GROUP BY date(created_at)
+           ORDER BY day`,
+        )
+        .all(workspace, `-${numDays} days`) as Array<{ day: string; count: number }>;
+
+      const handoffsByDay = db
+        .prepare(
+          `SELECT date(created_at) as day, COUNT(*) as count
+           FROM handoffs WHERE workspace_id = ? AND created_at >= datetime('now', ?)
+           GROUP BY date(created_at)
+           ORDER BY day`,
+        )
+        .all(workspace, `-${numDays} days`) as Array<{ day: string; count: number }>;
+
+      const blockersByDay = db
+        .prepare(
+          `SELECT date(created_at) as day, COUNT(*) as count
+           FROM blockers WHERE workspace_id = ? AND created_at >= datetime('now', ?)
+           GROUP BY date(created_at)
+           ORDER BY day`,
+        )
+        .all(workspace, `-${numDays} days`) as Array<{ day: string; count: number }>;
+
+      return reply.send({
+        workspace_id: workspace,
+        period_days: numDays,
+        agents: agentsByDay,
+        claims: claimsByDay,
+        handoffs: handoffsByDay,
+        blockers: blockersByDay,
+      });
+    },
+  );
 };
