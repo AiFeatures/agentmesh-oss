@@ -2770,4 +2770,24 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+
+  // F-290 agent-session-duration
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/session-duration",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT agent_id, display_name,
+                  ROUND((julianday(COALESCE(last_heartbeat_at, created_at)) - julianday(created_at)) * 24, 2) as hours_active
+           FROM agents
+           WHERE workspace_id = ?
+           ORDER BY hours_active DESC`,
+        )
+        .all(req.params.workspace) as { agent_id: string; display_name: string; hours_active: number }[];
+      const avg = rows.length > 0 ? Math.round((rows.reduce((s, r) => s + r.hours_active, 0) / rows.length) * 100) / 100 : 0;
+      reply.send({ workspace: req.params.workspace, agents: rows, avg_hours: avg });
+    },
+  );
+
 };

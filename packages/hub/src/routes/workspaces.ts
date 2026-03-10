@@ -2446,4 +2446,28 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+
+  // F-289 workspace-growth-rate
+  app.get<{ Params: { workspace: string }; Querystring: { days?: number } }>(
+    "/api/v1/workspaces/:workspace/workspace-growth-rate",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const ws = req.params.workspace;
+      const days = req.query.days ?? 30;
+      const entities = ["agents", "claims", "blockers", "handoffs"];
+      const growth: Record<string, { current: number; previous: number; rate: number }> = {};
+      for (const entity of entities) {
+        const cur = (db.prepare(
+          `SELECT COUNT(*) as c FROM ${entity} WHERE workspace_id = ? AND created_at >= datetime('now', '-' || ? || ' days')`
+        ).get(ws, days) as { c: number }).c;
+        const prev = (db.prepare(
+          `SELECT COUNT(*) as c FROM ${entity} WHERE workspace_id = ? AND created_at >= datetime('now', '-' || ? || ' days') AND created_at < datetime('now', '-' || ? || ' days')`
+        ).get(ws, days * 2, days) as { c: number }).c;
+        const rate = prev > 0 ? Math.round(((cur - prev) / prev) * 10000) / 100 : 0;
+        growth[entity] = { current: cur, previous: prev, rate };
+      }
+      reply.send({ workspace: ws, days, growth });
+    },
+  );
+
 };
