@@ -2618,4 +2618,28 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, stats: rows });
     },
   );
+
+  // F-408 watcher-count-ranking
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/watcher-count-ranking",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT b.blocker_id, b.title, COUNT(bw.agent_id) AS watcher_count
+           FROM blockers b
+           LEFT JOIN blocker_watchers bw ON bw.blocker_id = b.blocker_id
+           WHERE b.workspace_id = ?
+           GROUP BY b.blocker_id
+           ORDER BY watcher_count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        blocker_id: string;
+        title: string;
+        watcher_count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, blockers: rows });
+    },
+  );
 };

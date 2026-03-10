@@ -3537,4 +3537,30 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, pairs });
     },
   );
+
+  // F-407 capabilities-per-agent
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/capabilities-per-agent",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const agents = db
+        .prepare(`SELECT agent_id, display_name, capabilities FROM agents WHERE workspace_id = ?`)
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        capabilities: string;
+      }[];
+      const result = agents
+        .map((a) => {
+          let count = 0;
+          try {
+            const parsed = JSON.parse(a.capabilities);
+            if (Array.isArray(parsed)) count = parsed.length;
+          } catch {}
+          return { agent_id: a.agent_id, display_name: a.display_name, capability_count: count };
+        })
+        .sort((a, b) => b.capability_count - a.capability_count);
+      reply.send({ workspace: req.params.workspace, agents: result });
+    },
+  );
 };
