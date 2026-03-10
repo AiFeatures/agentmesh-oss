@@ -1978,4 +1978,55 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total_pairs: rows.length, pairs: rows });
     },
   );
+
+  // F-271 handoff-delegation-chain
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/delegation-chain",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params;
+      const handoffs = db
+        .prepare(
+          "SELECT handoff_id, from_agent_id, to_agent_id, parent_handoff_id, status, created_at FROM handoffs WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 200",
+        )
+        .all(workspace) as {
+        handoff_id: string;
+        from_agent_id: string;
+        to_agent_id: string;
+        parent_handoff_id: string | null;
+        status: string;
+        created_at: string;
+      }[];
+
+      const chains: Record<string, number> = {};
+      const roots = handoffs.filter((h) => !h.parent_handoff_id);
+      for (const root of roots) {
+        let depth = 1;
+        let current = root.handoff_id;
+        while (true) {
+          const child = handoffs.find((h) => h.parent_handoff_id === current);
+          if (!child) break;
+          depth++;
+          current = child.handoff_id;
+        }
+        chains[root.handoff_id] = depth;
+      }
+
+      const maxDepth = Object.values(chains).length > 0 ? Math.max(...Object.values(chains)) : 0;
+      const avgDepth =
+        Object.values(chains).length > 0
+          ? Math.round(
+              (Object.values(chains).reduce((s, v) => s + v, 0) / Object.values(chains).length) *
+                100,
+            ) / 100
+          : 0;
+
+      return reply.send({
+        workspace,
+        total_chains: roots.length,
+        max_depth: maxDepth,
+        avg_depth: avgDepth,
+      });
+    },
+  );
 };

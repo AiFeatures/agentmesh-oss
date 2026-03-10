@@ -2405,4 +2405,28 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total_bottlenecks: bottlenecks.length, bottlenecks });
     },
   );
+
+  // F-272 workspace-event-stream
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/event-stream",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params;
+      const events = db
+        .prepare(
+          `SELECT action, entity_type, entity_id, actor_id, created_at
+           FROM audit_log WHERE workspace_id = ?
+           ORDER BY created_at DESC LIMIT 100`,
+        )
+        .all(workspace) as {
+        action: string;
+        entity_type: string;
+        entity_id: string;
+        actor_id: string | null;
+        created_at: string;
+      }[];
+
+      return reply.send({ workspace, total_events: events.length, events });
+    },
+  );
 };
