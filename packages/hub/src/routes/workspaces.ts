@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { db } from "../db/index.js";
 import { writeAuditLog } from "../services/audit.js";
 import { workspaceId as generateWorkspaceId } from "../services/ids.js";
+import { broadcast } from "../ws/gateway.js";
 
 export const workspaceRoutes: FastifyPluginAsync = async (app) => {
   app.get(
@@ -1176,6 +1177,163 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
         handoffs: newHandoffs,
         claims: newClaims,
       });
+    },
+  );
+
+  /* ── F-145  workspace merge ─────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/merge",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["source_workspace_id"],
+          properties: {
+            source_workspace_id: { type: "string", minLength: 1, maxLength: 128 },
+            include_agents: { type: "boolean" },
+            include_claims: { type: "boolean" },
+            include_blockers: { type: "boolean" },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const body = request.body as {
+        source_workspace_id: string;
+        include_agents?: boolean;
+        include_claims?: boolean;
+        include_blockers?: boolean;
+      };
+
+      const target = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace) as { workspace_id: string } | undefined;
+      if (!target) {
+        return reply.code(404).send({ error: "Target workspace not found" });
+      }
+
+      const source = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(body.source_workspace_id) as { workspace_id: string } | undefined;
+      if (!source) {
+        return reply.code(404).send({ error: "Source workspace not found" });
+      }
+
+      if (body.source_workspace_id === workspace) {
+        return reply.code(422).send({ error: "Cannot merge a workspace into itself" });
+      }
+
+      const merged = { agents: 0, claims: 0, blockers: 0 };
+      const agentIdMap = new Map<string, string>();
+
+      if (body.include_agents !== false) {
+        const agents = db
+          .prepare(
+            "SELECT agent_id, display_name, model, capabilities, metadata FROM agents WHERE workspace_id = ?",
+          )
+          .all(body.source_workspace_id) as Array<{
+          agent_id: string;
+          display_name: string;
+          model: string;
+          capabilities: string;
+          metadata: string | null;
+        }>;
+        const insertAgent = db.prepare(
+          "INSERT OR IGNORE INTO agents (agent_id, workspace_id, display_name, model, capabilities, metadata, status) VALUES (?, ?, ?, ?, ?, ?, 'online')",
+        );
+        for (const a of agents) {
+          // Check if agent_id already exists globally
+          const exists = db
+            .prepare("SELECT agent_id FROM agents WHERE agent_id = ?")
+            .get(a.agent_id);
+          const newId = exists ? `${a.agent_id}_merged_${Date.now().toString(36)}` : a.agent_id;
+          agentIdMap.set(a.agent_id, newId);
+          const r = insertAgent.run(
+            newId,
+            workspace,
+            a.display_name,
+            a.model,
+            a.capabilities,
+            a.metadata,
+          );
+          if (r.changes > 0) merged.agents++;
+        }
+      }
+
+      if (body.include_claims !== false) {
+        const claims = db
+          .prepare(
+            "SELECT claim_id, agent_id, scope, ttl_seconds FROM claims WHERE workspace_id = ? AND status = 'active'",
+          )
+          .all(body.source_workspace_id) as Array<{
+          claim_id: string;
+          agent_id: string;
+          scope: string;
+          ttl_seconds: number;
+        }>;
+        const insertClaim = db.prepare(
+          "INSERT OR IGNORE INTO claims (claim_id, workspace_id, agent_id, scope, ttl_seconds, status, expires_at) VALUES (?, ?, ?, ?, ?, 'active', datetime('now', '+' || ? || ' seconds'))",
+        );
+        const insertPath = db.prepare(
+          "INSERT OR IGNORE INTO claim_paths (claim_id, path_pattern) VALUES (?, ?)",
+        );
+        for (const c of claims) {
+          const r = insertClaim.run(
+            c.claim_id,
+            workspace,
+            c.agent_id,
+            c.scope,
+            c.ttl_seconds,
+            c.ttl_seconds,
+          );
+          if (r.changes > 0) {
+            merged.claims++;
+            const paths = db
+              .prepare("SELECT path_pattern FROM claim_paths WHERE claim_id = ?")
+              .all(c.claim_id) as Array<{ path_pattern: string }>;
+            for (const p of paths) {
+              insertPath.run(c.claim_id, p.path_pattern);
+            }
+          }
+        }
+      }
+
+      if (body.include_blockers !== false) {
+        const blockers = db
+          .prepare(
+            "SELECT blocker_id, agent_id, title, severity FROM blockers WHERE workspace_id = ? AND status = 'open'",
+          )
+          .all(body.source_workspace_id) as Array<{
+          blocker_id: string;
+          agent_id: string;
+          title: string;
+          severity: string;
+        }>;
+        const insertBlocker = db.prepare(
+          "INSERT OR IGNORE INTO blockers (blocker_id, workspace_id, agent_id, title, severity, status) VALUES (?, ?, ?, ?, ?, 'open')",
+        );
+        for (const b of blockers) {
+          const r = insertBlocker.run(b.blocker_id, workspace, b.agent_id, b.title, b.severity);
+          if (r.changes > 0) merged.blockers++;
+        }
+      }
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "system",
+        action: "workspace.merge",
+        entityType: "workspace",
+        entityId: workspace,
+        requestId: request.id,
+        payload: {
+          source: body.source_workspace_id,
+          merged,
+        },
+      });
+
+      return reply.send({ ok: true, merged });
     },
   );
 };

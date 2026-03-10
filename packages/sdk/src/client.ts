@@ -1193,6 +1193,25 @@ export class AgentMeshClient {
     );
   }
 
+  /* ── F-145  workspace merge ─────────────── */
+  async mergeWorkspace(
+    workspace: string,
+    sourceWorkspaceId: string,
+    options?: {
+      include_agents?: boolean;
+      include_claims?: boolean;
+      include_blockers?: boolean;
+    },
+  ): Promise<ActionResponse> {
+    return this.request(`/api/v1/workspaces/${workspace}/merge`, {
+      method: "POST",
+      body: JSON.stringify({
+        source_workspace_id: sourceWorkspaceId,
+        ...options,
+      }),
+    });
+  }
+
   private async request<T = unknown>(path: string, init: RequestInit): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);

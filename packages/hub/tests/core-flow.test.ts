@@ -7072,3 +7072,84 @@ test("recommend returns null when no agents have capability", async () => {
 
   await app.close();
 });
+
+// --------------- F-145: Workspace merge ---------------
+test("workspace merge copies agents from source to target", async () => {
+  runMigrations();
+  const app = buildApp();
+  const suffix = Date.now().toString(36);
+  const source = `ws-msrc-${suffix}`;
+  const target = `ws-mtgt-${suffix}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: source, display_name: "Source" },
+  });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: target, display_name: "Target" },
+  });
+
+  // Add agent to source only
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${source}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `m-agent-${suffix}`, display_name: "MA", capabilities: ["code"] },
+  });
+
+  // Merge source into target (agents only, skip claims/blockers which reference agents by FK)
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${target}/merge`,
+    headers: auth,
+    payload: {
+      source_workspace_id: source,
+      include_claims: false,
+      include_blockers: false,
+    },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.ok(res.json().ok);
+  assert.equal(res.json().merged.agents, 1);
+
+  // Verify more agents exist in target now
+  const agents = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${target}/agents`,
+    headers: auth,
+  });
+  const agentList = agents.json().data as Array<{ agent_id: string }>;
+  assert.ok(agentList.length >= 1, "Target should have at least one agent after merge");
+
+  await app.close();
+});
+
+test("workspace merge rejects self-merge", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-mself-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/merge`,
+    headers: auth,
+    payload: { source_workspace_id: ws },
+  });
+  assert.equal(res.statusCode, 422);
+
+  await app.close();
+});
