@@ -1715,4 +1715,44 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-238: Handoff route mode stats
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/route-mode-stats",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const handoffs = db
+        .prepare(`SELECT route_mode, status FROM handoffs WHERE workspace_id = ?`)
+        .all(workspace) as { route_mode: string | null; status: string }[];
+
+      const modes: Record<
+        string,
+        { total: number; accepted: number; rejected: number; pending: number }
+      > = {};
+      for (const h of handoffs) {
+        const mode = h.route_mode || "direct";
+        if (!modes[mode]) modes[mode] = { total: 0, accepted: 0, rejected: 0, pending: 0 };
+        modes[mode].total++;
+        if (h.status === "accepted" || h.status === "completed") modes[mode].accepted++;
+        if (h.status === "rejected") modes[mode].rejected++;
+        if (h.status === "pending") modes[mode].pending++;
+      }
+
+      const modeStats = Object.entries(modes)
+        .map(([mode, v]) => ({
+          mode,
+          ...v,
+          success_rate: v.total > 0 ? Math.round((v.accepted / v.total) * 10000) / 100 : 0,
+        }))
+        .sort((a, b) => b.total - a.total);
+
+      return reply.send({
+        workspace,
+        total_handoffs: handoffs.length,
+        modes: modeStats,
+      });
+    },
+  );
 };

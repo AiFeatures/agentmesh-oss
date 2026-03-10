@@ -1627,4 +1627,49 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-237: Blocker deadline compliance
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/deadline-compliance",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const blockers = db
+        .prepare(
+          `SELECT blocker_id, status, deadline_at, resolved_at FROM blockers WHERE workspace_id = ? AND deadline_at IS NOT NULL`,
+        )
+        .all(workspace) as {
+        blocker_id: string;
+        status: string;
+        deadline_at: string;
+        resolved_at: string | null;
+      }[];
+
+      let metDeadline = 0;
+      let missedDeadline = 0;
+      let pendingWithDeadline = 0;
+
+      for (const b of blockers) {
+        if (b.status === "resolved" && b.resolved_at) {
+          if (b.resolved_at <= b.deadline_at) metDeadline++;
+          else missedDeadline++;
+        } else if (b.status === "open") {
+          pendingWithDeadline++;
+        }
+      }
+
+      const total = metDeadline + missedDeadline;
+      const complianceRate = total > 0 ? Math.round((metDeadline / total) * 10000) / 100 : 100;
+
+      return reply.send({
+        workspace,
+        blockers_with_deadline: blockers.length,
+        met_deadline: metDeadline,
+        missed_deadline: missedDeadline,
+        pending_with_deadline: pendingWithDeadline,
+        compliance_rate_percent: complianceRate,
+      });
+    },
+  );
 };
