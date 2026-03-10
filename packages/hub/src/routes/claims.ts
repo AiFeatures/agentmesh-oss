@@ -2172,4 +2172,34 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-254: Claim scope popularity
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/scope-popularity",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const claims = db
+        .prepare(`SELECT scope FROM claims WHERE workspace_id = ?`)
+        .all(workspace) as { scope: string }[];
+
+      const frequency: Record<string, number> = {};
+      for (const c of claims) {
+        frequency[c.scope] = (frequency[c.scope] || 0) + 1;
+      }
+
+      const scopes = Object.entries(frequency)
+        .map(([scope, count]) => ({ scope, claim_count: count }))
+        .sort((a, b) => b.claim_count - a.claim_count);
+
+      return reply.send({
+        workspace,
+        total_claims: claims.length,
+        unique_scopes: scopes.length,
+        most_popular: scopes.slice(0, 20),
+        least_popular: scopes.slice(-10).reverse(),
+      });
+    },
+  );
 };

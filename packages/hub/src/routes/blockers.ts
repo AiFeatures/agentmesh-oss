@@ -1759,4 +1759,40 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-253: Blocker resolution speed
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/resolution-speed",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const resolved = db
+        .prepare(
+          `SELECT severity, created_at, resolved_at FROM blockers WHERE workspace_id = ? AND resolved_at IS NOT NULL`,
+        )
+        .all(workspace) as { severity: string; created_at: string; resolved_at: string }[];
+
+      const bySeverity: Record<string, number[]> = {};
+      for (const b of resolved) {
+        const hours =
+          (new Date(b.resolved_at).getTime() - new Date(b.created_at).getTime()) / 3600000;
+        if (!bySeverity[b.severity]) bySeverity[b.severity] = [];
+        bySeverity[b.severity].push(hours);
+      }
+
+      const severities = Object.entries(bySeverity).map(([severity, times]) => {
+        const avg = Math.round((times.reduce((s, v) => s + v, 0) / times.length) * 100) / 100;
+        const sorted = [...times].sort((a, b) => a - b);
+        return {
+          severity,
+          count: times.length,
+          avg_hours: avg,
+          median_hours: sorted[Math.floor(sorted.length / 2)],
+        };
+      });
+
+      return reply.send({ workspace, total_resolved: resolved.length, by_severity: severities });
+    },
+  );
 };

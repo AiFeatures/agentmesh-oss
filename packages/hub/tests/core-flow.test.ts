@@ -10410,3 +10410,40 @@ test("GET /handoffs/sla-summary returns SLA compliance overview", async () => {
   assert.ok(typeof body.compliance_rate_percent === "number");
   await app.close();
 });
+
+// ---------- F-253: Blocker resolution speed ----------
+test("GET /blockers/resolution-speed returns speed by severity", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `bl-resspeed-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "bug", severity: "high" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/resolution-speed`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body2 = JSON.parse(res.payload);
+  assert.ok(typeof body2.total_resolved === "number");
+  assert.ok(Array.isArray(body2.by_severity));
+  await app.close();
+});
+
+// ---------- F-254: Claim scope popularity ----------
+test("GET /claims/scope-popularity returns popular scopes", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `cl-scpopular-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 } });
+  const res2 = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/scope-popularity`, headers: auth });
+  assert.equal(res2.statusCode, 200);
+  const body3 = JSON.parse(res2.payload);
+  assert.ok(typeof body3.total_claims === "number");
+  assert.ok(typeof body3.unique_scopes === "number");
+  assert.ok(Array.isArray(body3.most_popular));
+  await app.close();
+});
