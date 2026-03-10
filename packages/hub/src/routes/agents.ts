@@ -3477,4 +3477,64 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: rows });
     },
   );
+
+  // F-401 heartbeat-gap-analysis
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/heartbeat-gap-analysis",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT agent_id, display_name, status, last_heartbeat_at,
+                  CAST((strftime('%s','now') - strftime('%s', last_heartbeat_at)) AS INTEGER) AS gap_seconds
+           FROM agents
+           WHERE workspace_id = ? AND last_heartbeat_at IS NOT NULL
+           ORDER BY gap_seconds DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        status: string;
+        last_heartbeat_at: string;
+        gap_seconds: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, agents: rows });
+    },
+  );
+
+  // F-402 tag-co-occurrence
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/tag-co-occurrence",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const agents = db
+        .prepare(
+          `SELECT tags FROM agents WHERE workspace_id = ? AND tags IS NOT NULL AND tags != '[]'`,
+        )
+        .all(req.params.workspace) as { tags: string }[];
+      const pairCounts: Record<string, number> = {};
+      for (const row of agents) {
+        let parsed: string[];
+        try {
+          parsed = JSON.parse(row.tags);
+        } catch {
+          continue;
+        }
+        if (!Array.isArray(parsed)) continue;
+        const sorted = [...new Set(parsed)].sort();
+        for (let i = 0; i < sorted.length; i++) {
+          for (let j = i + 1; j < sorted.length; j++) {
+            const key = sorted[i] + " + " + sorted[j];
+            pairCounts[key] = (pairCounts[key] || 0) + 1;
+          }
+        }
+      }
+      const pairs = Object.entries(pairCounts)
+        .map(([pair, count]) => ({ pair, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 20);
+      reply.send({ workspace: req.params.workspace, pairs });
+    },
+  );
 };
