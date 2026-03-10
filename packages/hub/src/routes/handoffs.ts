@@ -1951,4 +1951,31 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-267 handoff-agent-pair-stats
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/agent-pair-stats",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params;
+      const rows = db
+        .prepare(
+          `SELECT from_agent_id, to_agent_id, COUNT(*) AS total,
+                  SUM(CASE WHEN status = 'accepted' OR status = 'completed' THEN 1 ELSE 0 END) AS accepted,
+                  SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejected
+           FROM handoffs WHERE workspace_id = ?
+           GROUP BY from_agent_id, to_agent_id
+           ORDER BY total DESC LIMIT 50`,
+        )
+        .all(workspace) as {
+        from_agent_id: string;
+        to_agent_id: string;
+        total: number;
+        accepted: number;
+        rejected: number;
+      }[];
+
+      return reply.send({ workspace, total_pairs: rows.length, pairs: rows });
+    },
+  );
 };

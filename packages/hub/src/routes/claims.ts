@@ -2263,4 +2263,45 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-268 claim-expiry-countdown
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/expiry-countdown",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params;
+      const rows = db
+        .prepare(
+          `SELECT claim_id, agent_id, scope, expires_at
+           FROM claims WHERE workspace_id = ? AND status = 'active' AND expires_at IS NOT NULL
+           ORDER BY expires_at ASC LIMIT 50`,
+        )
+        .all(workspace) as {
+        claim_id: string;
+        agent_id: string;
+        scope: string;
+        expires_at: string;
+      }[];
+
+      const now = Date.now();
+      const result = rows.map((r) => {
+        const remainingMs = new Date(r.expires_at).getTime() - now;
+        return {
+          claim_id: r.claim_id,
+          agent_id: r.agent_id,
+          scope: r.scope,
+          expires_at: r.expires_at,
+          remaining_seconds: Math.max(0, Math.round(remainingMs / 1000)),
+          expired: remainingMs <= 0,
+        };
+      });
+
+      return reply.send({
+        workspace,
+        total_expiring: result.length,
+        already_expired: result.filter((r) => r.expired).length,
+        claims: result,
+      });
+    },
+  );
 };

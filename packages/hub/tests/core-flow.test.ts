@@ -10661,3 +10661,40 @@ test("GET /workspaces/:ws/bottleneck-report returns bottleneck analysis", async 
   assert.ok(Array.isArray(body.bottlenecks));
   await app.close();
 });
+
+// F-267 handoff-agent-pair-stats
+test("GET /handoffs/agent-pair-stats returns pair statistics", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `ws-haps-${Date.now().toString(36)}`;
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["x"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "t" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/agent-pair-stats`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.strictEqual(body.workspace, ws);
+  assert.ok(typeof body.total_pairs === "number");
+  assert.ok(Array.isArray(body.pairs));
+  await app.close();
+});
+
+// F-268 claim-expiry-countdown
+test("GET /claims/expiry-countdown returns expiring claims", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `ws-cec-${Date.now().toString(36)}`;
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "expcount", paths: ["src/a.ts"], ttl_seconds: 3600 } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/expiry-countdown`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.strictEqual(body.workspace, ws);
+  assert.ok(typeof body.total_expiring === "number");
+  assert.ok(Array.isArray(body.claims));
+  await app.close();
+});
