@@ -3202,4 +3202,30 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, hours: rows });
     },
   );
+
+  // F-479 handoff-route-mode-stats
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-route-mode-stats",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT route_mode,
+                  COUNT(*) AS total,
+                  SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
+                  SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending
+           FROM handoffs
+           WHERE workspace_id = ?
+           GROUP BY route_mode
+           ORDER BY total DESC`,
+        )
+        .all(req.params.workspace) as {
+        route_mode: string;
+        total: number;
+        completed: number;
+        pending: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, modes: rows });
+    },
+  );
 };

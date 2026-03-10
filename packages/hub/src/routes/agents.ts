@@ -3881,4 +3881,30 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, transitions: rows });
     },
   );
+
+  // F-480 agent-tag-frequency
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/agent-tag-frequency",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const agents = db
+        .prepare(
+          `SELECT tags FROM agents WHERE workspace_id = ? AND tags IS NOT NULL AND tags != '[]'`,
+        )
+        .all(req.params.workspace) as { tags: string }[];
+      const freq: Record<string, number> = {};
+      for (const a of agents) {
+        try {
+          const arr = JSON.parse(a.tags);
+          if (Array.isArray(arr)) {
+            for (const t of arr) freq[t] = (freq[t] || 0) + 1;
+          }
+        } catch {}
+      }
+      const sorted = Object.entries(freq)
+        .map(([tag, count]) => ({ tag, count }))
+        .sort((a, b) => b.count - a.count);
+      reply.send({ workspace: req.params.workspace, tags: sorted });
+    },
+  );
 };
