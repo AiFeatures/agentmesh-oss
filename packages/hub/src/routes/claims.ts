@@ -3257,4 +3257,28 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, hours: rows });
     },
   );
+
+  // F-468 claim-priority-avg
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/claim-priority-avg",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS total,
+                  AVG(priority) AS avg_priority,
+                  MAX(priority) AS max_priority,
+                  MIN(priority) AS min_priority
+           FROM claims
+           WHERE workspace_id = ? AND priority IS NOT NULL`,
+        )
+        .get(req.params.workspace) as {
+        total: number;
+        avg_priority: number | null;
+        max_priority: number | null;
+        min_priority: number | null;
+      };
+      reply.send({ workspace: req.params.workspace, ...row });
+    },
+  );
 };

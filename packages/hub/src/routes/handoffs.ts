@@ -3106,4 +3106,28 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, matrix: rows });
     },
   );
+
+  // F-467 handoff-notes-per-handoff
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-notes-per-handoff",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT h.handoff_id, h.summary, COUNT(hn.id) AS note_count
+           FROM handoffs h
+           LEFT JOIN handoff_notes hn ON hn.handoff_id = h.handoff_id
+           WHERE h.workspace_id = ?
+           GROUP BY h.handoff_id
+           ORDER BY note_count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        handoff_id: string;
+        summary: string;
+        note_count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, handoffs: rows });
+    },
+  );
 };
