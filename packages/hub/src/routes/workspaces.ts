@@ -3170,4 +3170,22 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ paths: rows });
     },
   );
+
+  // F-455 workspace-creation-daily
+  app.get(
+    "/api/v1/workspaces/workspace-creation-daily",
+    { preHandler: app.authGuard },
+    async (_req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT DATE(created_at) AS day, COUNT(*) AS count
+           FROM workspaces
+           GROUP BY DATE(created_at)
+           ORDER BY day DESC
+           LIMIT 30`,
+        )
+        .all() as { day: string; count: number }[];
+      reply.send({ trend: rows });
+    },
+  );
 };

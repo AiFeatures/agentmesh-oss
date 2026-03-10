@@ -3760,4 +3760,31 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: rows });
     },
   );
+
+  // F-456 agent-metadata-keys
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/agent-metadata-keys",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const agents = db
+        .prepare(`SELECT metadata FROM agents WHERE workspace_id = ? AND metadata IS NOT NULL`)
+        .all(req.params.workspace) as { metadata: string }[];
+      const keyCounts: Record<string, number> = {};
+      for (const a of agents) {
+        try {
+          const parsed = JSON.parse(a.metadata);
+          if (parsed && typeof parsed === "object") {
+            for (const k of Object.keys(parsed)) {
+              keyCounts[k] = (keyCounts[k] || 0) + 1;
+            }
+          }
+        } catch {}
+      }
+      const keys = Object.entries(keyCounts)
+        .map(([key, count]) => ({ key, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 30);
+      reply.send({ workspace: req.params.workspace, keys });
+    },
+  );
 };
