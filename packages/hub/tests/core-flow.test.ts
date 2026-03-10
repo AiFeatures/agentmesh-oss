@@ -12580,3 +12580,31 @@ test("GET /blockers/escalation-level-distribution returns levels", async () => {
   assert.ok(Array.isArray(body.distribution));
   await app.close();
 });
+
+// F-399 audit-actor-frequency
+test("GET /workspaces/audit-actor-frequency returns actors", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "audact-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/audit-actor-frequency`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.actors));
+  await app.close();
+});
+
+// F-400 path-pattern-frequency
+test("GET /claims/path-pattern-frequency returns patterns", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "pthpat-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/path-pattern-frequency`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.patterns));
+  await app.close();
+});

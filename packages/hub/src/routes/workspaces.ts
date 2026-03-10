@@ -2983,4 +2983,27 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ...row, compliance_pct: pct });
     },
   );
+
+  // F-399 audit-actor-frequency
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/audit-actor-frequency",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT actor_id, actor_type, COUNT(*) AS action_count
+           FROM audit_log
+           WHERE workspace_id = ?
+           GROUP BY actor_id, actor_type
+           ORDER BY action_count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        actor_id: string;
+        actor_type: string;
+        action_count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, actors: rows });
+    },
+  );
 };

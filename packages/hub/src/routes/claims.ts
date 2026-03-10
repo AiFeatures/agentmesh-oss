@@ -2945,4 +2945,27 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, windows: rows });
     },
   );
+
+  // F-400 path-pattern-frequency
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/path-pattern-frequency",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT cp.path_pattern, COUNT(*) AS count
+           FROM claim_paths cp
+           JOIN claims c ON c.claim_id = cp.claim_id
+           WHERE c.workspace_id = ?
+           GROUP BY cp.path_pattern
+           ORDER BY count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        path_pattern: string;
+        count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, patterns: rows });
+    },
+  );
 };
