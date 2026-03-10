@@ -2653,4 +2653,28 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ranking: rows });
     },
   );
+
+  // F-383 handoff-summary-length-stats
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/summary-length-stats",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS total,
+                  AVG(LENGTH(summary)) AS avg_length,
+                  MIN(LENGTH(summary)) AS min_length,
+                  MAX(LENGTH(summary)) AS max_length
+           FROM handoffs
+           WHERE workspace_id = ?`,
+        )
+        .get(req.params.workspace) as {
+        total: number;
+        avg_length: number | null;
+        min_length: number | null;
+        max_length: number | null;
+      };
+      reply.send({ workspace: req.params.workspace, ...row });
+    },
+  );
 };

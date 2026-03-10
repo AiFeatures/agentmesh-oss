@@ -2877,4 +2877,23 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-384 claim-created-daily
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/created-daily",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT DATE(created_at) AS day, COUNT(*) AS count
+           FROM claims
+           WHERE workspace_id = ?
+           GROUP BY DATE(created_at)
+           ORDER BY day DESC
+           LIMIT 30`,
+        )
+        .all(req.params.workspace) as { day: string; count: number }[];
+      reply.send({ workspace: req.params.workspace, days: rows });
+    },
+  );
 };
