@@ -843,4 +843,80 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-154  handoff chain analysis ──────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/chain/:handoff_id",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, handoff_id } = request.params as {
+        workspace: string;
+        handoff_id: string;
+      };
+
+      // Walk forward from this handoff: agent_id → target_agent_id, then find handoffs
+      // from target_agent_id to build a chain of custody
+      const chain: Array<{
+        handoff_id: string;
+        from_agent: string;
+        to_agent: string;
+        status: string;
+        created_at: string;
+      }> = [];
+
+      const allHandoffs = db
+        .prepare(
+          `SELECT handoff_id, from_agent_id, to_agent_id, status, created_at
+           FROM handoffs WHERE workspace_id = ? ORDER BY created_at ASC`,
+        )
+        .all(workspace) as Array<{
+        handoff_id: string;
+        from_agent_id: string;
+        to_agent_id: string | null;
+        status: string;
+        created_at: string;
+      }>;
+
+      // Build adjacency map
+      const byId = new Map(allHandoffs.map((h) => [h.handoff_id, h]));
+      const byAgent = new Map<string, typeof allHandoffs>();
+      for (const h of allHandoffs) {
+        const list = byAgent.get(h.from_agent_id) ?? [];
+        list.push(h);
+        byAgent.set(h.from_agent_id, list);
+      }
+
+      // Start from the requested handoff and follow the chain
+      const start = byId.get(handoff_id);
+      if (!start) return reply.code(404).send({ error: "Handoff not found" });
+
+      const visited = new Set<string>();
+      let current = start;
+      while (current && !visited.has(current.handoff_id)) {
+        visited.add(current.handoff_id);
+        chain.push({
+          handoff_id: current.handoff_id,
+          from_agent: current.from_agent_id,
+          to_agent: current.to_agent_id ?? "any",
+          status: current.status,
+          created_at: current.created_at,
+        });
+        // Find the next handoff from target agent
+        if (current.to_agent_id) {
+          const next = byAgent
+            .get(current.to_agent_id)
+            ?.find((h) => h.created_at > current!.created_at && !visited.has(h.handoff_id));
+          current = next ?? null!;
+        } else {
+          break;
+        }
+      }
+
+      return reply.send({
+        origin: handoff_id,
+        chain_length: chain.length,
+        chain,
+      });
+    },
+  );
 };

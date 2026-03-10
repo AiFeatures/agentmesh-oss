@@ -1592,4 +1592,106 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-153  agent performance score ────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/:agent_id/performance",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, agent_id } = request.params as {
+        workspace: string;
+        agent_id: string;
+      };
+
+      const agent = db
+        .prepare(
+          "SELECT agent_id, display_name, status FROM agents WHERE agent_id = ? AND workspace_id = ?",
+        )
+        .get(agent_id, workspace) as
+        | { agent_id: string; display_name: string; status: string }
+        | undefined;
+      if (!agent) return reply.code(404).send({ error: "Agent not found" });
+
+      const claimStats = db
+        .prepare(
+          `SELECT
+             COUNT(*) as total_claims,
+             SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_claims,
+             SUM(CASE WHEN status = 'released' THEN 1 ELSE 0 END) as released_claims,
+             AVG(renewal_count) as avg_renewals
+           FROM claims WHERE agent_id = ? AND workspace_id = ?`,
+        )
+        .get(agent_id, workspace) as {
+        total_claims: number;
+        active_claims: number;
+        released_claims: number;
+        avg_renewals: number;
+      };
+
+      const handoffStats = db
+        .prepare(
+          `SELECT
+             COUNT(*) as total_handoffs_created,
+             SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted,
+             SUM(CASE WHEN status = 'expired' THEN 1 ELSE 0 END) as expired,
+             SUM(CASE WHEN to_agent_id = ? AND status = 'accepted' THEN 1 ELSE 0 END) as received_accepted
+           FROM handoffs WHERE (from_agent_id = ? OR to_agent_id = ?) AND workspace_id = ?`,
+        )
+        .get(agent_id, agent_id, agent_id, workspace) as {
+        total_handoffs_created: number;
+        accepted: number;
+        expired: number;
+        received_accepted: number;
+      };
+
+      const blockerStats = db
+        .prepare(
+          `SELECT
+             COUNT(*) as total_blockers,
+             SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) as open_blockers,
+             SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved_blockers
+           FROM blockers WHERE agent_id = ? AND workspace_id = ?`,
+        )
+        .get(agent_id, workspace) as {
+        total_blockers: number;
+        open_blockers: number;
+        resolved_blockers: number;
+      };
+
+      const completionRate =
+        claimStats.total_claims > 0
+          ? +(claimStats.released_claims / claimStats.total_claims).toFixed(3)
+          : 0;
+      const handoffSuccessRate =
+        handoffStats.total_handoffs_created > 0
+          ? +(handoffStats.accepted / handoffStats.total_handoffs_created).toFixed(3)
+          : 0;
+      const blockerResolutionRate =
+        blockerStats.total_blockers > 0
+          ? +(blockerStats.resolved_blockers / blockerStats.total_blockers).toFixed(3)
+          : 0;
+
+      // composite score: weighted average of rates (0-100)
+      const score = +(
+        completionRate * 30 +
+        handoffSuccessRate * 40 +
+        blockerResolutionRate * 30
+      ).toFixed(1);
+
+      return reply.send({
+        agent_id,
+        agent_name: agent.display_name,
+        status: agent.status,
+        score,
+        claims: claimStats,
+        handoffs: handoffStats,
+        blockers: blockerStats,
+        rates: {
+          completion: completionRate,
+          handoff_success: handoffSuccessRate,
+          blocker_resolution: blockerResolutionRate,
+        },
+      });
+    },
+  );
 };

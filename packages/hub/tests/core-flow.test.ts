@@ -7536,3 +7536,112 @@ test("claim health returns active claim stats and at-risk list", async () => {
 
   await app.close();
 });
+
+/* ── F-153  agent performance score ────────────────── */
+test("agent performance score returns composite score and stats", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `perf_${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "perf-a1", display_name: "Perf Agent", capabilities: ["code"] },
+  });
+  // create and release a claim
+  const cc = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "perf-a1", scope: "perf-scope", paths: ["/perf"] },
+  });
+  assert.equal(cc.statusCode, 201);
+  const claimId = cc.json().claim_id;
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims/${claimId}/release`,
+    headers: auth,
+    payload: {},
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/perf-a1/performance`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.agent_id, "perf-a1");
+  assert.ok(typeof body.score === "number");
+  assert.ok(body.claims);
+  assert.ok(body.handoffs);
+  assert.ok(body.blockers);
+  assert.ok(body.rates);
+  assert.ok(typeof body.rates.completion === "number");
+
+  await app.close();
+});
+
+/* ── F-154  handoff chain analysis ─────────────────── */
+test("handoff chain analysis follows handoff forward chain", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `chain_${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "ch-a1", display_name: "Chain A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "ch-a2", display_name: "Chain A2", capabilities: ["code"] },
+  });
+
+  // Create a handoff from a1 → a2
+  const hc = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: {
+      from_agent_id: "ch-a1",
+      to_agent_id: "ch-a2",
+      summary: "chain link 1",
+    },
+  });
+  assert.equal(hc.statusCode, 201);
+  const hid = hc.json().handoff_id;
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/chain/${hid}`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.origin, hid);
+  assert.ok(body.chain_length >= 1);
+  assert.ok(Array.isArray(body.chain));
+  assert.equal(body.chain[0].handoff_id, hid);
+  assert.equal(body.chain[0].from_agent, "ch-a1");
+
+  await app.close();
+});
