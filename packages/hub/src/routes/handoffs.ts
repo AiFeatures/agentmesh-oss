@@ -2589,4 +2589,27 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ranking: rows });
     },
   );
+
+  // F-368 handoff-acceptance-rate
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/acceptance-rate",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS total,
+                  SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) AS accepted,
+                  SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejected
+           FROM handoffs
+           WHERE workspace_id = ?`,
+        )
+        .get(req.params.workspace) as { total: number; accepted: number; rejected: number };
+      const rate = row.total > 0 ? row.accepted / row.total : 0;
+      reply.send({
+        workspace: req.params.workspace,
+        ...row,
+        acceptance_rate: Math.round(rate * 10000) / 100,
+      });
+    },
+  );
 };

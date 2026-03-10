@@ -2839,4 +2839,22 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-367 workspace-agent-model-summary
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agent-model-summary",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT COALESCE(model, 'unknown') AS model, COUNT(*) AS count
+           FROM agents
+           WHERE workspace_id = ?
+           GROUP BY model
+           ORDER BY count DESC`,
+        )
+        .all(req.params.workspace) as { model: string; count: number }[];
+      reply.send({ workspace: req.params.workspace, models: rows });
+    },
+  );
 };
