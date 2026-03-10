@@ -2177,4 +2177,29 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, pairs: rows });
     },
   );
+
+  // F-299 capability-demand
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/capability-demand",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT capability_tag, COUNT(*) as demand_count,
+                  SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as fulfilled,
+                  SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
+           FROM handoffs
+           WHERE workspace_id = ? AND capability_tag IS NOT NULL
+           GROUP BY capability_tag
+           ORDER BY demand_count DESC`,
+        )
+        .all(req.params.workspace) as {
+        capability_tag: string;
+        demand_count: number;
+        fulfilled: number;
+        pending: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, capabilities: rows });
+    },
+  );
 };

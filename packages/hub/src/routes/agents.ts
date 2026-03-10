@@ -2878,4 +2878,48 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-300 stale-capabilities
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/stale-capabilities",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const agents = db
+        .prepare("SELECT agent_id, display_name, capabilities FROM agents WHERE workspace_id = ?")
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        capabilities: string | null;
+      }[];
+
+      const usedTags = db
+        .prepare(
+          `SELECT DISTINCT capability_tag FROM handoffs
+           WHERE workspace_id = ? AND capability_tag IS NOT NULL`,
+        )
+        .all(req.params.workspace) as { capability_tag: string }[];
+
+      const usedSet = new Set(usedTags.map((r) => r.capability_tag));
+
+      const stale = agents
+        .map((a) => {
+          let caps: string[] = [];
+          try {
+            caps = JSON.parse(a.capabilities || "[]") as string[];
+          } catch {
+            /* skip */
+          }
+          const unused = caps.filter((c) => !usedSet.has(c));
+          return {
+            agent_id: a.agent_id,
+            display_name: a.display_name,
+            stale: unused,
+            stale_count: unused.length,
+          };
+        })
+        .filter((r) => r.stale_count > 0);
+
+      reply.send({ workspace: req.params.workspace, agents: stale });
+    },
+  );
 };
