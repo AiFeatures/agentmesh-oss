@@ -2572,4 +2572,22 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: rows });
     },
   );
+
+  // F-398 escalation-level-distribution
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/escalation-level-distribution",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT COALESCE(escalation_level, 0) AS level, COUNT(*) AS count
+           FROM blockers
+           WHERE workspace_id = ?
+           GROUP BY level
+           ORDER BY level`,
+        )
+        .all(req.params.workspace) as { level: number; count: number }[];
+      reply.send({ workspace: req.params.workspace, distribution: rows });
+    },
+  );
 };
