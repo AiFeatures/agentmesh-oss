@@ -345,4 +345,78 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-69  blocker watchers ─────────────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/blockers/:blockerId/watchers",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["agent_id"],
+          additionalProperties: false,
+          properties: {
+            agent_id: { type: "string", minLength: 1, maxLength: 128 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, blockerId } = request.params as {
+        workspace: string;
+        blockerId: string;
+      };
+      const blocker = db
+        .prepare("SELECT blocker_id FROM blockers WHERE blocker_id = ? AND workspace_id = ?")
+        .get(blockerId, workspace);
+      if (!blocker) {
+        return reply.code(404).send({ error: "Blocker not found" });
+      }
+      const body = request.body as { agent_id: string };
+      db.prepare(
+        "INSERT OR IGNORE INTO blocker_watchers (blocker_id, agent_id, workspace_id) VALUES (?, ?, ?)",
+      ).run(blockerId, body.agent_id, workspace);
+      return reply.code(201).send({ ok: true });
+    },
+  );
+
+  app.delete(
+    "/api/v1/workspaces/:workspace/blockers/:blockerId/watchers/:agentId",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, blockerId, agentId } = request.params as {
+        workspace: string;
+        blockerId: string;
+        agentId: string;
+      };
+      db.prepare(
+        "DELETE FROM blocker_watchers WHERE blocker_id = ? AND agent_id = ? AND workspace_id = ?",
+      ).run(blockerId, agentId, workspace);
+      return reply.send({ ok: true });
+    },
+  );
+
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/:blockerId/watchers",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, blockerId } = request.params as {
+        workspace: string;
+        blockerId: string;
+      };
+      const blocker = db
+        .prepare("SELECT blocker_id FROM blockers WHERE blocker_id = ? AND workspace_id = ?")
+        .get(blockerId, workspace);
+      if (!blocker) {
+        return reply.code(404).send({ error: "Blocker not found" });
+      }
+      const watchers = db
+        .prepare(
+          "SELECT agent_id, created_at FROM blocker_watchers WHERE blocker_id = ? AND workspace_id = ?",
+        )
+        .all(blockerId, workspace);
+      return reply.send({ data: watchers });
+    },
+  );
 };

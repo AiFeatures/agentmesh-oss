@@ -3601,3 +3601,212 @@ test("handoff notes can be added and retrieved", async () => {
 
   await app.close();
 });
+
+// --------------- F-69: Blocker watchers ---------------
+test("blocker watchers can be added and listed", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-bwatch-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] },
+  });
+
+  // create blocker
+  const b = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "Blocked on review", severity: "high" },
+  });
+  assert.equal(b.statusCode, 201);
+  const blockerId = b.json().blocker_id;
+
+  // add watcher
+  const w1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers/${blockerId}/watchers`,
+    headers: auth,
+    payload: { agent_id: "a2" },
+  });
+  assert.equal(w1.statusCode, 201);
+
+  // idempotent add
+  const w2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers/${blockerId}/watchers`,
+    headers: auth,
+    payload: { agent_id: "a2" },
+  });
+  assert.equal(w2.statusCode, 201);
+
+  // list watchers
+  const wl = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/${blockerId}/watchers`,
+    headers: auth,
+  });
+  assert.equal(wl.statusCode, 200);
+  assert.equal(wl.json().data.length, 1);
+  assert.equal(wl.json().data[0].agent_id, "a2");
+
+  // remove watcher
+  await app.inject({
+    method: "DELETE",
+    url: `/api/v1/workspaces/${ws}/blockers/${blockerId}/watchers/a2`,
+    headers: auth,
+  });
+  const wl2 = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/${blockerId}/watchers`,
+    headers: auth,
+  });
+  assert.equal(wl2.json().data.length, 0);
+
+  await app.close();
+});
+
+// --------------- F-70: Handoff chain tracking ---------------
+test("handoff chain tracks parent-child relationships", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-hchain-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] },
+  });
+
+  // create parent handoff
+  const h1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "parent task" },
+  });
+  assert.equal(h1.statusCode, 201);
+  const parentId = h1.json().handoff_id;
+
+  // create child handoff
+  const h2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: {
+      from_agent_id: "a2",
+      to_agent_id: "a1",
+      summary: "subtask",
+      parent_handoff_id: parentId,
+    },
+  });
+  assert.equal(h2.statusCode, 201);
+  const childId = h2.json().handoff_id;
+
+  // get chain from child — should include parent and child
+  const chain = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/${childId}/chain`,
+    headers: auth,
+  });
+  assert.equal(chain.statusCode, 200);
+  const body = chain.json();
+  assert.equal(body.chain.length, 2);
+  assert.equal(body.chain[0].handoff_id, parentId);
+  assert.equal(body.chain[1].handoff_id, childId);
+
+  // get chain from parent — should show children
+  const chain2 = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/${parentId}/chain`,
+    headers: auth,
+  });
+  assert.equal(chain2.statusCode, 200);
+  assert.equal(chain2.json().children.length, 1);
+  assert.equal(chain2.json().children[0].handoff_id, childId);
+
+  await app.close();
+});
+
+// --------------- F-71: Batch claim status check ---------------
+test("batch claim status returns statuses for multiple claims", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-bstatus-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+
+  // create two claims
+  const c1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "backend", paths: ["src/a.ts"] },
+  });
+  const c2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "frontend", paths: ["src/b.ts"] },
+  });
+  const id1 = c1.json().claim_id;
+  const id2 = c2.json().claim_id;
+
+  // batch status check
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims/batch-status`,
+    headers: auth,
+    payload: { claim_ids: [id1, id2, "nonexistent"] },
+  });
+  assert.equal(res.statusCode, 200);
+  const data = res.json().data;
+  assert.equal(data.length, 3);
+  assert.equal(data[0].status, "active");
+  assert.equal(data[1].status, "active");
+  assert.equal(data[2].status, "not_found");
+
+  await app.close();
+});

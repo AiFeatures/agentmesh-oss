@@ -707,4 +707,46 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-71  batch claim status check ─────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/claims/batch-status",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["claim_ids"],
+          additionalProperties: false,
+          properties: {
+            claim_ids: {
+              type: "array",
+              minItems: 1,
+              maxItems: 50,
+              items: { type: "string", minLength: 1, maxLength: 128 },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const body = request.body as { claim_ids: string[] };
+      const placeholders = body.claim_ids.map(() => "?").join(",");
+      const rows = db
+        .prepare(
+          `SELECT claim_id, status, agent_id, expires_at FROM claims WHERE workspace_id = ? AND claim_id IN (${placeholders})`,
+        )
+        .all(workspace, ...body.claim_ids) as Array<Record<string, unknown>>;
+      const resultMap: Record<string, Record<string, unknown>> = {};
+      for (const row of rows) {
+        resultMap[row.claim_id as string] = row;
+      }
+      // mark missing IDs
+      const results = body.claim_ids.map(
+        (id) => resultMap[id] ?? { claim_id: id, status: "not_found" },
+      );
+      return reply.send({ data: results });
+    },
+  );
 };

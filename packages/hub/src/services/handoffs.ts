@@ -12,6 +12,7 @@ type HandoffInput = {
   context?: Record<string, unknown>;
   timeoutSeconds?: number;
   maxRetries?: number;
+  parentHandoffId?: string;
 };
 
 export function createHandoff(input: HandoffInput): { id: string; toAgentId: string | null } {
@@ -27,8 +28,8 @@ export function createHandoff(input: HandoffInput): { id: string; toAgentId: str
   db.prepare(
     `
       INSERT INTO handoffs (
-        handoff_id, workspace_id, from_agent_id, to_agent_id, route_mode, capability_tag, summary, context, status, timeout_seconds, max_retries, expires_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, CASE WHEN ? IS NOT NULL THEN datetime('now', '+' || ? || ' seconds') ELSE NULL END)
+        handoff_id, workspace_id, from_agent_id, to_agent_id, route_mode, capability_tag, summary, context, status, timeout_seconds, max_retries, expires_at, parent_handoff_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, CASE WHEN ? IS NOT NULL THEN datetime('now', '+' || ? || ' seconds') ELSE NULL END, ?)
     `,
   ).run(
     id,
@@ -43,6 +44,7 @@ export function createHandoff(input: HandoffInput): { id: string; toAgentId: str
     maxRetries,
     timeoutSec,
     timeoutSec,
+    input.parentHandoffId ?? null,
   );
 
   return { id, toAgentId: routed };

@@ -234,6 +234,32 @@ export class AgentMeshClient {
     });
   }
 
+  async getHandoffChain(workspace: string, handoffId: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/handoffs/${handoffId}/chain`, {
+      method: "GET",
+    });
+  }
+
+  async watchBlocker(workspace: string, blockerId: string, agentId: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/blockers/${blockerId}/watchers`, {
+      method: "POST",
+      body: JSON.stringify({ agent_id: agentId }),
+    });
+  }
+
+  async getBlockerWatchers(workspace: string, blockerId: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/blockers/${blockerId}/watchers`, {
+      method: "GET",
+    });
+  }
+
+  async batchClaimStatus(workspace: string, claimIds: string[]): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/claims/batch-status`, {
+      method: "POST",
+      body: JSON.stringify({ claim_ids: claimIds }),
+    });
+  }
+
   startHeartbeat(workspace: string, agentId: string, intervalMs = 10000): () => void {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {

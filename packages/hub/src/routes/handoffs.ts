@@ -23,6 +23,7 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
             context: { type: "object", additionalProperties: true, maxProperties: 50 },
             timeout_seconds: { type: "integer", minimum: 60, maximum: 86400 },
             max_retries: { type: "integer", minimum: 0, maximum: 10 },
+            parent_handoff_id: { type: "string", minLength: 1, maxLength: 128 },
           },
         },
       },
@@ -37,6 +38,7 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
         context?: Record<string, unknown>;
         timeout_seconds?: number;
         max_retries?: number;
+        parent_handoff_id?: string;
       };
 
       const fromExists = db
@@ -63,6 +65,7 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
         context: body.context,
         timeoutSeconds: body.timeout_seconds,
         maxRetries: body.max_retries,
+        parentHandoffId: body.parent_handoff_id,
       });
 
       writeAuditLog({
@@ -371,6 +374,42 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
         )
         .all(handoffId, workspace);
       return reply.send({ data: notes });
+    },
+  );
+
+  /* ── F-70  handoff chain tracking ───────────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/:handoffId/chain",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, handoffId } = request.params as {
+        workspace: string;
+        handoffId: string;
+      };
+      const chain: Record<string, unknown>[] = [];
+      let currentId: string | null = handoffId;
+      const seen = new Set<string>();
+      while (currentId && !seen.has(currentId)) {
+        seen.add(currentId);
+        const row = db
+          .prepare(
+            "SELECT handoff_id, from_agent_id, to_agent_id, status, summary, parent_handoff_id, created_at FROM handoffs WHERE handoff_id = ? AND workspace_id = ?",
+          )
+          .get(currentId, workspace) as Record<string, unknown> | undefined;
+        if (!row) break;
+        chain.unshift(row);
+        currentId = (row.parent_handoff_id as string) ?? null;
+      }
+      if (chain.length === 0) {
+        return reply.code(404).send({ error: "Handoff not found" });
+      }
+      // also get children
+      const children = db
+        .prepare(
+          "SELECT handoff_id, from_agent_id, to_agent_id, status, summary, created_at FROM handoffs WHERE parent_handoff_id = ? AND workspace_id = ?",
+        )
+        .all(handoffId, workspace);
+      return reply.send({ chain, children });
     },
   );
 };
