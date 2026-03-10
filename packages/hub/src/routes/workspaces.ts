@@ -1644,4 +1644,38 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-180: Workspace audit stats
+  app.get(
+    "/api/v1/workspaces/:workspace/audit-stats",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const byAction = db
+        .prepare(
+          `SELECT action, COUNT(*) as count
+           FROM audit_log WHERE workspace_id = ?
+           GROUP BY action ORDER BY count DESC`,
+        )
+        .all(workspace) as Array<{ action: string; count: number }>;
+
+      const byDay = db
+        .prepare(
+          `SELECT date(created_at) as day, COUNT(*) as count
+           FROM audit_log WHERE workspace_id = ?
+           GROUP BY date(created_at) ORDER BY day DESC LIMIT 30`,
+        )
+        .all(workspace) as Array<{ day: string; count: number }>;
+
+      const totalEvents = byAction.reduce((s, a) => s + a.count, 0);
+
+      return reply.send({
+        workspace_id: workspace,
+        total_events: totalEvents,
+        by_action: byAction,
+        by_day: byDay,
+      });
+    },
+  );
 };

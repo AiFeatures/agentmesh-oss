@@ -8665,3 +8665,95 @@ test("GET /agents/stale-detection returns stale agent analysis", async () => {
 
   await app.close();
 });
+
+// F-179: Handoff escalation paths
+test("GET /handoffs/escalation-paths returns escalation analysis", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `esc-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "esc-a1", display_name: "ESC A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "esc-a2", display_name: "ESC A2", capabilities: ["review"] },
+  });
+
+  // Create and reject a handoff for escalation pattern
+  const h = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "esc-a1", to_agent_id: "esc-a2", summary: "Escalation test" },
+  });
+  const handoffId = h.json().handoff_id;
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs/${handoffId}/reject`,
+    headers: auth,
+    payload: { reason: "Cannot handle" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/escalation-paths`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.total_handoffs === "number");
+  assert.ok(typeof body.total_rejections === "number");
+  assert.ok(typeof body.retry_chains === "number");
+  assert.ok(Array.isArray(body.escalation_paths));
+  assert.equal(body.total_rejections, 1);
+
+  await app.close();
+});
+
+// F-180: Workspace audit stats
+test("GET /workspaces/:workspace/audit-stats returns audit statistics", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `as-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "as-a1", display_name: "AS A1", capabilities: ["code"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/audit-stats`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.workspace_id, ws);
+  assert.ok(typeof body.total_events === "number");
+  assert.ok(Array.isArray(body.by_action));
+  assert.ok(Array.isArray(body.by_day));
+
+  await app.close();
+});

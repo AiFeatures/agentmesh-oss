@@ -1140,4 +1140,54 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-179: Handoff escalation paths
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/escalation-paths",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      // Find handoffs that were rejected and then retried (escalation pattern)
+      const handoffs = db
+        .prepare(
+          `SELECT handoff_id, from_agent_id, to_agent_id, status, created_at, parent_handoff_id
+           FROM handoffs WHERE workspace_id = ?`,
+        )
+        .all(workspace) as Array<{
+        handoff_id: string;
+        from_agent_id: string;
+        to_agent_id: string | null;
+        status: string;
+        created_at: string;
+        parent_handoff_id: string | null;
+      }>;
+
+      // Count rejected handoffs per agent pair
+      const rejections: Record<string, { from: string; to: string; count: number }> = {};
+      for (const h of handoffs) {
+        if (h.status === "rejected" && h.to_agent_id) {
+          const key = `${h.from_agent_id}->${h.to_agent_id}`;
+          if (!rejections[key]) {
+            rejections[key] = { from: h.from_agent_id, to: h.to_agent_id, count: 0 };
+          }
+          rejections[key].count++;
+        }
+      }
+
+      // Find retry chains (handoffs with parent_handoff_id)
+      const retryChains = handoffs.filter((h) => h.parent_handoff_id);
+
+      const escalationPaths = Object.values(rejections)
+        .filter((r) => r.count > 0)
+        .sort((a, b) => b.count - a.count);
+
+      return reply.send({
+        total_handoffs: handoffs.length,
+        total_rejections: handoffs.filter((h) => h.status === "rejected").length,
+        retry_chains: retryChains.length,
+        escalation_paths: escalationPaths,
+      });
+    },
+  );
 };
