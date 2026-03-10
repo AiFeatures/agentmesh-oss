@@ -841,4 +841,26 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: agents, total: agents.length });
     },
   );
+
+  /* ── F-78  agent group list ─────────────────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/groups",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT "group", COUNT(*) as agent_count, GROUP_CONCAT(agent_id) as agent_ids
+           FROM agents WHERE workspace_id = ? AND "group" IS NOT NULL AND "group" != ''
+           GROUP BY "group" ORDER BY agent_count DESC`,
+        )
+        .all(workspace) as Array<{ group: string; agent_count: number; agent_ids: string }>;
+      const data = rows.map((r) => ({
+        group: r.group,
+        agent_count: r.agent_count,
+        agent_ids: r.agent_ids.split(","),
+      }));
+      return reply.send({ data, total: data.length });
+    },
+  );
 };

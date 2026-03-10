@@ -606,4 +606,55 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ hours: h, total, by_action: rows });
     },
   );
+
+  /* ── F-80  metrics history ──────────────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/metrics/snapshot",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const agents = (
+        db.prepare("SELECT COUNT(*) as c FROM agents WHERE workspace_id = ?").get(workspace) as {
+          c: number;
+        }
+      ).c;
+      const claims = (
+        db
+          .prepare("SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND status = 'active'")
+          .get(workspace) as { c: number }
+      ).c;
+      const handoffs = (
+        db
+          .prepare(
+            "SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND status = 'pending'",
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const blockers = (
+        db
+          .prepare("SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status = 'open'")
+          .get(workspace) as { c: number }
+      ).c;
+      db.prepare(
+        "INSERT INTO metrics_history (workspace_id, agent_count, active_claims, pending_handoffs, open_blockers) VALUES (?, ?, ?, ?, ?)",
+      ).run(workspace, agents, claims, handoffs, blockers);
+      return reply.code(201).send({ ok: true });
+    },
+  );
+
+  app.get(
+    "/api/v1/workspaces/:workspace/metrics/history",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { limit } = request.query as { limit?: string };
+      const lim = Math.min(1000, Math.max(1, Number(limit) || 100));
+      const rows = db
+        .prepare(
+          "SELECT agent_count, active_claims, pending_handoffs, open_blockers, snapshot_at FROM metrics_history WHERE workspace_id = ? ORDER BY id DESC LIMIT ?",
+        )
+        .all(workspace, lim);
+      return reply.send({ data: rows, total: rows.length });
+    },
+  );
 };

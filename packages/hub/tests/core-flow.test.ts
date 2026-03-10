@@ -4089,3 +4089,161 @@ test("handoff accept can include a note", async () => {
 
   await app.close();
 });
+
+// --------------- F-78: Agent group list ---------------
+test("agent group list returns groups with counts", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-groups-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: `grp-a1-${ws}`,
+      display_name: "A1",
+      capabilities: ["code"],
+      group: "backend",
+    },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: `grp-a2-${ws}`,
+      display_name: "A2",
+      capabilities: ["code"],
+      group: "backend",
+    },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: `grp-a3-${ws}`,
+      display_name: "A3",
+      capabilities: ["review"],
+      group: "frontend",
+    },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/groups`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.total, 2);
+  const backend = body.data.find((g: { group: string }) => g.group === "backend");
+  assert.ok(backend);
+  assert.equal(backend.agent_count, 2);
+
+  await app.close();
+});
+
+// --------------- F-79: Claim conflict detection ---------------
+test("detect-conflicts finds duplicate scopes", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-conflicts-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `cf-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `cf-a2-${ws}`, display_name: "A2", capabilities: ["code"] },
+  });
+
+  // create two claims on same scope with non-overlapping paths
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: `cf-a1-${ws}`, scope: "src.utils", paths: ["src/a.ts"], ttl_seconds: 300 },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: `cf-a2-${ws}`, scope: "src.utils", paths: ["src/b.ts"], ttl_seconds: 300 },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/detect-conflicts`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.total, 1);
+  assert.equal(body.data[0].scope, "src.utils");
+  assert.equal(body.data[0].claims.length, 2);
+
+  await app.close();
+});
+
+// --------------- F-80: Workspace metrics history ---------------
+test("metrics snapshot and history work correctly", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-metrichist-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `mh-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+
+  // take a snapshot
+  const snap = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/metrics/snapshot`,
+    headers: auth,
+  });
+  assert.equal(snap.statusCode, 201);
+
+  // retrieve history
+  const hist = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/metrics/history`,
+    headers: auth,
+  });
+  assert.equal(hist.statusCode, 200);
+  const body = hist.json();
+  assert.equal(body.data.length, 1);
+  assert.equal(body.data[0].agent_count, 1);
+
+  await app.close();
+});

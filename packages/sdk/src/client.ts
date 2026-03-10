@@ -289,6 +289,31 @@ export class AgentMeshClient {
     });
   }
 
+  async getAgentGroups(workspace: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/agents/groups`, {
+      method: "GET",
+    });
+  }
+
+  async detectClaimConflicts(workspace: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/claims/detect-conflicts`, {
+      method: "GET",
+    });
+  }
+
+  async snapshotMetrics(workspace: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/metrics/snapshot`, {
+      method: "POST",
+    });
+  }
+
+  async getMetricsHistory(workspace: string, limit?: number): Promise<unknown> {
+    const qs = limit ? `?limit=${limit}` : "";
+    return await this.request(`/api/v1/workspaces/${workspace}/metrics/history${qs}`, {
+      method: "GET",
+    });
+  }
+
   startHeartbeat(workspace: string, agentId: string, intervalMs = 10000): () => void {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {

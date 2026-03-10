@@ -754,4 +754,40 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: results });
     },
   );
+
+  /* ── F-79  claim conflict detection ─────────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/detect-conflicts",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const activeClaims = db
+        .prepare(
+          "SELECT claim_id, agent_id, scope FROM claims WHERE workspace_id = ? AND status = 'active' ORDER BY scope",
+        )
+        .all(workspace) as Array<{ claim_id: string; agent_id: string; scope: string }>;
+
+      const conflicts: Array<{
+        scope: string;
+        claims: Array<{ claim_id: string; agent_id: string }>;
+      }> = [];
+      const scopeMap = new Map<string, Array<{ claim_id: string; agent_id: string }>>();
+
+      for (const c of activeClaims) {
+        const existing = scopeMap.get(c.scope);
+        if (existing) {
+          existing.push({ claim_id: c.claim_id, agent_id: c.agent_id });
+        } else {
+          scopeMap.set(c.scope, [{ claim_id: c.claim_id, agent_id: c.agent_id }]);
+        }
+      }
+
+      for (const [scope, claims] of scopeMap) {
+        if (claims.length > 1) {
+          conflicts.push({ scope, claims });
+        }
+      }
+      return reply.send({ data: conflicts, total: conflicts.length });
+    },
+  );
 };
