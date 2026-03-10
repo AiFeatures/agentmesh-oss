@@ -3436,4 +3436,22 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, summary: rows });
     },
   );
+
+  // F-392 group-member-count
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/group-member-count",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT COALESCE("group", 'ungrouped') AS agent_group, COUNT(*) AS count
+           FROM agents
+           WHERE workspace_id = ?
+           GROUP BY agent_group
+           ORDER BY count DESC`,
+        )
+        .all(req.params.workspace) as { agent_group: string; count: number }[];
+      reply.send({ workspace: req.params.workspace, groups: rows });
+    },
+  );
 };

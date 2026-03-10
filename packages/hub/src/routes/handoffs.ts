@@ -2693,4 +2693,23 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, expired: row.expired });
     },
   );
+
+  // F-391 capability-tag-frequency
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/capability-tag-frequency",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT capability_tag, COUNT(*) AS count
+           FROM handoffs
+           WHERE workspace_id = ? AND capability_tag IS NOT NULL
+           GROUP BY capability_tag
+           ORDER BY count DESC
+           LIMIT 30`,
+        )
+        .all(req.params.workspace) as { capability_tag: string; count: number }[];
+      reply.send({ workspace: req.params.workspace, tags: rows });
+    },
+  );
 };
