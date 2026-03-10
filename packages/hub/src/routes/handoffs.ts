@@ -24,6 +24,10 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
             timeout_seconds: { type: "integer", minimum: 60, maximum: 86400 },
             max_retries: { type: "integer", minimum: 0, maximum: 10 },
             parent_handoff_id: { type: "string", minLength: 1, maxLength: 128 },
+            priority: {
+              type: "string",
+              enum: ["low", "normal", "high", "critical"],
+            },
           },
         },
       },
@@ -39,6 +43,7 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
         timeout_seconds?: number;
         max_retries?: number;
         parent_handoff_id?: string;
+        priority?: string;
       };
 
       const fromExists = db
@@ -67,6 +72,13 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
         maxRetries: body.max_retries,
         parentHandoffId: body.parent_handoff_id,
       });
+
+      if (body.priority && body.priority !== "normal") {
+        db.prepare("UPDATE handoffs SET priority = ? WHERE handoff_id = ?").run(
+          body.priority,
+          created.id,
+        );
+      }
 
       writeAuditLog({
         workspaceId: workspace,

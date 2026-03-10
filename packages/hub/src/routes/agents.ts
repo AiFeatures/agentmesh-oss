@@ -863,4 +863,26 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data, total: data.length });
     },
   );
+
+  /* ── F-85  agent heartbeat stats ────────────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/heartbeat-stats",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT agent_id, status, last_heartbeat_at,
+           CAST((julianday('now') - julianday(last_heartbeat_at)) * 86400 AS INTEGER) as seconds_since_heartbeat
+           FROM agents WHERE workspace_id = ? ORDER BY last_heartbeat_at DESC`,
+        )
+        .all(workspace) as Array<{
+        agent_id: string;
+        status: string;
+        last_heartbeat_at: string;
+        seconds_since_heartbeat: number;
+      }>;
+      return reply.send({ data: rows, total: rows.length });
+    },
+  );
 };

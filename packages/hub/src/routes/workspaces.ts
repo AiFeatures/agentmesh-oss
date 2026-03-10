@@ -682,4 +682,61 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ evicted_count: evicted.changes, idle_threshold_minutes: idleMinutes });
     },
   );
+
+  /* ── F-86  workspace clone ──────────────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/clone",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["new_workspace_id"],
+          additionalProperties: false,
+          properties: {
+            new_workspace_id: { type: "string", minLength: 2, maxLength: 128 },
+            display_name: { type: "string", minLength: 1, maxLength: 200 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const body = request.body as { new_workspace_id: string; display_name?: string };
+
+      const source = db.prepare("SELECT * FROM workspaces WHERE workspace_id = ?").get(workspace) as
+        | Record<string, unknown>
+        | undefined;
+      if (!source) {
+        return reply.code(404).send({ error: "Source workspace not found" });
+      }
+      const existing = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(body.new_workspace_id);
+      if (existing) {
+        return reply.code(409).send({ error: "Target workspace_id already exists" });
+      }
+
+      const displayName = body.display_name ?? `${source.display_name} (clone)`;
+      db.prepare(
+        "INSERT INTO workspaces (workspace_id, display_name, base_path, settings) VALUES (?, ?, ?, ?)",
+      ).run(body.new_workspace_id, displayName, source.base_path, source.settings);
+
+      writeAuditLog({
+        workspaceId: body.new_workspace_id,
+        actorType: "system",
+        action: "workspace.clone",
+        entityType: "workspace",
+        entityId: body.new_workspace_id,
+        requestId: request.id,
+        payload: { source_workspace: workspace },
+      });
+
+      return reply.code(201).send({
+        workspace_id: body.new_workspace_id,
+        display_name: displayName,
+        cloned_from: workspace,
+      });
+    },
+  );
 };

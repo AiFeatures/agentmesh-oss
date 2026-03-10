@@ -4393,3 +4393,134 @@ test("evict-idle returns eviction count", async () => {
 
   await app.close();
 });
+
+// --------------- F-84: Handoff priority ---------------
+test("handoff creation supports priority field", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-hopri-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `hp-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `hp-a2-${ws}`, display_name: "A2", capabilities: ["review"] },
+  });
+
+  const h = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: {
+      from_agent_id: `hp-a1-${ws}`,
+      to_agent_id: `hp-a2-${ws}`,
+      summary: "urgent review",
+      priority: "critical",
+    },
+  });
+  assert.equal(h.statusCode, 201);
+  const handoffId = h.json().handoff_id;
+
+  // verify priority is stored
+  const detail = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/${handoffId}`,
+    headers: auth,
+  });
+  assert.equal(detail.statusCode, 200);
+  assert.equal(detail.json().priority, "critical");
+
+  await app.close();
+});
+
+// --------------- F-85: Agent heartbeat stats ---------------
+test("heartbeat stats returns agent heartbeat info", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-hbstat-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `hb-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/heartbeat-stats`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.total, 1);
+  assert.equal(body.data[0].agent_id, `hb-a1-${ws}`);
+  assert.ok("seconds_since_heartbeat" in body.data[0]);
+
+  await app.close();
+});
+
+// --------------- F-86: Workspace clone ---------------
+test("workspace clone copies settings", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-clone-src-${Date.now().toString(36)}`;
+  const cloneWs = `ws-clone-dst-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: "Source" },
+  });
+
+  // set some settings on source
+  await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/settings`,
+    headers: auth,
+    payload: { agent_idle_timeout_minutes: 15 },
+  });
+
+  // clone
+  const clone = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/clone`,
+    headers: auth,
+    payload: { new_workspace_id: cloneWs, display_name: "Cloned" },
+  });
+  assert.equal(clone.statusCode, 201);
+  assert.equal(clone.json().cloned_from, ws);
+
+  // verify cloned settings
+  const settings = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${cloneWs}/settings`,
+    headers: auth,
+  });
+  assert.equal(settings.statusCode, 200);
+  assert.equal(settings.json().agent_idle_timeout_minutes, 15);
+
+  await app.close();
+});
