@@ -6996,3 +6996,79 @@ test("releasing a claim without dependents works normally", async () => {
 
   await app.close();
 });
+
+// --------------- F-144: Agent workload balancing ---------------
+test("recommend returns least-loaded agent for capability", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-alb-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+
+  // Register two agents with same capability
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "busy", display_name: "Busy", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "idle", display_name: "Idle", capabilities: ["code"] },
+  });
+
+  // Give busy agent 3 claims
+  for (let i = 0; i < 3; i++) {
+    await app.inject({
+      method: "POST",
+      url: `/api/v1/workspaces/${ws}/claims`,
+      headers: auth,
+      payload: { agent_id: "busy", scope: "file", paths: [`src/f${i}.ts`], ttl_seconds: 600 },
+    });
+  }
+
+  // Recommend should pick the idle agent
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/recommend?capability=code`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().recommended, "idle");
+  assert.equal(res.json().candidates.length, 2);
+  assert.ok(res.json().candidates[0].load_score <= res.json().candidates[1].load_score);
+
+  await app.close();
+});
+
+test("recommend returns null when no agents have capability", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-albn-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/recommend?capability=nonexistent`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().recommended, null);
+
+  await app.close();
+});

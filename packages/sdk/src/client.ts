@@ -1185,6 +1185,14 @@ export class AgentMeshClient {
     });
   }
 
+  /* ── F-144  agent workload recommend ─────────────── */
+  async recommendAgent(workspace: string, capability: string): Promise<AnalyticsResponse> {
+    return this.request(
+      `/api/v1/workspaces/${workspace}/agents/recommend?capability=${encodeURIComponent(capability)}`,
+      { method: "GET" },
+    );
+  }
+
   private async request<T = unknown>(path: string, init: RequestInit): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);

@@ -1500,4 +1500,96 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: overlaps });
     },
   );
+
+  /* ── F-144  agent workload balancing ─────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/recommend",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        querystring: {
+          type: "object",
+          properties: {
+            capability: { type: "string" },
+          },
+          required: ["capability"],
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { capability } = request.query as { capability: string };
+
+      const agents = db
+        .prepare(
+          "SELECT agent_id, display_name, capabilities, status FROM agents WHERE workspace_id = ? AND status = 'online'",
+        )
+        .all(workspace) as Array<{
+        agent_id: string;
+        display_name: string;
+        capabilities: string;
+        status: string;
+      }>;
+
+      const candidates = agents.filter((a) => {
+        try {
+          const caps = JSON.parse(a.capabilities) as string[];
+          return caps.includes(capability);
+        } catch {
+          return false;
+        }
+      });
+
+      if (candidates.length === 0) {
+        return reply.send({
+          recommended: null,
+          reason: "No online agents with the required capability",
+          candidates: [],
+        });
+      }
+
+      // Score each candidate: lower load = better
+      const scored = candidates.map((agent) => {
+        const activeClaims = (
+          db
+            .prepare(
+              "SELECT COUNT(*) as c FROM claims WHERE agent_id = ? AND workspace_id = ? AND status = 'active'",
+            )
+            .get(agent.agent_id, workspace) as { c: number }
+        ).c;
+        const pendingHandoffs = (
+          db
+            .prepare(
+              "SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND status = 'pending' AND (to_agent_id = ? OR from_agent_id = ?)",
+            )
+            .get(workspace, agent.agent_id, agent.agent_id) as { c: number }
+        ).c;
+        const openBlockers = (
+          db
+            .prepare(
+              "SELECT COUNT(*) as c FROM blockers WHERE agent_id = ? AND workspace_id = ? AND status = 'open'",
+            )
+            .get(agent.agent_id, workspace) as { c: number }
+        ).c;
+
+        const load = activeClaims * 2 + pendingHandoffs + openBlockers * 3;
+        return {
+          agent_id: agent.agent_id,
+          display_name: agent.display_name,
+          active_claims: activeClaims,
+          pending_handoffs: pendingHandoffs,
+          open_blockers: openBlockers,
+          load_score: load,
+        };
+      });
+
+      scored.sort((a, b) => a.load_score - b.load_score);
+
+      return reply.send({
+        recommended: scored[0].agent_id,
+        reason: `Lowest load score (${scored[0].load_score})`,
+        candidates: scored,
+      });
+    },
+  );
 };
