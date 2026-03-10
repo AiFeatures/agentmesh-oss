@@ -544,4 +544,54 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ ok: true, metadata: merged });
     },
   );
+
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/:agentId/activity",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as {
+        workspace: string;
+        agentId: string;
+      };
+      const agent = db
+        .prepare("SELECT agent_id FROM agents WHERE agent_id = ? AND workspace_id = ?")
+        .get(agentId, workspace);
+      if (!agent) {
+        return reply.code(404).send({ error: "Agent not found" });
+      }
+
+      const claims = db
+        .prepare(
+          "SELECT status, COUNT(*) as count FROM claims WHERE agent_id = ? AND workspace_id = ? GROUP BY status",
+        )
+        .all(agentId, workspace) as Array<{ status: string; count: number }>;
+      const handoffsFrom = db
+        .prepare(
+          "SELECT status, COUNT(*) as count FROM handoffs WHERE from_agent_id = ? AND workspace_id = ? GROUP BY status",
+        )
+        .all(agentId, workspace) as Array<{ status: string; count: number }>;
+      const handoffsTo = db
+        .prepare(
+          "SELECT status, COUNT(*) as count FROM handoffs WHERE to_agent_id = ? AND workspace_id = ? GROUP BY status",
+        )
+        .all(agentId, workspace) as Array<{ status: string; count: number }>;
+      const blockers = db
+        .prepare(
+          "SELECT status, COUNT(*) as count FROM blockers WHERE agent_id = ? AND workspace_id = ? GROUP BY status",
+        )
+        .all(agentId, workspace) as Array<{ status: string; count: number }>;
+      const auditCount = db
+        .prepare("SELECT COUNT(*) as count FROM audit_log WHERE actor_id = ? AND workspace_id = ?")
+        .get(agentId, workspace) as { count: number };
+
+      return reply.send({
+        agent_id: agentId,
+        claims: Object.fromEntries(claims.map((r) => [r.status, r.count])),
+        handoffs_initiated: Object.fromEntries(handoffsFrom.map((r) => [r.status, r.count])),
+        handoffs_received: Object.fromEntries(handoffsTo.map((r) => [r.status, r.count])),
+        blockers: Object.fromEntries(blockers.map((r) => [r.status, r.count])),
+        audit_events: auditCount.count,
+      });
+    },
+  );
 };

@@ -2178,7 +2178,7 @@ test("capability routing selects least-busy agent", async () => {
 test("POST /workspaces with duplicate workspace_id returns 409", async () => {
   const app = await buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  const ws = "dup-ws-test";
+  const ws = `dup-ws-test-${Date.now().toString(36)}`;
 
   await app.inject({
     method: "POST",
@@ -2203,7 +2203,7 @@ test("POST /workspaces with duplicate workspace_id returns 409", async () => {
 test("POST /agents/bulk-register registers multiple agents", async () => {
   const app = await buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  const ws = "bulk-reg-ws";
+  const ws = `bulk-reg-ws-${Date.now().toString(36)}`;
 
   await app.inject({
     method: "POST",
@@ -2244,7 +2244,7 @@ test("POST /agents/bulk-register registers multiple agents", async () => {
 test("claim renewal increments renewal_count", async () => {
   const app = await buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  const ws = "renew-cnt-ws";
+  const ws = `renew-cnt-ws-${Date.now().toString(36)}`;
 
   await app.inject({
     method: "POST",
@@ -2297,7 +2297,7 @@ test("claim renewal increments renewal_count", async () => {
 test("GET/PATCH /workspaces/:ws/settings", async () => {
   const app = await buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  const ws = "settings-ws";
+  const ws = `settings-ws-${Date.now().toString(36)}`;
 
   await app.inject({
     method: "POST",
@@ -2347,7 +2347,7 @@ test("GET/PATCH /workspaces/:ws/settings", async () => {
 test("GET /agents?capability= filters by capability", async () => {
   const app = await buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  const ws = "cap-filter-ws";
+  const ws = `cap-filter-ws-${Date.now().toString(36)}`;
 
   await app.inject({
     method: "POST",
@@ -2377,6 +2377,86 @@ test("GET /agents?capability= filters by capability", async () => {
   assert.equal(res.statusCode, 200);
   assert.equal(res.json().data.length, 1);
   assert.equal(res.json().data[0].agent_id, "cf-a");
+
+  await app.close();
+});
+
+/* ── F-39  agent activity summary ─────────────────────────────── */
+test("GET /agents/:agentId/activity returns activity summary", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `activity-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Activity" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "act-agent", display_name: "Act" },
+  });
+
+  // Create a claim
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "act-agent", scope: "src", paths: ["src/**"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/act-agent/activity`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.agent_id, "act-agent");
+  assert.equal(body.claims.active, 1);
+  assert.ok(body.audit_events >= 1);
+
+  await app.close();
+});
+
+/* ── F-41  batch claim create ─────────────────────────────────── */
+test("POST /claims/batch creates multiple claims", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `batch-claim-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Batch" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "batch-a", display_name: "BA" },
+  });
+
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims/batch`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: {
+      claims: [
+        { agent_id: "batch-a", scope: "pkg1", paths: ["pkg1/**"] },
+        { agent_id: "batch-a", scope: "pkg2", paths: ["pkg2/**"] },
+      ],
+    },
+  });
+  assert.equal(res.statusCode, 201);
+  const body = res.json();
+  assert.equal(body.total, 2);
+  assert.ok(body.results[0].claim_id);
+  assert.ok(body.results[1].claim_id);
 
   await app.close();
 });

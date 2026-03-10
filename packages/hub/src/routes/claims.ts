@@ -81,6 +81,80 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  app.post(
+    "/api/v1/workspaces/:workspace/claims/batch",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["claims"],
+          additionalProperties: false,
+          properties: {
+            claims: {
+              type: "array",
+              minItems: 1,
+              maxItems: 20,
+              items: {
+                type: "object",
+                required: ["agent_id", "scope", "paths"],
+                additionalProperties: false,
+                properties: {
+                  agent_id: { type: "string", minLength: 2, maxLength: 128 },
+                  scope: { type: "string", minLength: 1, maxLength: 128 },
+                  paths: {
+                    type: "array",
+                    minItems: 1,
+                    maxItems: 512,
+                    items: { type: "string", minLength: 1, maxLength: 512 },
+                  },
+                  ttl_seconds: { type: "integer", minimum: 30, maximum: 86400 },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { claims } = request.body as {
+        claims: Array<{
+          agent_id: string;
+          scope: string;
+          paths: string[];
+          ttl_seconds?: number;
+        }>;
+      };
+
+      const wsExists = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!wsExists) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+
+      const results: Array<{ claim_id: string } | { error: string; index: number }> = [];
+      for (let i = 0; i < claims.length; i++) {
+        const c = claims[i];
+        const result = createClaim({
+          workspaceId: workspace,
+          agentId: c.agent_id,
+          scope: c.scope,
+          paths: c.paths,
+          ttlSeconds: c.ttl_seconds,
+        });
+        if ("conflict" in result) {
+          results.push({ error: "conflict", index: i });
+        } else {
+          results.push({ claim_id: result.id });
+        }
+      }
+
+      return reply.code(201).send({ results, total: results.length });
+    },
+  );
+
   app.get(
     "/api/v1/workspaces/:workspace/claims",
     {
