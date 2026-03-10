@@ -73,6 +73,88 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
   );
 
   app.post(
+    "/api/v1/workspaces/:workspace/agents/bulk-register",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["agents"],
+          additionalProperties: false,
+          properties: {
+            agents: {
+              type: "array",
+              minItems: 1,
+              maxItems: 50,
+              items: {
+                type: "object",
+                required: ["agent_id", "display_name"],
+                additionalProperties: false,
+                properties: {
+                  agent_id: { type: "string", minLength: 2, maxLength: 128 },
+                  display_name: { type: "string", minLength: 1, maxLength: 256 },
+                  model: { type: "string", minLength: 1, maxLength: 128 },
+                  capabilities: {
+                    type: "array",
+                    items: { type: "string", minLength: 1, maxLength: 64 },
+                    maxItems: 128,
+                  },
+                  metadata: { type: "object", additionalProperties: true, maxProperties: 50 },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { agents } = request.body as {
+        agents: Array<{
+          agent_id: string;
+          display_name: string;
+          model?: string;
+          capabilities?: string[];
+          metadata?: Record<string, unknown>;
+        }>;
+      };
+
+      const exists = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!exists) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+
+      const registered: string[] = [];
+      for (const agent of agents) {
+        registerAgent({
+          agentId: agent.agent_id,
+          workspaceId: workspace,
+          displayName: agent.display_name,
+          model: agent.model ?? "custom",
+          capabilities: agent.capabilities ?? [],
+          metadata: agent.metadata,
+        });
+        registered.push(agent.agent_id);
+      }
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "system",
+        action: "agent.bulk_register",
+        entityType: "agent",
+        entityId: registered.join(","),
+        requestId: request.id,
+        payload: { count: registered.length },
+      });
+
+      broadcast("agents.updated", { workspace, agent_ids: registered });
+      return reply.code(201).send({ ok: true, registered, count: registered.length });
+    },
+  );
+
+  app.post(
     "/api/v1/workspaces/:workspace/agents/heartbeat",
     {
       preHandler: app.authGuard,

@@ -154,6 +154,8 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
           additionalProperties: false,
           properties: {
             status: { type: "string", enum: ["pending", "accepted", "rejected"] },
+            from_agent_id: { type: "string", maxLength: 128 },
+            to_agent_id: { type: "string", maxLength: 128 },
             limit: { type: "string" },
             offset: { type: "string" },
           },
@@ -162,8 +164,17 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
     },
     async (request, reply) => {
       const { workspace } = request.params as { workspace: string };
-      const { status } = request.query as { status?: string };
-      const data = listHandoffs(workspace).filter((row) => (status ? row.status === status : true));
+      const { status, from_agent_id, to_agent_id } = request.query as {
+        status?: string;
+        from_agent_id?: string;
+        to_agent_id?: string;
+      };
+      const data = listHandoffs(workspace).filter(
+        (row) =>
+          (!status || row.status === status) &&
+          (!from_agent_id || row.from_agent_id === from_agent_id) &&
+          (!to_agent_id || row.to_agent_id === to_agent_id),
+      );
       const start = Math.max(0, Number((request.query as Record<string, string>).offset) || 0);
       const count = Math.min(
         200,

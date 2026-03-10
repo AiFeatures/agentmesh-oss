@@ -2198,3 +2198,97 @@ test("POST /workspaces with duplicate workspace_id returns 409", async () => {
 
   await app.close();
 });
+
+/* ── F-33  bulk agent register ────────────────────────────────── */
+test("POST /agents/bulk-register registers multiple agents", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "bulk-reg-ws";
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Bulk" },
+  });
+
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/bulk-register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: {
+      agents: [
+        { agent_id: "bulk-a", display_name: "Agent A", capabilities: ["code"] },
+        { agent_id: "bulk-b", display_name: "Agent B", capabilities: ["test"] },
+        { agent_id: "bulk-c", display_name: "Agent C" },
+      ],
+    },
+  });
+  assert.equal(res.statusCode, 201);
+  const body = res.json();
+  assert.equal(body.count, 3);
+  assert.deepEqual(body.registered, ["bulk-a", "bulk-b", "bulk-c"]);
+
+  // Verify agents exist
+  const listRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+  });
+  assert.equal(listRes.json().data.length, 3);
+
+  await app.close();
+});
+
+/* ── F-34  claim renewal_count tracking ───────────────────────── */
+test("claim renewal increments renewal_count", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "renew-cnt-ws";
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "RenewCnt" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "rc-agent", display_name: "RC" },
+  });
+
+  const claimRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "rc-agent", scope: "pkg", paths: ["pkg/**"] },
+  });
+  const claimId = claimRes.json().claim_id;
+
+  // Renew twice
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims/${claimId}/renew`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: {},
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims/${claimId}/renew`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: {},
+  });
+
+  // Check renewal_count
+  const detailRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/${claimId}`,
+    headers: auth,
+  });
+  assert.equal(detailRes.statusCode, 200);
+  assert.equal(detailRes.json().renewal_count, 2);
+
+  await app.close();
+});

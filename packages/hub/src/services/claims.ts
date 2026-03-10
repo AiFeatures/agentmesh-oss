@@ -90,7 +90,7 @@ export function releaseClaim(id: string, force = false): boolean {
 export function renewClaim(id: string, ttlSeconds = 1800): boolean {
   const result = db
     .prepare(
-      "UPDATE claims SET expires_at = datetime('now', '+' || ? || ' seconds'), ttl_seconds = ? WHERE claim_id = ? AND status = 'active'",
+      "UPDATE claims SET expires_at = datetime('now', '+' || ? || ' seconds'), ttl_seconds = ?, renewal_count = renewal_count + 1 WHERE claim_id = ? AND status = 'active'",
     )
     .run(ttlSeconds, ttlSeconds, id);
   return result.changes > 0;

@@ -2,6 +2,8 @@ import WebSocket, { type RawData } from "ws";
 import type {
   BlockerPayload,
   BlockerResponse,
+  BulkRegisterPayload,
+  BulkRegisterResponse,
   ClaimPayload,
   ClaimResponse,
   GcResponse,
@@ -44,6 +46,13 @@ export class AgentMeshClient {
     return await this.request(`/api/v1/workspaces/${payload.workspace}/agents/register`, {
       method: "POST",
       body: JSON.stringify(payload),
+    });
+  }
+
+  async bulkRegister(payload: BulkRegisterPayload): Promise<BulkRegisterResponse> {
+    return await this.request(`/api/v1/workspaces/${payload.workspace}/agents/bulk-register`, {
+      method: "POST",
+      body: JSON.stringify({ agents: payload.agents }),
     });
   }
 

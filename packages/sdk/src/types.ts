@@ -8,6 +8,17 @@ export type RegisterPayload = {
   metadata?: Record<string, unknown>;
 };
 
+export type BulkRegisterPayload = {
+  workspace: string;
+  agents: Array<{
+    agent_id: string;
+    display_name: string;
+    model?: string;
+    capabilities?: string[];
+    metadata?: Record<string, unknown>;
+  }>;
+};
+
 export type ClaimPayload = {
   workspace: string;
   agent_id: string;
@@ -74,6 +85,8 @@ export type MeshClientOptions = {
 export type OkResponse = { ok: true };
 
 export type RegisterResponse = { ok: true; agent_id: string; workspace_id: string };
+
+export type BulkRegisterResponse = { ok: true; registered: string[]; count: number };
 
 export type ClaimResponse = { claim_id: string };
 
