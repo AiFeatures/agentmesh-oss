@@ -3563,4 +3563,30 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: result });
     },
   );
+
+  // F-412 idle-time-histogram
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/idle-time-histogram",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT
+             CASE
+               WHEN last_heartbeat_at IS NULL THEN 'never'
+               WHEN (strftime('%s','now') - strftime('%s', last_heartbeat_at)) < 60 THEN '<1m'
+               WHEN (strftime('%s','now') - strftime('%s', last_heartbeat_at)) < 300 THEN '1-5m'
+               WHEN (strftime('%s','now') - strftime('%s', last_heartbeat_at)) < 3600 THEN '5-60m'
+               ELSE '>1h'
+             END AS bucket,
+             COUNT(*) AS count
+           FROM agents
+           WHERE workspace_id = ?
+           GROUP BY bucket
+           ORDER BY count DESC`,
+        )
+        .all(req.params.workspace) as { bucket: string; count: number }[];
+      reply.send({ workspace: req.params.workspace, histogram: rows });
+    },
+  );
 };

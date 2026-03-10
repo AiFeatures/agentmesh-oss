@@ -3032,4 +3032,23 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: ws, totals: row });
     },
   );
+
+  // F-411 activity-heatmap
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/activity-heatmap",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT CAST(strftime('%H', created_at) AS INTEGER) AS hour,
+                  COUNT(*) AS count
+           FROM audit_log
+           WHERE workspace_id = ?
+           GROUP BY hour
+           ORDER BY hour ASC`,
+        )
+        .all(req.params.workspace) as { hour: number; count: number }[];
+      reply.send({ workspace: req.params.workspace, heatmap: rows });
+    },
+  );
 };
