@@ -3306,4 +3306,23 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, chains: rows });
     },
   );
+
+  // F-476 claim-transfer-frequency
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/claim-transfer-frequency",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT claim_id, COUNT(*) AS transfer_count
+           FROM claim_transfer_history
+           WHERE workspace_id = ?
+           GROUP BY claim_id
+           ORDER BY transfer_count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as { claim_id: string; transfer_count: number }[];
+      reply.send({ workspace: req.params.workspace, transfers: rows });
+    },
+  );
 };

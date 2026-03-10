@@ -2941,4 +2941,35 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, severities: rows });
     },
   );
+
+  // F-475 blocker-open-closed-ratio
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/blocker-open-closed-ratio",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT
+             SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) AS open_count,
+             SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) AS closed_count,
+             COUNT(*) AS total,
+             ROUND(
+               CASE WHEN SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) > 0
+                 THEN 1.0 * SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END)
+                       / SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END)
+                 ELSE 0
+               END, 3
+             ) AS ratio
+           FROM blockers
+           WHERE workspace_id = ?`,
+        )
+        .get(req.params.workspace) as {
+        open_count: number;
+        closed_count: number;
+        total: number;
+        ratio: number;
+      };
+      reply.send({ workspace: req.params.workspace, ...row });
+    },
+  );
 };
