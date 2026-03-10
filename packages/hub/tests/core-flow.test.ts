@@ -13333,3 +13333,31 @@ test("GET /handoffs/handoff-route-mode-split returns mode data", async () => {
   assert.ok(Array.isArray(body.modes));
   await app.close();
 });
+
+// F-453 claim-agent-ranking
+test("GET /claims/claim-agent-ranking returns ranking data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "car-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-agent-ranking`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.agents));
+  await app.close();
+});
+
+// F-454 blocker-dependency-fanout
+test("GET /blockers/blocker-dependency-fanout returns fanout data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "bdf-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-dependency-fanout`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.blockers));
+  await app.close();
+});

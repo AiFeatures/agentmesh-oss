@@ -2869,4 +2869,28 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, trend: rows });
     },
   );
+
+  // F-454 blocker-dependency-fanout
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/blocker-dependency-fanout",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT bd.blocker_id, b.title, COUNT(bd.depends_on_blocker_id) AS dependency_count
+           FROM blocker_dependencies bd
+           JOIN blockers b ON b.blocker_id = bd.blocker_id
+           WHERE b.workspace_id = ?
+           GROUP BY bd.blocker_id
+           ORDER BY dependency_count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        blocker_id: string;
+        title: string;
+        dependency_count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, blockers: rows });
+    },
+  );
 };
