@@ -3081,3 +3081,128 @@ test("workspace archive and unarchive", async () => {
 
   await app.close();
 });
+
+/* ── F-60  idempotency key ────────────────────────────────────── */
+test("X-Idempotency-Key replays identical response", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ikey = `idem-${Date.now()}`;
+
+  // first request creates workspace
+  const r1 = await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json", "x-idempotency-key": ikey },
+    payload: { workspace_id: `idem-ws-${Date.now().toString(36)}`, display_name: "IdemWS" },
+  });
+  assert.equal(r1.statusCode, 201);
+
+  // second request with same key replays
+  const r2 = await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json", "x-idempotency-key": ikey },
+    payload: { workspace_id: "different-ws", display_name: "Different" },
+  });
+  assert.equal(r2.statusCode, 201);
+  assert.equal(r2.headers["x-idempotent-replayed"], "true");
+  assert.equal(r2.json().workspace_id, r1.json().workspace_id);
+
+  await app.close();
+});
+
+/* ── F-61  blocker deadline extension ─────────────────────────── */
+test("blocker extend-deadline extends open blocker deadline", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `blkext-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "BlkExt" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "blk-ext-a", display_name: "Ext" },
+  });
+  const b = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: {
+      agent_id: "blk-ext-a",
+      title: "Deadline test",
+      severity: "high",
+      deadline_seconds: 3600,
+    },
+  });
+  const blockerId = b.json().blocker_id;
+
+  const ext = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers/${blockerId}/extend-deadline`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { additional_seconds: 7200 },
+  });
+  assert.equal(ext.statusCode, 200);
+  assert.equal(ext.json().ok, true);
+  assert.ok(ext.json().new_deadline);
+
+  await app.close();
+});
+
+/* ── F-62  handoff list sort + date ───────────────────────────── */
+test("handoffs list supports sort_by and created_after", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `hsort-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "HSort" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "hsort-from", display_name: "From" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "hsort-to", display_name: "To" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { from_agent_id: "hsort-from", to_agent_id: "hsort-to", summary: "sort test" },
+  });
+
+  // sort by created_at asc
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs?sort_by=created_at&sort_order=asc`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().data.length, 1);
+
+  // filter by future date — no results
+  const res2 = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs?created_after=2099-01-01`,
+    headers: auth,
+  });
+  assert.equal(res2.statusCode, 200);
+  assert.equal(res2.json().data.length, 0);
+
+  await app.close();
+});

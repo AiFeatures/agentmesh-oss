@@ -159,6 +159,63 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  /* ── F-61  blocker deadline extension ───────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/blockers/:blockerId/extend-deadline",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["additional_seconds"],
+          additionalProperties: false,
+          properties: {
+            additional_seconds: { type: "integer", minimum: 60, maximum: 604800 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { blockerId, workspace } = request.params as {
+        blockerId: string;
+        workspace: string;
+      };
+      const { additional_seconds } = request.body as { additional_seconds: number };
+
+      const row = db
+        .prepare("SELECT * FROM blockers WHERE blocker_id = ? AND workspace_id = ?")
+        .get(blockerId, workspace) as Record<string, unknown> | undefined;
+      if (!row) {
+        return reply.code(404).send({ error: "Blocker not found" });
+      }
+      if (row.status === "resolved") {
+        return reply.code(422).send({ error: "Cannot extend resolved blocker" });
+      }
+      if (!row.deadline_at) {
+        return reply.code(422).send({ error: "Blocker has no deadline" });
+      }
+
+      db.prepare(
+        "UPDATE blockers SET deadline_at = datetime(deadline_at, '+' || ? || ' seconds') WHERE blocker_id = ?",
+      ).run(additional_seconds, blockerId);
+
+      const updated = db
+        .prepare("SELECT deadline_at FROM blockers WHERE blocker_id = ?")
+        .get(blockerId) as { deadline_at: string };
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "system",
+        action: "blocker.extend_deadline",
+        entityType: "blocker",
+        entityId: blockerId,
+        payload: { additional_seconds, new_deadline: updated.deadline_at },
+      });
+
+      return reply.send({ ok: true, new_deadline: updated.deadline_at });
+    },
+  );
+
   app.get(
     "/api/v1/workspaces/:workspace/blockers",
     {

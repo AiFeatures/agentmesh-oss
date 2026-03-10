@@ -30,6 +30,44 @@ export function buildApp() {
     reply.header("X-Request-Id", requestId);
   });
 
+  /* ── F-60  Idempotency key support ──────────────────────────── */
+  app.addHook("preHandler", async (request, reply) => {
+    if (request.method !== "POST") return;
+    const key = request.headers["x-idempotency-key"];
+    if (typeof key !== "string" || key.length === 0) return;
+
+    const existing = db
+      .prepare(
+        "SELECT response_status, response_body FROM idempotency_keys WHERE idempotency_key = ?",
+      )
+      .get(key) as { response_status: number; response_body: string } | undefined;
+    if (existing) {
+      reply.header("X-Idempotent-Replayed", "true");
+      return reply.code(existing.response_status).send(JSON.parse(existing.response_body));
+    }
+    (request as Record<string, unknown>)._idempotencyKey = key;
+  });
+
+  app.addHook("onSend", async (request, reply, payload) => {
+    const key = (request as Record<string, unknown>)._idempotencyKey as string | undefined;
+    if (!key || request.method !== "POST") return payload;
+    const workspace = (request.params as Record<string, string>)?.workspace ?? "";
+    try {
+      db.prepare(
+        "INSERT OR IGNORE INTO idempotency_keys (idempotency_key, workspace_id, endpoint, response_status, response_body) VALUES (?, ?, ?, ?, ?)",
+      ).run(
+        key,
+        workspace,
+        request.url,
+        reply.statusCode,
+        typeof payload === "string" ? payload : JSON.stringify(payload),
+      );
+    } catch (_) {
+      // ignore write failures
+    }
+    return payload;
+  });
+
   app.register(cors, { origin: true });
   app.register(rateLimit, { max: 100, timeWindow: "1 minute" });
 

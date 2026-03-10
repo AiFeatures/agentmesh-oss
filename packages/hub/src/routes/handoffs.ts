@@ -201,6 +201,10 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
             status: { type: "string", enum: ["pending", "accepted", "rejected"] },
             from_agent_id: { type: "string", maxLength: 128 },
             to_agent_id: { type: "string", maxLength: 128 },
+            created_after: { type: "string", maxLength: 30 },
+            created_before: { type: "string", maxLength: 30 },
+            sort_by: { type: "string", enum: ["created_at", "updated_at"] },
+            sort_order: { type: "string", enum: ["asc", "desc"] },
             limit: { type: "string" },
             offset: { type: "string" },
           },
@@ -209,17 +213,35 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
     },
     async (request, reply) => {
       const { workspace } = request.params as { workspace: string };
-      const { status, from_agent_id, to_agent_id } = request.query as {
+      const q = request.query as {
         status?: string;
         from_agent_id?: string;
         to_agent_id?: string;
+        created_after?: string;
+        created_before?: string;
+        sort_by?: string;
+        sort_order?: string;
       };
-      const data = listHandoffs(workspace).filter(
+      let data = listHandoffs(workspace).filter(
         (row) =>
-          (!status || row.status === status) &&
-          (!from_agent_id || row.from_agent_id === from_agent_id) &&
-          (!to_agent_id || row.to_agent_id === to_agent_id),
+          (!q.status || row.status === q.status) &&
+          (!q.from_agent_id || row.from_agent_id === q.from_agent_id) &&
+          (!q.to_agent_id || row.to_agent_id === q.to_agent_id),
       );
+      if (q.created_after) {
+        data = data.filter((r) => String(r.created_at) >= q.created_after!);
+      }
+      if (q.created_before) {
+        data = data.filter((r) => String(r.created_at) <= q.created_before!);
+      }
+      if (q.sort_by) {
+        const dir = q.sort_order === "asc" ? 1 : -1;
+        data.sort((a, b) => {
+          const av = String(a[q.sort_by!] ?? "");
+          const bv = String(b[q.sort_by!] ?? "");
+          return dir * av.localeCompare(bv);
+        });
+      }
       const start = Math.max(0, Number((request.query as Record<string, string>).offset) || 0);
       const count = Math.min(
         200,
