@@ -2857,4 +2857,33 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, models: rows });
     },
   );
+
+  // F-372 workspace-claim-utilization
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claim-utilization",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS total_claims,
+                  SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active,
+                  SUM(CASE WHEN status = 'released' THEN 1 ELSE 0 END) AS released,
+                  SUM(CASE WHEN status = 'expired' THEN 1 ELSE 0 END) AS expired
+           FROM claims
+           WHERE workspace_id = ?`,
+        )
+        .get(req.params.workspace) as {
+        total_claims: number;
+        active: number;
+        released: number;
+        expired: number;
+      };
+      const utilization = row.total_claims > 0 ? row.active / row.total_claims : 0;
+      reply.send({
+        workspace: req.params.workspace,
+        ...row,
+        utilization_pct: Math.round(utilization * 10000) / 100,
+      });
+    },
+  );
 };

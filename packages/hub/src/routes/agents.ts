@@ -3334,4 +3334,27 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: rows });
     },
   );
+
+  // F-371 agent-registration-age
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/registration-age",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT agent_id, display_name, created_at,
+                  CAST((julianday('now') - julianday(created_at)) * 86400 AS INTEGER) AS age_seconds
+           FROM agents
+           WHERE workspace_id = ?
+           ORDER BY age_seconds DESC`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        created_at: string;
+        age_seconds: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, agents: rows });
+    },
+  );
 };
