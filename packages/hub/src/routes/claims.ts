@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { db } from "../db/index.js";
 import { writeAuditLog } from "../services/audit.js";
 import { createClaim, listClaims, releaseClaim, renewClaim } from "../services/claims.js";
+import { findConflictingPattern } from "../services/conflict.js";
 import { parseJsonSafe } from "../utils/json.js";
 import { broadcast } from "../ws/gateway.js";
 
@@ -258,6 +259,55 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       }
 
       return reply.send({ released, not_found: notFound });
+    },
+  );
+
+  app.post(
+    "/api/v1/workspaces/:workspace/claims/check-overlap",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["paths"],
+          additionalProperties: false,
+          properties: {
+            paths: {
+              type: "array",
+              minItems: 1,
+              maxItems: 512,
+              items: { type: "string", minLength: 1, maxLength: 512 },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { paths } = request.body as { paths: string[] };
+
+      const activePaths = db
+        .prepare(
+          `SELECT c.claim_id AS claimId, c.agent_id AS agentId, cp.path_pattern AS pathPattern
+           FROM claims c JOIN claim_paths cp ON cp.claim_id = c.claim_id
+           WHERE c.workspace_id = ? AND c.status = 'active'`,
+        )
+        .all(workspace) as Array<{
+        claimId: string;
+        agentId: string;
+        pathPattern: string;
+      }>;
+
+      const conflict = findConflictingPattern(paths, activePaths);
+      if (conflict) {
+        return reply.send({
+          overlaps: true,
+          conflicting_claim_id: conflict.claimId,
+          conflicting_agent_id: conflict.agentId,
+          conflicting_pattern: conflict.pathPattern,
+        });
+      }
+      return reply.send({ overlaps: false });
     },
   );
 

@@ -390,6 +390,19 @@ export class AgentMeshClient {
     });
   }
 
+  async checkClaimOverlap(workspace: string, paths: string[]): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/claims/check-overlap`, {
+      method: "POST",
+      body: JSON.stringify({ paths }),
+    });
+  }
+
+  async exportWorkspace(workspace: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/export`, {
+      method: "GET",
+    });
+  }
+
   private async request(path: string, init: RequestInit): Promise<unknown> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);

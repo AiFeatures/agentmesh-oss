@@ -1460,3 +1460,151 @@ test("workspace_id rejects invalid characters", async () => {
 
   await app.close();
 });
+
+test("check-overlap returns conflict when paths overlap", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "ol";
+  const workspaceId = `ws-overlap-${suffix}`;
+  const agentId = `agent-ol-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Overlap Test" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "OAgent", capabilities: ["test"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, scope: "backend", paths: ["src/**"] },
+  });
+
+  const overlapRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/claims/check-overlap`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { paths: ["src/app.ts"] },
+  });
+  assert.equal(overlapRes.statusCode, 200);
+  const overlap = overlapRes.json() as { overlaps: boolean };
+  assert.equal(overlap.overlaps, true);
+
+  const noOverlapRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/claims/check-overlap`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { paths: ["docs/README.md"] },
+  });
+  assert.equal(noOverlapRes.statusCode, 200);
+  const noOverlap = noOverlapRes.json() as { overlaps: boolean };
+  assert.equal(noOverlap.overlaps, false);
+
+  await app.close();
+});
+
+test("workspace export returns full data", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "ex";
+  const workspaceId = `ws-export-${suffix}`;
+  const agentId = `agent-ex-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Export Test" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "ExAgent", capabilities: ["test"] },
+  });
+
+  const exportRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/export`,
+    headers: auth,
+  });
+  assert.equal(exportRes.statusCode, 200);
+  const data = exportRes.json() as {
+    workspace: { workspace_id: string };
+    agents: unknown[];
+    claims: unknown[];
+    handoffs: unknown[];
+    blockers: unknown[];
+    exported_at: string;
+  };
+  assert.equal(data.workspace.workspace_id, workspaceId);
+  assert.equal(data.agents.length, 1);
+  assert.ok(data.exported_at);
+
+  await app.close();
+});
+
+test("blocker detail includes timeline", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "bt";
+  const workspaceId = `ws-btl-${suffix}`;
+  const agentId = `agent-bt-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Timeline Test" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "BTAgent", capabilities: ["test"] },
+  });
+
+  const blockerRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/blockers`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, title: "Blocked on review", severity: "high" },
+  });
+  const blockerId = (blockerRes.json() as { blocker_id: string }).blocker_id;
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/blockers/${blockerId}/resolve`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { note: "Fixed", resolved_by: agentId },
+  });
+
+  const detailRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/blockers/${blockerId}`,
+    headers: auth,
+  });
+  assert.equal(detailRes.statusCode, 200);
+  const detail = detailRes.json() as {
+    blocker_id: string;
+    timeline: Array<{ action: string }>;
+  };
+  assert.equal(detail.blocker_id, blockerId);
+  assert.ok(Array.isArray(detail.timeline));
+  assert.ok(detail.timeline.length >= 2);
+  const actions = detail.timeline.map((t) => t.action);
+  assert.ok(actions.includes("blocker.create"));
+  assert.ok(actions.includes("blocker.resolve"));
+
+  await app.close();
+});

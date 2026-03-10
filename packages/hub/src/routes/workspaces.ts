@@ -250,4 +250,49 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(201).send({ workspace_id: id });
     },
   );
+
+  app.get(
+    "/api/v1/workspaces/:workspace/export",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare(
+          "SELECT workspace_id, display_name, base_path, created_at FROM workspaces WHERE workspace_id = ?",
+        )
+        .get(workspace) as Record<string, unknown> | undefined;
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const agents = db
+        .prepare(
+          "SELECT agent_id, display_name, model, capabilities, status, last_heartbeat_at, created_at FROM agents WHERE workspace_id = ?",
+        )
+        .all(workspace);
+      const claims = db
+        .prepare(
+          "SELECT claim_id, agent_id, scope, status, ttl_seconds, created_at, expires_at FROM claims WHERE workspace_id = ?",
+        )
+        .all(workspace);
+      const handoffs = db
+        .prepare(
+          "SELECT handoff_id, from_agent_id, to_agent_id, route_mode, capability_tag, summary, status, created_at FROM handoffs WHERE workspace_id = ?",
+        )
+        .all(workspace);
+      const blockers = db
+        .prepare(
+          "SELECT blocker_id, agent_id, title, severity, status, deadline_at, created_at, resolved_at FROM blockers WHERE workspace_id = ?",
+        )
+        .all(workspace);
+
+      return reply.send({
+        workspace: ws,
+        agents,
+        claims,
+        handoffs,
+        blockers,
+        exported_at: new Date().toISOString(),
+      });
+    },
+  );
 };

@@ -168,7 +168,12 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       if (!row) {
         return reply.code(404).send({ error: "Blocker not found" });
       }
-      return reply.send(row);
+      const timeline = db
+        .prepare(
+          "SELECT action, actor_type, actor_id, payload, created_at FROM audit_log WHERE entity_type = 'blocker' AND entity_id = ? ORDER BY created_at ASC",
+        )
+        .all(blockerId) as Array<Record<string, unknown>>;
+      return reply.send({ ...(row as Record<string, unknown>), timeline });
     },
   );
 };
