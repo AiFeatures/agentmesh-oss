@@ -12974,3 +12974,31 @@ test("GET /handoffs/handoff-notes-count returns note counts", async () => {
   assert.ok(Array.isArray(body.handoffs));
   await app.close();
 });
+
+// F-427 blocker-comment-authors
+test("GET /blockers/blocker-comment-authors returns author data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "bcaut-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-comment-authors`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.blockers));
+  await app.close();
+});
+
+// F-428 agent-display-name-length
+test("GET /agents/agent-display-name-length returns length stats", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "adnl-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/agent-display-name-length`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(typeof body.total === "number");
+  await app.close();
+});

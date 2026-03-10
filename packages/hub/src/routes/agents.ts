@@ -3635,4 +3635,28 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: rows });
     },
   );
+
+  // F-428 agent-display-name-length
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/agent-display-name-length",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS total,
+                  AVG(LENGTH(display_name)) AS avg_length,
+                  MAX(LENGTH(display_name)) AS max_length,
+                  MIN(LENGTH(display_name)) AS min_length
+           FROM agents
+           WHERE workspace_id = ?`,
+        )
+        .get(req.params.workspace) as {
+        total: number;
+        avg_length: number | null;
+        max_length: number | null;
+        min_length: number | null;
+      };
+      reply.send({ workspace: req.params.workspace, ...row });
+    },
+  );
 };

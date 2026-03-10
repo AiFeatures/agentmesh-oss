@@ -2729,4 +2729,28 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ...row });
     },
   );
+
+  // F-427 blocker-comment-authors
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/blocker-comment-authors",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT bc.blocker_id, b.title, COUNT(DISTINCT bc.author_id) AS unique_authors
+           FROM blocker_comments bc
+           JOIN blockers b ON b.blocker_id = bc.blocker_id
+           WHERE b.workspace_id = ?
+           GROUP BY bc.blocker_id
+           ORDER BY unique_authors DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        blocker_id: string;
+        title: string;
+        unique_authors: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, blockers: rows });
+    },
+  );
 };
