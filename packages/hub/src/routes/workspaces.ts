@@ -553,4 +553,33 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send(merged);
     },
   );
+
+  /* ── F-73  workspace event log summary ──────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/audit/summary",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            hours: { type: "string" },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { hours } = request.query as { hours?: string };
+      const h = Math.min(720, Math.max(1, Number(hours) || 24));
+      const rows = db
+        .prepare(
+          `SELECT action, COUNT(*) as count FROM audit_log WHERE workspace_id = ? AND created_at >= datetime('now', '-${h} hours') GROUP BY action ORDER BY count DESC`,
+        )
+        .all(workspace) as Array<{ action: string; count: number }>;
+      const total = rows.reduce((acc, r) => acc + r.count, 0);
+      return reply.send({ hours: h, total, by_action: rows });
+    },
+  );
 };

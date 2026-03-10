@@ -570,6 +570,10 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
         "UPDATE agents SET metadata = ?, updated_at = CURRENT_TIMESTAMP WHERE agent_id = ?",
       ).run(JSON.stringify(merged), agentId);
 
+      db.prepare(
+        "INSERT INTO agent_metadata_history (agent_id, workspace_id, metadata) VALUES (?, ?, ?)",
+      ).run(agentId, workspace, JSON.stringify(merged));
+
       writeAuditLog({
         workspaceId: workspace,
         actorType: "agent",
@@ -583,6 +587,48 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
 
       broadcast("agents.updated", { workspace, agent_id: agentId });
       return reply.send({ ok: true, metadata: merged });
+    },
+  );
+
+  /* ── F-72  agent metadata history ───────────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/:agentId/metadata-history",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            limit: { type: "string" },
+            offset: { type: "string" },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as {
+        workspace: string;
+        agentId: string;
+      };
+      const agent = db
+        .prepare("SELECT agent_id FROM agents WHERE agent_id = ? AND workspace_id = ?")
+        .get(agentId, workspace);
+      if (!agent) {
+        return reply.code(404).send({ error: "Agent not found" });
+      }
+      const { limit, offset } = request.query as { limit?: string; offset?: string };
+      const count = Math.min(200, Math.max(1, Number(limit) || 50));
+      const start = Math.max(0, Number(offset) || 0);
+      const rows = db
+        .prepare(
+          "SELECT metadata, created_at FROM agent_metadata_history WHERE agent_id = ? AND workspace_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+        )
+        .all(agentId, workspace, count, start) as Array<Record<string, unknown>>;
+      for (const row of rows) {
+        row.metadata = JSON.parse(String(row.metadata ?? "{}"));
+      }
+      return reply.send({ data: rows });
     },
   );
 

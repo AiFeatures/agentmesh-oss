@@ -260,6 +260,28 @@ export class AgentMeshClient {
     });
   }
 
+  async getAgentMetadataHistory(
+    workspace: string,
+    agentId: string,
+    opts?: { limit?: number; offset?: number },
+  ): Promise<unknown> {
+    const params = new URLSearchParams();
+    if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
+    if (opts?.offset !== undefined) params.set("offset", String(opts.offset));
+    const qs = params.toString();
+    return await this.request(
+      `/api/v1/workspaces/${workspace}/agents/${agentId}/metadata-history${qs ? `?${qs}` : ""}`,
+      { method: "GET" },
+    );
+  }
+
+  async getAuditSummary(workspace: string, hours?: number): Promise<unknown> {
+    const qs = hours ? `?hours=${hours}` : "";
+    return await this.request(`/api/v1/workspaces/${workspace}/audit/summary${qs}`, {
+      method: "GET",
+    });
+  }
+
   startHeartbeat(workspace: string, agentId: string, intervalMs = 10000): () => void {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {

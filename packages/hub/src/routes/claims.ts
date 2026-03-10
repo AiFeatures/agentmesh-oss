@@ -18,7 +18,12 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
           additionalProperties: false,
           properties: {
             agent_id: { type: "string", minLength: 2, maxLength: 128 },
-            scope: { type: "string", minLength: 1, maxLength: 128 },
+            scope: {
+              type: "string",
+              minLength: 1,
+              maxLength: 128,
+              pattern: "^[a-zA-Z0-9][a-zA-Z0-9._-]*$",
+            },
             paths: {
               type: "array",
               minItems: 1,

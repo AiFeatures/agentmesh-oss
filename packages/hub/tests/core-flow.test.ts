@@ -3810,3 +3810,138 @@ test("batch claim status returns statuses for multiple claims", async () => {
 
   await app.close();
 });
+
+// --------------- F-72: Agent metadata history ---------------
+test("agent metadata history tracks changes", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-metahist-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+
+  // update metadata twice
+  await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/agents/a1/metadata`,
+    headers: auth,
+    payload: { metadata: { version: "1.0" } },
+  });
+  await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/agents/a1/metadata`,
+    headers: auth,
+    payload: { metadata: { version: "2.0" } },
+  });
+
+  // get history
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/a1/metadata-history`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const history = res.json().data;
+  assert.ok(history.length >= 2);
+  // most recent first (id DESC)
+  assert.equal(history[0].metadata.version, "2.0");
+  assert.equal(history[1].metadata.version, "1.0");
+
+  await app.close();
+});
+
+// --------------- F-73: Workspace event log summary ---------------
+test("workspace audit summary aggregates by action", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-auditsum-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+
+  // the above creates audit events; query summary
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/audit/summary?hours=1`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(body.total > 0);
+  assert.ok(Array.isArray(body.by_action));
+  assert.ok(body.by_action.some((a: any) => a.action === "agent.register"));
+
+  await app.close();
+});
+
+// --------------- F-74: Claim scope validation ---------------
+test("claim scope validation rejects invalid scopes", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-scopeval-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+
+  // valid scope
+  const valid = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "backend.v2", paths: ["src/a.ts"] },
+  });
+  assert.equal(valid.statusCode, 201);
+
+  // invalid scope — starts with dot
+  const invalid = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: ".invalid", paths: ["src/b.ts"] },
+  });
+  assert.equal(invalid.statusCode, 400);
+
+  // invalid scope — contains spaces
+  const invalid2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "has space", paths: ["src/c.ts"] },
+  });
+  assert.equal(invalid2.statusCode, 400);
+
+  await app.close();
+});
