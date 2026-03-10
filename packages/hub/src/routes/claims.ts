@@ -2708,4 +2708,34 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, claims: rows });
     },
   );
+
+  // F-348 scope-collision-risk
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/scope-collision-risk",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT c1.claim_id AS claim_a, c2.claim_id AS claim_b,
+                  c1.scope AS scope_a, c2.scope AS scope_b,
+                  c1.agent_id AS agent_a, c2.agent_id AS agent_b
+           FROM claims c1
+           JOIN claims c2 ON c1.workspace_id = c2.workspace_id
+             AND c1.claim_id < c2.claim_id
+             AND c1.agent_id != c2.agent_id
+             AND (c1.scope LIKE c2.scope || '%' OR c2.scope LIKE c1.scope || '%')
+           WHERE c1.workspace_id = ? AND c1.status = 'active' AND c2.status = 'active'
+           LIMIT 30`,
+        )
+        .all(req.params.workspace) as {
+        claim_a: string;
+        claim_b: string;
+        scope_a: string;
+        scope_b: string;
+        agent_a: string;
+        agent_b: string;
+      }[];
+      reply.send({ workspace: req.params.workspace, risks: rows });
+    },
+  );
 };

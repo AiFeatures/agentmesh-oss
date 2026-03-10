@@ -3195,4 +3195,36 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ...row });
     },
   );
+
+  // F-347 last-activity-summary
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/last-activity-summary",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT a.agent_id, a.display_name,
+                  al.action AS last_action,
+                  al.created_at AS last_activity_at
+           FROM agents a
+           LEFT JOIN audit_log al ON al.actor_id = a.agent_id
+             AND al.workspace_id = a.workspace_id
+             AND al.audit_id = (
+               SELECT audit_id FROM audit_log
+               WHERE actor_id = a.agent_id AND workspace_id = a.workspace_id
+               ORDER BY created_at DESC LIMIT 1
+             )
+           WHERE a.workspace_id = ?
+           ORDER BY al.created_at DESC NULLS LAST
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        last_action: string | null;
+        last_activity_at: string | null;
+      }[];
+      reply.send({ workspace: req.params.workspace, agents: rows });
+    },
+  );
 };
