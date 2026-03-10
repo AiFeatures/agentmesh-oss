@@ -3051,4 +3051,23 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, heatmap: rows });
     },
   );
+
+  // F-417 audit-growth-rate
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/audit-growth-rate",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT DATE(created_at) AS day, COUNT(*) AS count
+           FROM audit_log
+           WHERE workspace_id = ?
+             AND created_at >= datetime('now', '-7 days')
+           GROUP BY day
+           ORDER BY day ASC`,
+        )
+        .all(req.params.workspace) as { day: string; count: number }[];
+      reply.send({ workspace: req.params.workspace, daily: rows });
+    },
+  );
 };
