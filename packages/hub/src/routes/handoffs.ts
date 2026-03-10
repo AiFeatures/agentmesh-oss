@@ -3457,4 +3457,31 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-514 handoff-context-key-frequency
+  app.get<{ Params: { workspaceId: string } }>(
+    "/api/v1/workspaces/:workspaceId/analytics/handoff-context-key-frequency",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspaceId } = req.params;
+      const rows = db
+        .prepare("SELECT context FROM handoffs WHERE workspace_id = ? AND context IS NOT NULL")
+        .all(workspaceId) as any[];
+      const freq: Record<string, number> = {};
+      for (const r of rows) {
+        try {
+          const parsed = JSON.parse(r.context);
+          if (parsed && typeof parsed === "object") {
+            for (const key of Object.keys(parsed)) {
+              freq[key] = (freq[key] || 0) + 1;
+            }
+          }
+        } catch {}
+      }
+      const sorted = Object.entries(freq)
+        .map(([key, count]) => ({ key, count }))
+        .sort((a, b) => b.count - a.count);
+      return reply.send({ total_handoffs_with_context: rows.length, keys: sorted });
+    },
+  );
 };

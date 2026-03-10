@@ -14177,3 +14177,32 @@ test("F-512 handoff-retry-rate", async () => {
   await app.close();
 });
 
+
+// T-513 blocker-resolution-speed-ranking
+test("F-513 blocker-resolution-speed-ranking", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "brsr-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/blocker-resolution-speed-ranking`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json()));
+  await app.close();
+});
+
+// T-514 handoff-context-key-frequency
+test("F-514 handoff-context-key-frequency", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "hckf-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/handoff-context-key-frequency`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = res.json();
+  assert.ok("keys" in body);
+  assert.ok(Array.isArray(body.keys));
+  await app.close();
+});
+

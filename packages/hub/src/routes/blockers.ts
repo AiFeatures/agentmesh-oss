@@ -3180,4 +3180,24 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       );
     },
   );
+
+  // F-513 blocker-resolution-speed-ranking
+  app.get<{ Params: { workspaceId: string } }>(
+    "/api/v1/workspaces/:workspaceId/analytics/blocker-resolution-speed-ranking",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspaceId } = req.params;
+      const rows = db
+        .prepare(
+          `SELECT blocker_id, agent_id, title,
+                  ROUND((julianday(resolved_at) - julianday(created_at)) * 86400, 2) AS resolution_seconds
+           FROM blockers
+           WHERE workspace_id = ? AND status = 'resolved' AND resolved_at IS NOT NULL
+           ORDER BY resolution_seconds ASC
+           LIMIT 20`,
+        )
+        .all(workspaceId) as any[];
+      return reply.send(rows);
+    },
+  );
 };
