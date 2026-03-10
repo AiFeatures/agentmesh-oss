@@ -14,6 +14,10 @@ export function blockerId(): string {
   return `blk_${rand()}`;
 }
 
+export function templateId(): string {
+  return `tpl_${rand()}`;
+}
+
 export function workspaceId(prefix?: string): string {
   return prefix ? `wks_${prefix}_${rand()}` : `wks_${rand()}`;
 }

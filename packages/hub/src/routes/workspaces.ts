@@ -739,4 +739,27 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-90  workspace activity feed ──────────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/activity",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { limit, offset } = request.query as { limit?: string; offset?: string };
+      const lim = Math.min(200, Math.max(1, Number(limit) || 50));
+      const off = Math.max(0, Number(offset) || 0);
+      const rows = db
+        .prepare(
+          "SELECT audit_id, action, entity_type, entity_id, actor_type, actor_id, created_at FROM audit_log WHERE workspace_id = ? ORDER BY audit_id DESC LIMIT ? OFFSET ?",
+        )
+        .all(workspace, lim, off);
+      const total = (
+        db.prepare("SELECT COUNT(*) as c FROM audit_log WHERE workspace_id = ?").get(workspace) as {
+          c: number;
+        }
+      ).c;
+      return reply.send({ data: rows, total, limit: lim, offset: off });
+    },
+  );
 };

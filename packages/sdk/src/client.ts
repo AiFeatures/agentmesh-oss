@@ -394,6 +394,43 @@ export class AgentMeshClient {
     );
   }
 
+  async getWorkspaceActivity(workspace: string, limit?: number, offset?: number): Promise<unknown> {
+    const params = new URLSearchParams();
+    if (limit) params.set("limit", String(limit));
+    if (offset) params.set("offset", String(offset));
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    return await this.request(`/api/v1/workspaces/${workspace}/activity${qs}`, {
+      method: "GET",
+    });
+  }
+
+  async createHandoffTemplate(
+    workspace: string,
+    template: {
+      name: string;
+      summary_template: string;
+      default_priority?: string;
+      default_timeout_seconds?: number;
+    },
+  ): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/handoff-templates`, {
+      method: "POST",
+      body: JSON.stringify(template),
+    });
+  }
+
+  async getHandoffTemplates(workspace: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/handoff-templates`, {
+      method: "GET",
+    });
+  }
+
+  async getAgentHealth(workspace: string, agentId: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}/health`, {
+      method: "GET",
+    });
+  }
+
   startHeartbeat(workspace: string, agentId: string, intervalMs = 10000): () => void {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {

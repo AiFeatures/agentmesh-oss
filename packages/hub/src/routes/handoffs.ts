@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { db } from "../db/index.js";
 import { writeAuditLog } from "../services/audit.js";
 import { createHandoff, listHandoffs, updateHandoffStatus } from "../services/handoffs.js";
+import { templateId } from "../services/ids.js";
 import { parseJsonSafe } from "../utils/json.js";
 import { broadcast } from "../ws/gateway.js";
 
@@ -432,6 +433,65 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
         )
         .all(handoffId, workspace);
       return reply.send({ chain, children });
+    },
+  );
+
+  /* ── F-91  handoff templates ────────────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/handoff-templates",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["name", "summary_template"],
+          additionalProperties: false,
+          properties: {
+            name: { type: "string", minLength: 1, maxLength: 200 },
+            summary_template: { type: "string", minLength: 1, maxLength: 2000 },
+            default_priority: {
+              type: "string",
+              enum: ["low", "normal", "high", "critical"],
+            },
+            default_timeout_seconds: { type: "integer", minimum: 60, maximum: 86400 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const body = request.body as {
+        name: string;
+        summary_template: string;
+        default_priority?: string;
+        default_timeout_seconds?: number;
+      };
+      const id = templateId();
+      db.prepare(
+        "INSERT INTO handoff_templates (template_id, workspace_id, name, summary_template, default_priority, default_timeout_seconds) VALUES (?, ?, ?, ?, ?, ?)",
+      ).run(
+        id,
+        workspace,
+        body.name,
+        body.summary_template,
+        body.default_priority ?? "normal",
+        body.default_timeout_seconds ?? null,
+      );
+      return reply.code(201).send({ template_id: id });
+    },
+  );
+
+  app.get(
+    "/api/v1/workspaces/:workspace/handoff-templates",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          "SELECT template_id, name, summary_template, default_priority, default_timeout_seconds, created_at FROM handoff_templates WHERE workspace_id = ? ORDER BY created_at DESC",
+        )
+        .all(workspace);
+      return reply.send({ data: rows, total: rows.length });
     },
   );
 };

@@ -4686,3 +4686,114 @@ test("claim transfer history tracks transfers", async () => {
 
   await app.close();
 });
+
+// --------------- F-90: Workspace activity feed ---------------
+test("workspace activity feed returns recent audit events", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-activity-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `act-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/activity`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(body.total >= 1);
+  assert.ok(body.data.length >= 1);
+
+  await app.close();
+});
+
+// --------------- F-91: Handoff templates ---------------
+test("handoff templates can be created and listed", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-hotpl-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+
+  // create template
+  const create = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoff-templates`,
+    headers: auth,
+    payload: {
+      name: "Code Review",
+      summary_template: "Please review {file}",
+      default_priority: "high",
+      default_timeout_seconds: 3600,
+    },
+  });
+  assert.equal(create.statusCode, 201);
+  assert.ok(create.json().template_id);
+
+  // list templates
+  const list = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoff-templates`,
+    headers: auth,
+  });
+  assert.equal(list.statusCode, 200);
+  assert.equal(list.json().data.length, 1);
+  assert.equal(list.json().data[0].name, "Code Review");
+  assert.equal(list.json().data[0].default_priority, "high");
+
+  await app.close();
+});
+
+// --------------- F-92: Agent health score ---------------
+test("agent health score returns computed score", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-health-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `hl-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/hl-a1-${ws}/health`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.agent_id, `hl-a1-${ws}`);
+  assert.ok(body.health_score >= 0 && body.health_score <= 100);
+  assert.ok("seconds_since_heartbeat" in body);
+  assert.ok("active_claims" in body);
+
+  await app.close();
+});

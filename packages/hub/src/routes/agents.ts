@@ -943,4 +943,59 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ labels });
     },
   );
+
+  /* ── F-92  agent health score ───────────────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/:agentId/health",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as { workspace: string; agentId: string };
+      const agent = db
+        .prepare(
+          "SELECT status, last_heartbeat_at FROM agents WHERE agent_id = ? AND workspace_id = ?",
+        )
+        .get(agentId, workspace) as { status: string; last_heartbeat_at: string } | undefined;
+      if (!agent) {
+        return reply.code(404).send({ error: "Agent not found" });
+      }
+
+      const secsSinceHb = (
+        db
+          .prepare("SELECT CAST((julianday('now') - julianday(?)) * 86400 AS INTEGER) as secs")
+          .get(agent.last_heartbeat_at) as { secs: number }
+      ).secs;
+
+      const activeClaims = (
+        db
+          .prepare(
+            "SELECT COUNT(*) as c FROM claims WHERE agent_id = ? AND workspace_id = ? AND status = 'active'",
+          )
+          .get(agentId, workspace) as { c: number }
+      ).c;
+
+      const openBlockers = (
+        db
+          .prepare(
+            "SELECT COUNT(*) as c FROM blockers WHERE agent_id = ? AND workspace_id = ? AND status = 'open'",
+          )
+          .get(agentId, workspace) as { c: number }
+      ).c;
+
+      // score: 100 base, -10 per 60s since heartbeat, -20 if stale/evicted, -5 per blocker
+      let score = 100;
+      score -= Math.floor(secsSinceHb / 60) * 10;
+      if (agent.status === "stale" || agent.status === "evicted") score -= 20;
+      score -= openBlockers * 5;
+      score = Math.max(0, Math.min(100, score));
+
+      return reply.send({
+        agent_id: agentId,
+        status: agent.status,
+        health_score: score,
+        seconds_since_heartbeat: secsSinceHb,
+        active_claims: activeClaims,
+        open_blockers: openBlockers,
+      });
+    },
+  );
 };
