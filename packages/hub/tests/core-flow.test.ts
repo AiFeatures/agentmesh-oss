@@ -11654,3 +11654,31 @@ test("GET /agents/idle-duration returns idle agents", async () => {
   assert.ok(Array.isArray(body.agents));
   await app.close();
 });
+
+// F-333 auto-escalation-candidates
+test("GET /blockers/auto-escalation-candidates returns candidates", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "autoesc-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/auto-escalation-candidates`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.candidates));
+  await app.close();
+});
+
+// F-334 usage-heatmap
+test("GET /claims/usage-heatmap returns heatmap data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "clheat-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/usage-heatmap`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.heatmap));
+  await app.close();
+});

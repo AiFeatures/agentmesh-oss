@@ -2275,4 +2275,32 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-333 auto-escalation-candidates
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/auto-escalation-candidates",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT blocker_id, agent_id, title, severity, escalation_level,
+                  deadline_at, created_at
+           FROM blockers
+           WHERE workspace_id = ? AND status = 'open'
+             AND deadline_at IS NOT NULL AND deadline_at < datetime('now')
+           ORDER BY deadline_at ASC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        blocker_id: string;
+        agent_id: string;
+        title: string;
+        severity: string;
+        escalation_level: number;
+        deadline_at: string;
+        created_at: string;
+      }[];
+      reply.send({ workspace: req.params.workspace, candidates: rows });
+    },
+  );
 };

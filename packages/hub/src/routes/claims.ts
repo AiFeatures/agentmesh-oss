@@ -2639,4 +2639,23 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, overlaps: rows });
     },
   );
+
+  // F-334 usage-heatmap
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/usage-heatmap",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT CAST(strftime('%H', created_at) AS INTEGER) AS hour,
+                  COUNT(*) AS count
+           FROM claims
+           WHERE workspace_id = ?
+           GROUP BY hour
+           ORDER BY hour`,
+        )
+        .all(req.params.workspace) as { hour: number; count: number }[];
+      reply.send({ workspace: req.params.workspace, heatmap: rows });
+    },
+  );
 };
