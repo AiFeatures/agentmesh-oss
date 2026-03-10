@@ -3380,4 +3380,31 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, words: sorted });
     },
   );
+
+  // F-505 handoff-to-agent-load
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-to-agent-load",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT to_agent_id,
+                  COUNT(*) AS total,
+                  SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
+                  SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed
+           FROM handoffs
+           WHERE workspace_id = ? AND to_agent_id IS NOT NULL
+           GROUP BY to_agent_id
+           ORDER BY pending DESC, total DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        to_agent_id: string;
+        total: number;
+        pending: number;
+        completed: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, agents: rows });
+    },
+  );
 };

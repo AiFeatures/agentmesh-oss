@@ -3128,4 +3128,28 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, keywords: sorted });
     },
   );
+
+  // F-506 blocker-details-length-stats
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/blocker-details-length-stats",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS total,
+                  ROUND(AVG(LENGTH(details)), 1) AS avg_length,
+                  MAX(LENGTH(details)) AS max_length,
+                  MIN(LENGTH(details)) AS min_length
+           FROM blockers
+           WHERE workspace_id = ? AND details IS NOT NULL`,
+        )
+        .get(req.params.workspace) as {
+        total: number;
+        avg_length: number | null;
+        max_length: number | null;
+        min_length: number | null;
+      };
+      reply.send({ workspace: req.params.workspace, ...row });
+    },
+  );
 };
