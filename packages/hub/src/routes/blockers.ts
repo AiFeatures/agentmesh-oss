@@ -2354,4 +2354,27 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, blockers: rows });
     },
   );
+
+  // F-349 severity-distribution-trend
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/severity-distribution-trend",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT strftime('%Y-W%W', created_at) AS week,
+                  severity, COUNT(*) AS count
+           FROM blockers
+           WHERE workspace_id = ?
+           GROUP BY week, severity
+           ORDER BY week, severity`,
+        )
+        .all(req.params.workspace) as {
+        week: string;
+        severity: string;
+        count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, trend: rows });
+    },
+  );
 };

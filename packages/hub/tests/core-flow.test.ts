@@ -11879,3 +11879,31 @@ test("GET /claims/scope-collision-risk returns risks", async () => {
   assert.ok(Array.isArray(body.risks));
   await app.close();
 });
+
+// F-349 severity-distribution-trend
+test("GET /blockers/severity-distribution-trend returns trend", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "sevtrd-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/severity-distribution-trend`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.trend));
+  await app.close();
+});
+
+// F-350 agent-pair-frequency
+test("GET /handoffs/agent-pair-frequency returns pairs", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "agpfr-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/agent-pair-frequency`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.pairs));
+  await app.close();
+});

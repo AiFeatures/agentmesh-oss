@@ -2488,4 +2488,27 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, breakdown: rows });
     },
   );
+
+  // F-350 agent-pair-frequency
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/agent-pair-frequency",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT from_agent_id, to_agent_id, COUNT(*) AS count
+           FROM handoffs
+           WHERE workspace_id = ? AND from_agent_id IS NOT NULL AND to_agent_id IS NOT NULL
+           GROUP BY from_agent_id, to_agent_id
+           ORDER BY count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        from_agent_id: string;
+        to_agent_id: string;
+        count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, pairs: rows });
+    },
+  );
 };
