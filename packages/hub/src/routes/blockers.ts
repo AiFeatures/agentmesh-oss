@@ -2446,4 +2446,29 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, words: cloud });
     },
   );
+
+  // F-366 blocker-comment-count-ranking
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/comment-count-ranking",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT b.blocker_id, b.title, b.severity, COUNT(bc.id) AS comment_count
+           FROM blockers b
+           LEFT JOIN blocker_comments bc ON bc.blocker_id = b.blocker_id
+           WHERE b.workspace_id = ?
+           GROUP BY b.blocker_id
+           ORDER BY comment_count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        blocker_id: string;
+        title: string;
+        severity: string;
+        comment_count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, ranking: rows });
+    },
+  );
 };

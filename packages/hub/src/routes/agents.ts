@@ -3309,4 +3309,29 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, leaderboard: rows });
     },
   );
+
+  // F-365 agent-heartbeat-frequency
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/heartbeat-frequency",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT agent_id, display_name,
+                  CAST((julianday(last_heartbeat_at) - julianday(created_at)) * 86400 AS INTEGER) AS total_seconds,
+                  last_heartbeat_at, created_at
+           FROM agents
+           WHERE workspace_id = ? AND last_heartbeat_at IS NOT NULL
+           ORDER BY last_heartbeat_at DESC`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        total_seconds: number;
+        last_heartbeat_at: string;
+        created_at: string;
+      }[];
+      reply.send({ workspace: req.params.workspace, agents: rows });
+    },
+  );
 };
