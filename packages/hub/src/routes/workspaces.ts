@@ -2756,4 +2756,22 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ...row });
     },
   );
+
+  // F-346 task-priority-distribution
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/task-priority-distribution",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT COALESCE(priority, 'unset') AS priority, COUNT(*) AS count
+           FROM agent_tasks
+           WHERE workspace_id = ?
+           GROUP BY priority
+           ORDER BY count DESC`,
+        )
+        .all(req.params.workspace) as { priority: string; count: number }[];
+      reply.send({ workspace: req.params.workspace, distribution: rows });
+    },
+  );
 };

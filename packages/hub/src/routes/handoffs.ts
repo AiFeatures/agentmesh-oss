@@ -2470,4 +2470,22 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-345 priority-breakdown
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/priority-breakdown",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT COALESCE(priority, 'unset') AS priority, COUNT(*) AS count
+           FROM handoffs
+           WHERE workspace_id = ?
+           GROUP BY priority
+           ORDER BY count DESC`,
+        )
+        .all(req.params.workspace) as { priority: string; count: number }[];
+      reply.send({ workspace: req.params.workspace, breakdown: rows });
+    },
+  );
 };
