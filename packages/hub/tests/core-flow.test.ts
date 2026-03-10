@@ -7941,3 +7941,91 @@ test("handoff priority queue returns pending handoffs sorted by priority", async
 
   await app.close();
 });
+
+/* ── F-161  agent load forecast ────────────────────── */
+test("agent load forecast returns current and predicted loads", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `forecast_${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "fc-a1", display_name: "Forecast A1", capabilities: ["code"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/load-forecast`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.agent_count === "number");
+  assert.ok(body.agent_count >= 1);
+  assert.ok(Array.isArray(body.forecast));
+  assert.ok(typeof body.forecast[0].current_load === "number");
+  assert.ok(typeof body.forecast[0].forecast_load_1h === "number");
+
+  await app.close();
+});
+
+/* ── F-162  blocker bulk severity update ──────────── */
+test("blocker bulk severity update changes severity of multiple blockers", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `bsev_${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "bsev-a1", display_name: "BSEV A1", capabilities: ["debug"] },
+  });
+
+  const b1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "bsev-a1", title: "Bug 1", severity: "low" },
+  });
+  const b2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "bsev-a1", title: "Bug 2", severity: "low" },
+  });
+  assert.equal(b1.statusCode, 201);
+  assert.equal(b2.statusCode, 201);
+
+  const res = await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/blockers/bulk-update-severity`,
+    headers: auth,
+    payload: {
+      blocker_ids: [b1.json().blocker_id, b2.json().blocker_id],
+      severity: "critical",
+    },
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.updated, 2);
+  assert.equal(body.severity, "critical");
+
+  await app.close();
+});

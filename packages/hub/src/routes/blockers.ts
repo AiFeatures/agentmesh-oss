@@ -933,4 +933,56 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-162  blocker bulk severity update ───────────── */
+  app.patch(
+    "/api/v1/workspaces/:workspace/blockers/bulk-update-severity",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["blocker_ids", "severity"],
+          properties: {
+            blocker_ids: {
+              type: "array",
+              items: { type: "string" },
+              minItems: 1,
+              maxItems: 50,
+            },
+            severity: {
+              type: "string",
+              enum: ["low", "medium", "high", "critical"],
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { blocker_ids, severity } = request.body as {
+        blocker_ids: string[];
+        severity: string;
+      };
+
+      const placeholders = blocker_ids.map(() => "?").join(",");
+      const updated = db
+        .prepare(
+          `UPDATE blockers SET severity = ?
+           WHERE blocker_id IN (${placeholders}) AND workspace_id = ? AND status = 'open'`,
+        )
+        .run(severity, ...blocker_ids, workspace);
+
+      broadcast("blockers.bulk_severity_updated", {
+        workspace,
+        blocker_ids,
+        severity,
+      });
+
+      return reply.send({
+        updated: updated.changes,
+        severity,
+      });
+    },
+  );
 };

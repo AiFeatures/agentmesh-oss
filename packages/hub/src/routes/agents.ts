@@ -1694,4 +1694,75 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-161  agent load forecast ─────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/load-forecast",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const agents = db
+        .prepare("SELECT agent_id, display_name, status FROM agents WHERE workspace_id = ?")
+        .all(workspace) as Array<{
+        agent_id: string;
+        display_name: string;
+        status: string;
+      }>;
+
+      const forecast = agents.map((a) => {
+        const activeClaims = (
+          db
+            .prepare("SELECT COUNT(*) as c FROM claims WHERE agent_id = ? AND status = 'active'")
+            .get(a.agent_id) as { c: number }
+        ).c;
+        const pendingHandoffs = (
+          db
+            .prepare(
+              "SELECT COUNT(*) as c FROM handoffs WHERE (from_agent_id = ? OR to_agent_id = ?) AND status = 'pending'",
+            )
+            .get(a.agent_id, a.agent_id) as { c: number }
+        ).c;
+        const openBlockers = (
+          db
+            .prepare("SELECT COUNT(*) as c FROM blockers WHERE agent_id = ? AND status = 'open'")
+            .get(a.agent_id) as { c: number }
+        ).c;
+
+        const currentLoad = activeClaims * 2 + pendingHandoffs + openBlockers * 3;
+        // Simple forecast: if agent has expiring claims, load will decrease
+        const expiringIn1h = (
+          db
+            .prepare(
+              `SELECT COUNT(*) as c FROM claims
+               WHERE agent_id = ? AND status = 'active'
+                 AND expires_at IS NOT NULL
+                 AND datetime(expires_at) < datetime('now', '+1 hour')`,
+            )
+            .get(a.agent_id) as { c: number }
+        ).c;
+
+        const forecastLoad = Math.max(0, currentLoad - expiringIn1h * 2);
+
+        return {
+          agent_id: a.agent_id,
+          display_name: a.display_name,
+          status: a.status,
+          current_load: currentLoad,
+          forecast_load_1h: forecastLoad,
+          active_claims: activeClaims,
+          pending_handoffs: pendingHandoffs,
+          open_blockers: openBlockers,
+          expiring_claims_1h: expiringIn1h,
+        };
+      });
+
+      forecast.sort((a, b) => b.current_load - a.current_load);
+
+      return reply.send({
+        agent_count: forecast.length,
+        forecast,
+      });
+    },
+  );
 };
