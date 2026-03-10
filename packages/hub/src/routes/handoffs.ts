@@ -2029,4 +2029,24 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-275 handoff-volume-trend
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/volume-trend",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params;
+      const rows = db
+        .prepare(
+          `SELECT DATE(created_at) AS day, COUNT(*) AS cnt
+           FROM handoffs WHERE workspace_id = ?
+           GROUP BY DATE(created_at) ORDER BY day DESC LIMIT 30`,
+        )
+        .all(workspace) as { day: string; cnt: number }[];
+
+      const total = rows.reduce((s, r) => s + r.cnt, 0);
+      const avg = rows.length > 0 ? Math.round((total / rows.length) * 100) / 100 : 0;
+      return reply.send({ workspace, total_handoffs: total, days_tracked: rows.length, avg_per_day: avg, daily: rows });
+    },
+  );
 };

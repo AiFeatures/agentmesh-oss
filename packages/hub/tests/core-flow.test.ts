@@ -10802,3 +10802,40 @@ test("GET /blockers/agent-workload returns agent blocker workload", async () => 
   assert.ok(Array.isArray(body.agents));
   await app.close();
 });
+
+// F-275 handoff-volume-trend
+test("GET /handoffs/volume-trend returns daily volume", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `ws-hvt-${Date.now().toString(36)}`;
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["x"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "t" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/volume-trend`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.strictEqual(body.workspace, ws);
+  assert.ok(typeof body.avg_per_day === "number");
+  assert.ok(Array.isArray(body.daily));
+  await app.close();
+});
+
+// F-276 claim-status-summary
+test("GET /claims/status-summary returns status breakdown", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `ws-css-${Date.now().toString(36)}`;
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "statsum", paths: ["src/a.ts"] } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/status-summary`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.strictEqual(body.workspace, ws);
+  assert.ok(typeof body.total_claims === "number");
+  assert.ok(body.by_status);
+  await app.close();
+});

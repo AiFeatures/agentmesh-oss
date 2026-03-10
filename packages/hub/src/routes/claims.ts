@@ -2326,4 +2326,24 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total_renewals: total, daily: rows });
     },
   );
+
+  // F-276 claim-status-summary
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/status-summary",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params;
+      const rows = db
+        .prepare(
+          "SELECT status, COUNT(*) AS cnt FROM claims WHERE workspace_id = ? GROUP BY status",
+        )
+        .all(workspace) as { status: string; cnt: number }[];
+
+      const total = rows.reduce((s, r) => s + r.cnt, 0);
+      const byStatus: Record<string, number> = {};
+      for (const r of rows) byStatus[r.status] = r.cnt;
+
+      return reply.send({ workspace, total_claims: total, by_status: byStatus });
+    },
+  );
 };
