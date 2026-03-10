@@ -2495,4 +2495,21 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, matrix: rows });
     },
   );
+
+  // F-374 blocker-overdue-count
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/overdue-count",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS overdue
+           FROM blockers
+           WHERE workspace_id = ? AND status != 'resolved'
+             AND deadline_at IS NOT NULL AND deadline_at < datetime('now')`,
+        )
+        .get(req.params.workspace) as { overdue: number };
+      reply.send({ workspace: req.params.workspace, overdue: row.overdue });
+    },
+  );
 };

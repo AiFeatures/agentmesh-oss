@@ -12216,3 +12216,31 @@ test("GET /workspaces/claim-utilization returns utilization", async () => {
   assert.ok(typeof body.utilization_pct === "number");
   await app.close();
 });
+
+// F-373 handoff-route-mode-breakdown
+test("GET /handoffs/route-mode-breakdown returns modes", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "hrmb-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/route-mode-breakdown`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.modes));
+  await app.close();
+});
+
+// F-374 blocker-overdue-count
+test("GET /blockers/overdue-count returns overdue", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "boc-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/overdue-count`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(typeof body.overdue === "number");
+  await app.close();
+});

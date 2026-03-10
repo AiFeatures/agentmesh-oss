@@ -2612,4 +2612,22 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-373 handoff-route-mode-breakdown
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/route-mode-breakdown",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT COALESCE(route_mode, 'direct') AS route_mode, COUNT(*) AS count
+           FROM handoffs
+           WHERE workspace_id = ?
+           GROUP BY route_mode
+           ORDER BY count DESC`,
+        )
+        .all(req.params.workspace) as { route_mode: string; count: number }[];
+      reply.send({ workspace: req.params.workspace, modes: rows });
+    },
+  );
 };
