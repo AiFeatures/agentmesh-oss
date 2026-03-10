@@ -2319,4 +2319,28 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-321 sla-violation-agents
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/sla-violation-agents",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT to_agent_id, COUNT(*) as total_handoffs,
+                  SUM(CASE WHEN sla_deadline IS NOT NULL AND updated_at > sla_deadline THEN 1 ELSE 0 END) as violations
+           FROM handoffs
+           WHERE workspace_id = ? AND to_agent_id IS NOT NULL
+           GROUP BY to_agent_id
+           ORDER BY violations DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        to_agent_id: string;
+        total_handoffs: number;
+        violations: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, agents: rows });
+    },
+  );
 };

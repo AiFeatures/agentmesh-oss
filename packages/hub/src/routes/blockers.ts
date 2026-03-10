@@ -2198,4 +2198,33 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-322 cross-agent-impact
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/cross-agent-impact",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT b.blocker_id, b.title, b.severity,
+                  COUNT(DISTINCT bw.agent_id) as watcher_count,
+                  b.agent_id as reporter
+           FROM blockers b
+           LEFT JOIN blocker_watchers bw ON bw.blocker_id = b.blocker_id
+           WHERE b.workspace_id = ?
+           GROUP BY b.blocker_id
+           HAVING watcher_count > 0
+           ORDER BY watcher_count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        blocker_id: string;
+        title: string;
+        severity: string;
+        watcher_count: number;
+        reporter: string;
+      }[];
+      reply.send({ workspace: req.params.workspace, blockers: rows });
+    },
+  );
 };
