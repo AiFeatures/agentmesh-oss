@@ -372,6 +372,18 @@ export class AgentMeshClient {
     }
   }
 
+  filterEvents(events: string[]): void {
+    if (this.ws && this.ws.readyState === 1) {
+      this.ws.send(JSON.stringify({ type: "filter_events", events }));
+    }
+  }
+
+  clearEventFilter(): void {
+    if (this.ws && this.ws.readyState === 1) {
+      this.ws.send(JSON.stringify({ type: "clear_filter" }));
+    }
+  }
+
   async garbageCollectClaims(workspace: string): Promise<unknown> {
     return await this.request(`/api/v1/workspaces/${workspace}/claims/gc`, {
       method: "POST",

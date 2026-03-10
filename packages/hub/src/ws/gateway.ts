@@ -2,12 +2,17 @@ import type { WebSocket } from "ws";
 
 const sockets = new Set<WebSocket>();
 const socketWorkspaces = new WeakMap<WebSocket, Set<string>>();
+const socketEventFilters = new WeakMap<WebSocket, Set<string>>();
 
 export function registerSocket(socket: WebSocket): void {
   sockets.add(socket);
   socket.on("message", (raw) => {
     try {
-      const msg = JSON.parse(String(raw)) as { type?: string; workspace?: string };
+      const msg = JSON.parse(String(raw)) as {
+        type?: string;
+        workspace?: string;
+        events?: string[];
+      };
       if (msg.type === "subscribe" && typeof msg.workspace === "string") {
         let subs = socketWorkspaces.get(socket);
         if (!subs) {
@@ -17,6 +22,14 @@ export function registerSocket(socket: WebSocket): void {
         subs.add(msg.workspace);
       } else if (msg.type === "unsubscribe" && typeof msg.workspace === "string") {
         socketWorkspaces.get(socket)?.delete(msg.workspace);
+      } else if (msg.type === "filter_events" && Array.isArray(msg.events)) {
+        const filters = new Set<string>();
+        for (const e of msg.events) {
+          if (typeof e === "string") filters.add(e);
+        }
+        socketEventFilters.set(socket, filters);
+      } else if (msg.type === "clear_filter") {
+        socketEventFilters.delete(socket);
       }
     } catch {
       // ignore non-JSON messages
@@ -43,6 +56,10 @@ export function broadcast(event: string, data: Record<string, unknown>): void {
     if (socket.readyState === 1) {
       const subs = socketWorkspaces.get(socket);
       if (subs && subs.size > 0 && workspace && !subs.has(workspace)) {
+        continue;
+      }
+      const eventFilter = socketEventFilters.get(socket);
+      if (eventFilter && eventFilter.size > 0 && !eventFilter.has(event)) {
         continue;
       }
       try {
