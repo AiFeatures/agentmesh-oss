@@ -12721,3 +12721,31 @@ test("GET /blockers/watcher-count-ranking returns blockers", async () => {
   assert.ok(Array.isArray(body.blockers));
   await app.close();
 });
+
+// F-409 priority-by-route-mode
+test("GET /handoffs/priority-by-route-mode returns stats", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "pbrm-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/priority-by-route-mode`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.stats));
+  await app.close();
+});
+
+// F-410 transfer-leaderboard
+test("GET /claims/transfer-leaderboard returns leaderboard", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "trlb-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/transfer-leaderboard`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.leaderboard));
+  await app.close();
+});

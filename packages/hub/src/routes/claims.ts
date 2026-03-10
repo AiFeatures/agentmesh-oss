@@ -2993,4 +2993,26 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, distribution: rows });
     },
   );
+
+  // F-410 transfer-leaderboard
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/transfer-leaderboard",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT from_agent_id AS agent_id, COUNT(*) AS transfer_count
+           FROM claim_transfer_history
+           WHERE workspace_id = ?
+           GROUP BY from_agent_id
+           ORDER BY transfer_count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        transfer_count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, leaderboard: rows });
+    },
+  );
 };

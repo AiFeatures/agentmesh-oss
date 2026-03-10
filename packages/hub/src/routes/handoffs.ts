@@ -2758,4 +2758,32 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, distribution: rows });
     },
   );
+
+  // F-409 priority-by-route-mode
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/priority-by-route-mode",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT route_mode,
+                  COUNT(*) AS count,
+                  CAST(AVG(priority) AS REAL) AS avg_priority,
+                  MIN(priority) AS min_priority,
+                  MAX(priority) AS max_priority
+           FROM handoffs
+           WHERE workspace_id = ? AND priority IS NOT NULL
+           GROUP BY route_mode
+           ORDER BY avg_priority DESC`,
+        )
+        .all(req.params.workspace) as {
+        route_mode: string;
+        count: number;
+        avg_priority: number;
+        min_priority: number;
+        max_priority: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, stats: rows });
+    },
+  );
 };
