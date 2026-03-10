@@ -3127,4 +3127,26 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspaces: rows });
     },
   );
+
+  // F-443 workspace-agent-count-trend
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/workspace-agent-count-trend",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT DATE(created_at) AS day, COUNT(*) AS agents_registered
+           FROM agents
+           WHERE workspace_id = ?
+           GROUP BY DATE(created_at)
+           ORDER BY day DESC
+           LIMIT 30`,
+        )
+        .all(req.params.workspace) as {
+        day: string;
+        agents_registered: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, trend: rows });
+    },
+  );
 };

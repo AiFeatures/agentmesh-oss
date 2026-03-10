@@ -2822,4 +2822,28 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, levels: rows });
     },
   );
+
+  // F-444 blocker-deadline-proximity
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/blocker-deadline-proximity",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT blocker_id, title, severity,
+                  ROUND((julianday(deadline_at) - julianday('now')) * 24, 2) AS hours_until_deadline
+           FROM blockers
+           WHERE workspace_id = ? AND status != 'resolved' AND deadline_at IS NOT NULL
+           ORDER BY deadline_at ASC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        blocker_id: string;
+        title: string;
+        severity: string;
+        hours_until_deadline: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, blockers: rows });
+    },
+  );
 };

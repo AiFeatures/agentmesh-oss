@@ -13195,3 +13195,31 @@ test("GET /claims/claim-scope-collision returns collision data", async () => {
   assert.ok(Array.isArray(body.collisions));
   await app.close();
 });
+
+// F-443 workspace-agent-count-trend
+test("GET /workspace-agent-count-trend returns trend data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "wact-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/workspace-agent-count-trend`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.trend));
+  await app.close();
+});
+
+// F-444 blocker-deadline-proximity
+test("GET /blockers/blocker-deadline-proximity returns proximity data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "bdlp-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-deadline-proximity`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.blockers));
+  await app.close();
+});
