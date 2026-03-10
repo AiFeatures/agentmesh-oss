@@ -2919,4 +2919,30 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, prefixes: rows });
     },
   );
+
+  // F-394 expiry-window-stats
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/expiry-window-stats",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT
+            CASE
+              WHEN julianday(expires_at) - julianday('now') < 0 THEN 'expired'
+              WHEN julianday(expires_at) - julianday('now') < 0.041667 THEN 'under_1h'
+              WHEN julianday(expires_at) - julianday('now') < 0.25 THEN '1h_to_6h'
+              WHEN julianday(expires_at) - julianday('now') < 1 THEN '6h_to_24h'
+              ELSE 'over_24h'
+            END AS window,
+            COUNT(*) AS count
+           FROM claims
+           WHERE workspace_id = ? AND status = 'active' AND expires_at IS NOT NULL
+           GROUP BY window
+           ORDER BY count DESC`,
+        )
+        .all(req.params.workspace) as { window: string; count: number }[];
+      reply.send({ workspace: req.params.workspace, windows: rows });
+    },
+  );
 };

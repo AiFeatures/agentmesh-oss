@@ -2548,4 +2548,28 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ...row });
     },
   );
+
+  // F-393 open-by-agent
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/open-by-agent",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT b.agent_id, a.display_name, COUNT(*) AS open_count
+           FROM blockers b
+           LEFT JOIN agents a ON a.agent_id = b.agent_id AND a.workspace_id = b.workspace_id
+           WHERE b.workspace_id = ? AND b.status = 'open'
+           GROUP BY b.agent_id
+           ORDER BY open_count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string | null;
+        open_count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, agents: rows });
+    },
+  );
 };
