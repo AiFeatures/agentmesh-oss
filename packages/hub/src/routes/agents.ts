@@ -2111,4 +2111,47 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-201: Agent collaboration score
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/collaboration-score",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const agents = db
+        .prepare(`SELECT agent_id, display_name FROM agents WHERE workspace_id = ?`)
+        .all(workspace) as { agent_id: string; display_name: string }[];
+
+      const handoffs = db
+        .prepare(`SELECT from_agent_id, to_agent_id, status FROM handoffs WHERE workspace_id = ?`)
+        .all(workspace) as { from_agent_id: string; to_agent_id: string; status: string }[];
+
+      const scores = agents.map((a) => {
+        const sent = handoffs.filter((h) => h.from_agent_id === a.agent_id).length;
+        const received = handoffs.filter((h) => h.to_agent_id === a.agent_id).length;
+        const accepted = handoffs.filter(
+          (h) => h.to_agent_id === a.agent_id && h.status === "accepted",
+        ).length;
+        const uniquePartners = new Set([
+          ...handoffs.filter((h) => h.from_agent_id === a.agent_id).map((h) => h.to_agent_id),
+          ...handoffs.filter((h) => h.to_agent_id === a.agent_id).map((h) => h.from_agent_id),
+        ]).size;
+        // Score: sent + received + 2*accepted + 3*uniquePartners
+        const score = sent + received + 2 * accepted + 3 * uniquePartners;
+        return {
+          agent_id: a.agent_id,
+          display_name: a.display_name,
+          sent,
+          received,
+          accepted,
+          unique_partners: uniquePartners,
+          collaboration_score: score,
+        };
+      });
+
+      scores.sort((a, b) => b.collaboration_score - a.collaboration_score);
+      return reply.send({ workspace, agents: scores });
+    },
+  );
 };

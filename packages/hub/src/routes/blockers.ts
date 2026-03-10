@@ -1376,4 +1376,44 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-202: Blocker agent impact — which agents are most impacted
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/agent-impact",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const blockers = db
+        .prepare(`SELECT agent_id, severity, status FROM blockers WHERE workspace_id = ?`)
+        .all(workspace) as { agent_id: string; severity: string; status: string }[];
+
+      const agentImpact: Record<
+        string,
+        { total: number; open: number; critical: number; high: number }
+      > = {};
+      for (const b of blockers) {
+        if (!agentImpact[b.agent_id])
+          agentImpact[b.agent_id] = { total: 0, open: 0, critical: 0, high: 0 };
+        agentImpact[b.agent_id].total++;
+        if (b.status === "open") agentImpact[b.agent_id].open++;
+        if (b.severity === "critical") agentImpact[b.agent_id].critical++;
+        if (b.severity === "high") agentImpact[b.agent_id].high++;
+      }
+
+      const agents = Object.entries(agentImpact)
+        .map(([agent_id, stats]) => ({
+          agent_id,
+          ...stats,
+          impact_score: stats.open + stats.critical * 3 + stats.high * 2,
+        }))
+        .sort((a, b) => b.impact_score - a.impact_score);
+
+      return reply.send({
+        workspace,
+        total_blockers: blockers.length,
+        agents,
+      });
+    },
+  );
 };
