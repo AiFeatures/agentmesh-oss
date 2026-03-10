@@ -2420,4 +2420,54 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, results: rows });
     },
   );
+
+  // F-340 chain-analysis
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/chain-analysis",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT handoff_id, parent_handoff_id, from_agent_id, to_agent_id, status
+           FROM handoffs
+           WHERE workspace_id = ? AND parent_handoff_id IS NOT NULL
+           ORDER BY created_at`,
+        )
+        .all(req.params.workspace) as {
+        handoff_id: string;
+        parent_handoff_id: string;
+        from_agent_id: string;
+        to_agent_id: string;
+        status: string;
+      }[];
+
+      const children: Record<string, string[]> = {};
+      for (const r of rows) {
+        if (!children[r.parent_handoff_id]) children[r.parent_handoff_id] = [];
+        children[r.parent_handoff_id].push(r.handoff_id);
+      }
+
+      const getDepth = (id: string, seen: Set<string>): number => {
+        if (seen.has(id)) return 0;
+        seen.add(id);
+        const ch = children[id] || [];
+        return ch.length > 0 ? 1 + Math.max(...ch.map((c) => getDepth(c, seen))) : 0;
+      };
+
+      const roots = rows.filter((r) => !rows.some((o) => o.handoff_id === r.parent_handoff_id));
+      const parentIds = [...new Set(roots.map((r) => r.parent_handoff_id))];
+      const chains = parentIds
+        .map((pid) => ({
+          root_handoff_id: pid,
+          depth: 1 + getDepth(pid, new Set()),
+        }))
+        .sort((a, b) => b.depth - a.depth);
+
+      reply.send({
+        workspace: req.params.workspace,
+        chains,
+        max_depth: chains.length > 0 ? chains[0].depth : 0,
+      });
+    },
+  );
 };

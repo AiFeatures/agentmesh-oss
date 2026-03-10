@@ -2303,4 +2303,31 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, candidates: rows });
     },
   );
+
+  // F-339 resolution-time-percentiles
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/resolution-time-percentiles",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT CAST((julianday(resolved_at) - julianday(created_at)) * 86400 AS INTEGER) AS seconds
+           FROM blockers
+           WHERE workspace_id = ? AND status = 'resolved' AND resolved_at IS NOT NULL
+           ORDER BY seconds`,
+        )
+        .all(req.params.workspace) as { seconds: number }[];
+
+      const n = rows.length;
+      const pct = (p: number) =>
+        n === 0 ? null : rows[Math.min(Math.floor(n * p), n - 1)].seconds;
+      reply.send({
+        workspace: req.params.workspace,
+        count: n,
+        p50: pct(0.5),
+        p90: pct(0.9),
+        p99: pct(0.99),
+      });
+    },
+  );
 };

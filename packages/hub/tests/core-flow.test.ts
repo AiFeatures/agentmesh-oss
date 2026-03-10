@@ -11738,3 +11738,32 @@ test("GET /claims/longest-active returns longest active claims", async () => {
   assert.ok(Array.isArray(body.claims));
   await app.close();
 });
+
+// F-339 resolution-time-percentiles
+test("GET /blockers/resolution-time-percentiles returns percentiles", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "rspctl-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/resolution-time-percentiles`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(typeof body.count === "number");
+  await app.close();
+});
+
+// F-340 chain-analysis
+test("GET /handoffs/chain-analysis returns chain data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "chnan-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/chain-analysis`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.chains));
+  assert.ok(typeof body.max_depth === "number");
+  await app.close();
+});
