@@ -3407,4 +3407,29 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: rows });
     },
   );
+
+  // F-507 handoff-chain-completion-rate
+  app.get<{ Params: { workspaceId: string } }>(
+    "/api/v1/workspaces/:workspaceId/analytics/handoff-chain-completion-rate",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspaceId } = req.params;
+      const row = db
+        .prepare(
+          `SELECT
+             COUNT(*) AS total_chain,
+             SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed_chain
+           FROM handoffs
+           WHERE workspace_id = ? AND parent_handoff_id IS NOT NULL`,
+        )
+        .get(workspaceId) as any;
+      const total = row?.total_chain ?? 0;
+      const completed = row?.completed_chain ?? 0;
+      return reply.send({
+        total_chain_handoffs: total,
+        completed_chain_handoffs: completed,
+        completion_rate: total > 0 ? +(completed / total).toFixed(4) : 0,
+      });
+    },
+  );
 };

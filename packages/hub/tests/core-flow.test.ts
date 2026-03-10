@@ -14088,3 +14088,32 @@ test("GET /blockers/blocker-details-length-stats returns length stats", async ()
   assert.ok(typeof body.total === "number");
   await app.close();
 });
+
+// T-507 handoff-chain-completion-rate
+test("F-507 handoff-chain-completion-rate", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "hccr-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/handoff-chain-completion-rate`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = res.json();
+  assert.ok("total_chain_handoffs" in body);
+  assert.ok("completion_rate" in body);
+  await app.close();
+});
+
+// T-508 blocker-agent-resolution-rate
+test("F-508 blocker-agent-resolution-rate", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "barr-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/blocker-agent-resolution-rate`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const data = res.json();
+  assert.ok(Array.isArray(data));
+  await app.close();
+});
