@@ -2642,4 +2642,33 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, blockers: rows });
     },
   );
+
+  // F-414 age-percentiles
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/age-percentiles",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT CAST((strftime('%s','now') - strftime('%s', created_at)) AS INTEGER) AS age_seconds
+           FROM blockers
+           WHERE workspace_id = ? AND status = 'open'
+           ORDER BY age_seconds ASC`,
+        )
+        .all(req.params.workspace) as { age_seconds: number }[];
+      const n = rows.length;
+      const percentile = (p: number) => {
+        if (n === 0) return 0;
+        const idx = Math.ceil((p / 100) * n) - 1;
+        return rows[Math.max(0, Math.min(idx, n - 1))].age_seconds;
+      };
+      reply.send({
+        workspace: req.params.workspace,
+        count: n,
+        p50: percentile(50),
+        p90: percentile(90),
+        p99: percentile(99),
+      });
+    },
+  );
 };

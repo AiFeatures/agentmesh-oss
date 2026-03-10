@@ -2786,4 +2786,32 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, stats: rows });
     },
   );
+
+  // F-413 sla-breach-list
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/sla-breach-list",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT handoff_id, from_agent_id, to_agent_id, status, sla_deadline, created_at
+           FROM handoffs
+           WHERE workspace_id = ?
+             AND sla_deadline IS NOT NULL
+             AND sla_deadline < datetime('now')
+             AND status NOT IN ('completed', 'rejected')
+           ORDER BY sla_deadline ASC
+           LIMIT 50`,
+        )
+        .all(req.params.workspace) as {
+        handoff_id: string;
+        from_agent_id: string;
+        to_agent_id: string;
+        status: string;
+        sla_deadline: string;
+        created_at: string;
+      }[];
+      reply.send({ workspace: req.params.workspace, breached: rows });
+    },
+  );
 };

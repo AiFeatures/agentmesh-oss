@@ -12777,3 +12777,32 @@ test("GET /agents/idle-time-histogram returns buckets", async () => {
   assert.ok(Array.isArray(body.histogram));
   await app.close();
 });
+
+// F-413 sla-breach-list
+test("GET /handoffs/sla-breach-list returns breached handoffs", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "slab-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/sla-breach-list`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.breached));
+  await app.close();
+});
+
+// F-414 age-percentiles
+test("GET /blockers/age-percentiles returns percentiles", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "bagp-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/age-percentiles`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(typeof body.count === "number");
+  assert.ok(typeof body.p50 === "number");
+  await app.close();
+});
