@@ -8105,3 +8105,72 @@ test("handoff delegation depth returns warnings for deep chains", async () => {
 
   await app.close();
 });
+
+/* ── F-165  workspace health score (enhanced test) ──── */
+test("workspace health score returns composite score and factors", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `health_${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "hs-a1", display_name: "HS A1", capabilities: ["code"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/health-score`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.score === "number");
+  assert.ok(body.score >= 0 && body.score <= 100);
+  assert.ok(body.factors);
+  assert.ok(typeof body.factors.total_agents === "number");
+
+  await app.close();
+});
+
+/* ── F-166  blocker cascade analysis ───────────────── */
+test("blocker cascade analysis returns dependency chains", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `cascade_${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "cas-a1", display_name: "CAS A1", capabilities: ["debug"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/cascade-analysis`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.total_dependencies === "number");
+  assert.ok(typeof body.cascade_roots === "number");
+  assert.ok(Array.isArray(body.cascades));
+
+  await app.close();
+});

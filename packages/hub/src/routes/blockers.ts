@@ -985,4 +985,59 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-166  blocker cascade analysis ──────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/cascade-analysis",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      // Find blockers that have dependencies (blocking other blockers)
+      const deps = db
+        .prepare(
+          `SELECT bd.blocker_id, bd.depends_on_blocker_id,
+             b1.title as blocker_title, b1.status as blocker_status,
+             b2.title as dependency_title, b2.status as dependency_status
+           FROM blocker_dependencies bd
+           JOIN blockers b1 ON b1.blocker_id = bd.blocker_id
+           JOIN blockers b2 ON b2.blocker_id = bd.depends_on_blocker_id
+           WHERE b1.workspace_id = ?`,
+        )
+        .all(workspace) as Array<{
+        blocker_id: string;
+        depends_on_blocker_id: string;
+        blocker_title: string;
+        blocker_status: string;
+        dependency_title: string;
+        dependency_status: string;
+      }>;
+
+      // Find cascade roots: blockers that others depend on but aren't resolved
+      const rootBlockers = new Set<string>();
+      const blocked = new Map<string, string[]>();
+      for (const d of deps) {
+        if (d.dependency_status === "open") {
+          rootBlockers.add(d.depends_on_blocker_id);
+        }
+        const list = blocked.get(d.depends_on_blocker_id) ?? [];
+        list.push(d.blocker_id);
+        blocked.set(d.depends_on_blocker_id, list);
+      }
+
+      const cascades = Array.from(rootBlockers).map((rootId) => ({
+        root_blocker_id: rootId,
+        blocked_count: blocked.get(rootId)?.length ?? 0,
+        blocked_ids: blocked.get(rootId) ?? [],
+      }));
+
+      cascades.sort((a, b) => b.blocked_count - a.blocked_count);
+
+      return reply.send({
+        total_dependencies: deps.length,
+        cascade_roots: cascades.length,
+        cascades,
+      });
+    },
+  );
 };
