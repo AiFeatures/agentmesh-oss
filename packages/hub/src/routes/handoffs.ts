@@ -3356,4 +3356,28 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, priorities: rows });
     },
   );
+
+  // F-501 handoff-summary-word-frequency
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-summary-word-frequency",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(`SELECT summary FROM handoffs WHERE workspace_id = ? AND summary IS NOT NULL`)
+        .all(req.params.workspace) as { summary: string }[];
+      const freq: Record<string, number> = {};
+      for (const r of rows) {
+        const words = r.summary
+          .toLowerCase()
+          .split(/\s+/)
+          .filter((w) => w.length > 2);
+        for (const w of words) freq[w] = (freq[w] || 0) + 1;
+      }
+      const sorted = Object.entries(freq)
+        .map(([word, count]) => ({ word, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 30);
+      reply.send({ workspace: req.params.workspace, words: sorted });
+    },
+  );
 };

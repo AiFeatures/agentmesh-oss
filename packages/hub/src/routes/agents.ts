@@ -3993,4 +3993,23 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, matrix: result });
     },
   );
+
+  // F-502 agent-task-completion-trend
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/agent-task-completion-trend",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT DATE(updated_at) AS date, COUNT(*) AS completed_count
+           FROM agent_tasks
+           WHERE workspace_id = ? AND status = 'completed' AND updated_at IS NOT NULL
+           GROUP BY date
+           ORDER BY date DESC
+           LIMIT 30`,
+        )
+        .all(req.params.workspace) as { date: string; completed_count: number }[];
+      reply.send({ workspace: req.params.workspace, trend: rows });
+    },
+  );
 };

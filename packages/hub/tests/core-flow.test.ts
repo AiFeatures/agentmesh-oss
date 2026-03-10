@@ -14004,3 +14004,31 @@ test("GET /blockers/blocker-comment-timeline returns timeline", async () => {
   assert.ok(Array.isArray(body.timeline));
   await app.close();
 });
+
+// F-501 handoff-summary-word-frequency
+test("GET /handoffs/handoff-summary-word-frequency returns word counts", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "hswf-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-summary-word-frequency`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.words));
+  await app.close();
+});
+
+// F-502 agent-task-completion-trend
+test("GET /agents/agent-task-completion-trend returns trend", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "atct-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/agent-task-completion-trend`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.trend));
+  await app.close();
+});
