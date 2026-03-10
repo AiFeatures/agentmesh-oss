@@ -705,4 +705,33 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ total_handoffs: rows.length, max_depth: maxDepth, avg_depth: avgDepth });
     },
   );
+
+  /* ── F-139  handoff rejection rate ──────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/rejection-rate",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const total = (
+        db.prepare("SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ?").get(workspace) as {
+          c: number;
+        }
+      ).c;
+      const rejected = (
+        db
+          .prepare(
+            "SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND status IN ('rejected','failed')",
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const rate = total > 0 ? Math.round((rejected / total) * 10000) / 100 : 0;
+      return reply.send({ total, rejected, rejection_rate: rate });
+    },
+  );
 };

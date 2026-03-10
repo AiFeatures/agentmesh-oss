@@ -1461,4 +1461,43 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data });
     },
   );
+
+  /* ── F-138  agent capability overlap ─────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/capability-overlap",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const agents = db
+        .prepare(
+          "SELECT agent_id, capabilities FROM agents WHERE workspace_id = ? AND capabilities IS NOT NULL",
+        )
+        .all(workspace) as Array<{ agent_id: string; capabilities: string }>;
+      const capMap: Record<string, string[]> = {};
+      for (const a of agents) {
+        try {
+          const caps = JSON.parse(a.capabilities);
+          if (Array.isArray(caps)) {
+            for (const c of caps) {
+              if (!capMap[c]) capMap[c] = [];
+              capMap[c].push(a.agent_id);
+            }
+          }
+        } catch {
+          /* skip */
+        }
+      }
+      const overlaps = Object.entries(capMap)
+        .filter(([, ids]) => ids.length > 1)
+        .map(([capability, agent_ids]) => ({ capability, agent_ids, count: agent_ids.length }))
+        .sort((a, b) => b.count - a.count);
+      return reply.send({ data: overlaps });
+    },
+  );
 };

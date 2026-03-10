@@ -6513,3 +6513,101 @@ test("GET /workspaces/:workspace/claims/scope-frequency", async () => {
 
   await app.close();
 });
+
+/* ── F-138  agent capability overlap ───────────────────── */
+test("GET /workspaces/:workspace/agents/capability-overlap", async () => {
+  runMigrations();
+  const app = buildApp();
+  const suffix = Date.now().toString(36);
+  const ws = `ws-co-${suffix}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "CapOverlap" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a1-co-${suffix}`, display_name: "A1", capabilities: ["code", "review"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a2-co-${suffix}`, display_name: "A2", capabilities: ["code", "test"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/capability-overlap`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body2 = res.json() as { data: Array<{ capability: string; count: number }> };
+  assert.ok(Array.isArray(body2.data));
+  const codeOverlap = body2.data.find((d) => d.capability === "code");
+  assert.ok(codeOverlap);
+  assert.equal(codeOverlap.count, 2);
+
+  await app.close();
+});
+
+/* ── F-139  handoff rejection rate ─────────────────────── */
+test("GET /workspaces/:workspace/handoffs/rejection-rate", async () => {
+  runMigrations();
+  const app = buildApp();
+  const suffix = Date.now().toString(36);
+  const ws = `ws-rr-${suffix}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "RejRate" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/rejection-rate`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body3 = res.json() as { total: number; rejected: number; rejection_rate: number };
+  assert.equal(body3.total, 0);
+  assert.equal(body3.rejection_rate, 0);
+
+  await app.close();
+});
+
+/* ── F-140  blocker severity trend ─────────────────────── */
+test("GET /workspaces/:workspace/blockers/severity-trend", async () => {
+  runMigrations();
+  const app = buildApp();
+  const suffix = Date.now().toString(36);
+  const ws = `ws-st-${suffix}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "SevTrend" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/severity-trend`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body4 = res.json() as { data: unknown[] };
+  assert.ok(Array.isArray(body4.data));
+
+  await app.close();
+});

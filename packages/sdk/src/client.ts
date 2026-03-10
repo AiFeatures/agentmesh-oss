@@ -1129,6 +1129,27 @@ export class AgentMeshClient {
     });
   }
 
+  /* ── F-138  agent capability overlap ───────────── */
+  async getCapabilityOverlap(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/agents/capability-overlap`, {
+      method: "GET",
+    });
+  }
+
+  /* ── F-139  handoff rejection rate ─────────────── */
+  async getHandoffRejectionRate(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/handoffs/rejection-rate`, {
+      method: "GET",
+    });
+  }
+
+  /* ── F-140  blocker severity trend ─────────────── */
+  async getBlockerSeverityTrend(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/blockers/severity-trend`, {
+      method: "GET",
+    });
+  }
+
   private async request<T = unknown>(path: string, init: RequestInit): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);

@@ -761,4 +761,31 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ total, escalated, escalation_rate: rate });
     },
   );
+
+  /* ── F-140  blocker severity trend ──────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/severity-trend",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const rows = db
+        .prepare(
+          `SELECT severity,
+                  strftime('%Y-%m-%d', created_at) as day,
+                  COUNT(*) as count
+           FROM blockers WHERE workspace_id = ?
+           GROUP BY severity, day
+           ORDER BY day DESC, severity ASC
+           LIMIT 200`,
+        )
+        .all(workspace);
+      return reply.send({ data: rows });
+    },
+  );
 };
