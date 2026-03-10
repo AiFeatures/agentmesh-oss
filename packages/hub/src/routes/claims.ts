@@ -1590,4 +1590,63 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-194: Claim duration statistics
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/duration-stats",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const released = db
+        .prepare(
+          `SELECT claim_id, created_at, expires_at, status
+           FROM claims WHERE workspace_id = ? AND status IN ('released', 'expired')`,
+        )
+        .all(workspace) as {
+        claim_id: string;
+        created_at: string;
+        expires_at: string;
+        status: string;
+      }[];
+
+      const active = db
+        .prepare(
+          `SELECT claim_id, created_at, expires_at
+           FROM claims WHERE workspace_id = ? AND status = 'active'`,
+        )
+        .all(workspace) as {
+        claim_id: string;
+        created_at: string;
+        expires_at: string;
+      }[];
+
+      const durations = released.map((c) => {
+        const start = new Date(c.created_at).getTime();
+        const end = new Date(c.expires_at).getTime();
+        return (end - start) / 3600000; // hours
+      });
+
+      const sorted = [...durations].sort((a, b) => a - b);
+      const avg =
+        sorted.length > 0
+          ? Math.round((sorted.reduce((s, d) => s + d, 0) / sorted.length) * 100) / 100
+          : 0;
+      const median = sorted.length > 0 ? sorted[Math.floor(sorted.length / 2)] : 0;
+      const p95 = sorted.length > 0 ? sorted[Math.floor(sorted.length * 0.95)] : 0;
+
+      return reply.send({
+        workspace,
+        completed_claims: released.length,
+        active_claims: active.length,
+        duration_hours: {
+          avg,
+          median: Math.round(median * 100) / 100,
+          p95: Math.round(p95 * 100) / 100,
+          min: sorted.length > 0 ? Math.round(sorted[0] * 100) / 100 : 0,
+          max: sorted.length > 0 ? Math.round(sorted[sorted.length - 1] * 100) / 100 : 0,
+        },
+      });
+    },
+  );
 };

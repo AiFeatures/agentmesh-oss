@@ -1284,4 +1284,51 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-193: Agent workload from handoffs perspective
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/agent-workload",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const sent = db
+        .prepare(
+          `SELECT from_agent_id as agent_id, COUNT(*) as count
+           FROM handoffs WHERE workspace_id = ?
+           GROUP BY from_agent_id`,
+        )
+        .all(workspace) as { agent_id: string; count: number }[];
+
+      const received = db
+        .prepare(
+          `SELECT to_agent_id as agent_id, COUNT(*) as count
+           FROM handoffs WHERE workspace_id = ? AND to_agent_id IS NOT NULL
+           GROUP BY to_agent_id`,
+        )
+        .all(workspace) as { agent_id: string; count: number }[];
+
+      const pending = db
+        .prepare(
+          `SELECT to_agent_id as agent_id, COUNT(*) as count
+           FROM handoffs WHERE workspace_id = ? AND status = 'pending' AND to_agent_id IS NOT NULL
+           GROUP BY to_agent_id`,
+        )
+        .all(workspace) as { agent_id: string; count: number }[];
+
+      const agentIds = new Set([
+        ...sent.map((s) => s.agent_id),
+        ...received.map((r) => r.agent_id),
+      ]);
+      const workload = [...agentIds].map((id) => ({
+        agent_id: id,
+        sent: sent.find((s) => s.agent_id === id)?.count || 0,
+        received: received.find((r) => r.agent_id === id)?.count || 0,
+        pending: pending.find((p) => p.agent_id === id)?.count || 0,
+      }));
+
+      workload.sort((a, b) => b.pending - a.pending);
+      return reply.send({ workspace, agents: workload });
+    },
+  );
 };
