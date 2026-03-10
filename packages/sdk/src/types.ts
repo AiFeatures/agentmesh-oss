@@ -63,6 +63,8 @@ export type MeshEventName =
   | "handoffs.expired"
   | "blocker.created"
   | "blocker.resolved"
+  | "blocker.escalated"
+  | "blocker.watcher_notify"
   | "blockers.sla_breached"
   | "presence.updated"
   | "audit.logged";

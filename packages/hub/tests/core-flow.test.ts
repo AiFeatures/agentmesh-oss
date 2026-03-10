@@ -3682,6 +3682,124 @@ test("blocker watchers can be added and listed", async () => {
   await app.close();
 });
 
+// --------------- F-141: Blocker watcher notifications ---------------
+test("resolving a blocker with watchers succeeds and watchers are still listed", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-bwn-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "watcher1", display_name: "Watcher", capabilities: ["review"] },
+  });
+
+  const b = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "Need review", severity: "high" },
+  });
+  const blockerId = b.json().blocker_id;
+
+  // add watcher
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers/${blockerId}/watchers`,
+    headers: auth,
+    payload: { agent_id: "watcher1" },
+  });
+
+  // resolve the blocker — should trigger watcher notification internally
+  const r = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers/${blockerId}/resolve`,
+    headers: auth,
+    payload: { note: "Fixed", resolved_by: "a1" },
+  });
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.json().ok, true);
+
+  // watchers should still be queryable after resolution
+  const wl = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/${blockerId}/watchers`,
+    headers: auth,
+  });
+  assert.equal(wl.statusCode, 200);
+  assert.equal(wl.json().data.length, 1);
+  assert.equal(wl.json().data[0].agent_id, "watcher1");
+
+  await app.close();
+});
+
+test("escalating a blocker with watchers succeeds", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-bwe-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "w1", display_name: "W1", capabilities: ["review"] },
+  });
+
+  const b = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "Stuck", severity: "medium" },
+  });
+  const blockerId = b.json().blocker_id;
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers/${blockerId}/watchers`,
+    headers: auth,
+    payload: { agent_id: "w1" },
+  });
+
+  // escalate the blocker
+  const e = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers/${blockerId}/escalate`,
+    headers: auth,
+  });
+  assert.equal(e.statusCode, 200);
+  assert.equal(e.json().ok, true);
+  assert.equal(e.json().escalation_level, 1);
+
+  await app.close();
+});
+
 // --------------- F-70: Handoff chain tracking ---------------
 test("handoff chain tracks parent-child relationships", async () => {
   runMigrations();

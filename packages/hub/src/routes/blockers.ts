@@ -4,6 +4,25 @@ import { writeAuditLog } from "../services/audit.js";
 import { createBlocker, listBlockers, resolveBlocker } from "../services/blockers.js";
 import { broadcast } from "../ws/gateway.js";
 
+function notifyWatchers(
+  blockerId: string,
+  workspace: string,
+  event: string,
+  extra: Record<string, unknown> = {},
+): void {
+  const watchers = db
+    .prepare("SELECT agent_id FROM blocker_watchers WHERE blocker_id = ? AND workspace_id = ?")
+    .all(blockerId, workspace) as Array<{ agent_id: string }>;
+  if (watchers.length === 0) return;
+  broadcast("blocker.watcher_notify", {
+    workspace,
+    blocker_id: blockerId,
+    trigger: event,
+    watchers: watchers.map((w) => w.agent_id),
+    ...extra,
+  });
+}
+
 export const blockerRoutes: FastifyPluginAsync = async (app) => {
   app.post(
     "/api/v1/workspaces/:workspace/blockers",
@@ -127,6 +146,7 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
 
       broadcast("blocker.resolved", { workspace, blocker_id: blockerId });
+      notifyWatchers(blockerId, workspace, "resolved");
       return reply.send({ ok: true });
     },
   );
@@ -168,6 +188,9 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       broadcast("blocker.escalated", {
         workspace,
         blocker_id: blockerId,
+        escalation_level: newLevel,
+      });
+      notifyWatchers(blockerId, workspace, "escalated", {
         escalation_level: newLevel,
       });
       return reply.send({ ok: true, escalation_level: newLevel });
@@ -554,6 +577,7 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
             payload: { resolved_by, note },
           });
           broadcast("blocker.resolved", { workspace, blocker_id: bid });
+          notifyWatchers(bid, workspace, "resolved");
         }
       }
       return reply.send({ results });

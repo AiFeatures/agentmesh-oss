@@ -1,3 +1,4 @@
+import { db } from "../db/index.js";
 import { getOverdueBlockers } from "../services/blockers.js";
 import { broadcast } from "../ws/gateway.js";
 
@@ -32,6 +33,21 @@ export function startBlockerSlaMonitor(): NodeJS.Timeout {
         blockerIds: overdue.map((b) => b.blocker_id),
         count: overdue.length,
       });
+      for (const b of overdue) {
+        const watchers = db
+          .prepare(
+            "SELECT agent_id FROM blocker_watchers WHERE blocker_id = ? AND workspace_id = ?",
+          )
+          .all(b.blocker_id, b.workspace_id) as Array<{ agent_id: string }>;
+        if (watchers.length > 0) {
+          broadcast("blocker.watcher_notify", {
+            workspace: b.workspace_id,
+            blocker_id: b.blocker_id,
+            trigger: "sla_breached",
+            watchers: watchers.map((w) => w.agent_id),
+          });
+        }
+      }
       void notifyEscalationWebhook(overdue);
     }
   }, INTERVAL_MS);
