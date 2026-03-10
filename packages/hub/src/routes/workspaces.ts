@@ -2605,4 +2605,28 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-320 audit-timeline
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/audit-timeline",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT strftime('%Y-%m-%d %H:00:00', created_at) as hour,
+                  action, COUNT(*) as count
+           FROM audit_log
+           WHERE workspace_id = ?
+           GROUP BY hour, action
+           ORDER BY hour DESC
+           LIMIT 100`,
+        )
+        .all(req.params.workspace) as {
+        hour: string;
+        action: string;
+        count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, timeline: rows });
+    },
+  );
 };

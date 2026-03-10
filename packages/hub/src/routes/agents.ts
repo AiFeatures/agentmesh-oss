@@ -3007,4 +3007,54 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: rows });
     },
   );
+
+  // F-319 capability-load
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/capability-load",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const agents = db
+        .prepare("SELECT capabilities FROM agents WHERE workspace_id = ?")
+        .all(req.params.workspace) as { capabilities: string | null }[];
+
+      const supply: Record<string, number> = {};
+      for (const a of agents) {
+        let caps: string[] = [];
+        try {
+          caps = JSON.parse(a.capabilities || "[]") as string[];
+        } catch {
+          /* skip */
+        }
+        for (const c of caps) {
+          supply[c] = (supply[c] || 0) + 1;
+        }
+      }
+
+      const demand = db
+        .prepare(
+          `SELECT capability_tag, COUNT(*) as request_count
+           FROM handoffs
+           WHERE workspace_id = ? AND capability_tag IS NOT NULL
+           GROUP BY capability_tag`,
+        )
+        .all(req.params.workspace) as {
+        capability_tag: string;
+        request_count: number;
+      }[];
+
+      const allCaps = new Set([...Object.keys(supply), ...demand.map((d) => d.capability_tag)]);
+      const result = [...allCaps]
+        .map((cap) => {
+          const demandRow = demand.find((d) => d.capability_tag === cap);
+          return {
+            capability: cap,
+            supply: supply[cap] || 0,
+            demand: demandRow?.request_count || 0,
+          };
+        })
+        .sort((a, b) => b.demand - b.supply - (a.demand - a.supply));
+
+      reply.send({ workspace: req.params.workspace, capabilities: result });
+    },
+  );
 };
