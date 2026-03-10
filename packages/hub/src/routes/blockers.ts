@@ -2671,4 +2671,38 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-419 resolution-streak
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/resolution-streak",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT DISTINCT DATE(resolved_at) AS day
+           FROM blockers
+           WHERE workspace_id = ? AND resolved_at IS NOT NULL
+           ORDER BY day DESC`,
+        )
+        .all(req.params.workspace) as { day: string }[];
+      let streak = 0;
+      const today = new Date().toISOString().slice(0, 10);
+      let expected = today;
+      for (const row of rows) {
+        if (row.day === expected) {
+          streak++;
+          const d = new Date(expected);
+          d.setDate(d.getDate() - 1);
+          expected = d.toISOString().slice(0, 10);
+        } else {
+          break;
+        }
+      }
+      reply.send({
+        workspace: req.params.workspace,
+        streak_days: streak,
+        total_resolution_days: rows.length,
+      });
+    },
+  );
 };

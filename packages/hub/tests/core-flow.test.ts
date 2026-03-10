@@ -12862,3 +12862,31 @@ test("GET /agents/model-version-matrix returns matrix", async () => {
   assert.ok(Array.isArray(body.matrix));
   await app.close();
 });
+
+// F-419 resolution-streak
+test("GET /blockers/resolution-streak returns streak", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "brs-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/resolution-streak`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(typeof body.streak_days === "number");
+  await app.close();
+});
+
+// F-420 from-to-heatmap
+test("GET /handoffs/from-to-heatmap returns pairs", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "fthm-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/from-to-heatmap`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.pairs));
+  await app.close();
+});

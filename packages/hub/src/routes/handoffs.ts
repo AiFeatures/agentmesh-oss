@@ -2845,4 +2845,27 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, handoffs: rows });
     },
   );
+
+  // F-420 from-to-heatmap
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/from-to-heatmap",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT from_agent_id, to_agent_id, COUNT(*) AS count
+           FROM handoffs
+           WHERE workspace_id = ?
+           GROUP BY from_agent_id, to_agent_id
+           ORDER BY count DESC
+           LIMIT 30`,
+        )
+        .all(req.params.workspace) as {
+        from_agent_id: string;
+        to_agent_id: string;
+        count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, pairs: rows });
+    },
+  );
 };
