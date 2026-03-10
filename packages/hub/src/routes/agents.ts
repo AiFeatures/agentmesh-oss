@@ -267,8 +267,73 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
         "UPDATE agents SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE agent_id = ?",
       ).run(status, agentId);
 
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        actorId: agentId,
+        action: "agent.status_change",
+        entityType: "agent",
+        entityId: agentId,
+        requestId: request.id,
+        payload: { status },
+      });
+
       broadcast("agents.updated", { workspace, agent_id: agentId, status });
       return reply.send({ ok: true, status });
+    },
+  );
+
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/:agentId/history",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            limit: { type: "string" },
+            offset: { type: "string" },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as {
+        workspace: string;
+        agentId: string;
+      };
+      const { limit, offset } = request.query as { limit?: string; offset?: string };
+
+      const agent = db
+        .prepare("SELECT agent_id FROM agents WHERE agent_id = ? AND workspace_id = ?")
+        .get(agentId, workspace);
+      if (!agent) {
+        return reply.code(404).send({ error: "Agent not found" });
+      }
+
+      const count = Math.min(200, Math.max(1, Number(limit) || 50));
+      const start = Math.max(0, Number(offset) || 0);
+
+      const rows = db
+        .prepare(
+          `SELECT action, payload, created_at FROM audit_log
+           WHERE workspace_id = ? AND entity_type = 'agent' AND entity_id = ?
+           ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+        )
+        .all(workspace, agentId, count, start) as Array<{
+        action: string;
+        payload: string | null;
+        created_at: string;
+      }>;
+
+      const data = rows.map((row) => ({
+        action: row.action,
+        payload: parseJsonSafe(row.payload ?? "", null as Record<string, unknown> | null),
+        created_at: row.created_at,
+      }));
+
+      return reply.send({ data, total: data.length });
     },
   );
 };

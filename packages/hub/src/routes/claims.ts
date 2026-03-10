@@ -153,6 +153,16 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       if (!ok) {
         return reply.code(404).send({ error: "Active claim not found" });
       }
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        action: "claim.release",
+        entityType: "claim",
+        entityId: claimId,
+        requestId: request.id,
+      });
+
       broadcast("claims.updated", { workspace, claim_id: claimId, status: "released" });
       return reply.send({ ok: true });
     },
@@ -186,6 +196,17 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       if (!ok) {
         return reply.code(404).send({ error: "Active claim not found" });
       }
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        action: "claim.renew",
+        entityType: "claim",
+        entityId: claimId,
+        requestId: request.id,
+        payload: { ttl_seconds: body?.ttl_seconds ?? 1800 },
+      });
+
       broadcast("claims.updated", { workspace, claim_id: claimId, status: "active" });
       return reply.send({ ok: true });
     },

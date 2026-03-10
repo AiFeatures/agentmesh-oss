@@ -90,6 +90,8 @@ CREATE INDEX IF NOT EXISTS idx_agents_last_heartbeat ON agents(last_heartbeat_at
 CREATE INDEX IF NOT EXISTS idx_claims_workspace_status ON claims(workspace_id, status);
 CREATE INDEX IF NOT EXISTS idx_claims_expires ON claims(expires_at);
 CREATE INDEX IF NOT EXISTS idx_claim_paths_claim ON claim_paths(claim_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_claim_paths_unique ON claim_paths(claim_id, path_pattern);
 CREATE INDEX IF NOT EXISTS idx_handoffs_workspace_status ON handoffs(workspace_id, status);
 CREATE INDEX IF NOT EXISTS idx_blockers_workspace_status ON blockers(workspace_id, status);
+CREATE INDEX IF NOT EXISTS idx_blockers_deadline ON blockers(deadline_at) WHERE deadline_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_audit_workspace_time ON audit_log(workspace_id, created_at);

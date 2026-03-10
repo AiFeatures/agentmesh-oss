@@ -98,6 +98,16 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       if (!ok) {
         return reply.code(404).send({ error: "Handoff not found" });
       }
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        action: "handoff.accept",
+        entityType: "handoff",
+        entityId: handoffId,
+        requestId: request.id,
+      });
+
       broadcast("handoffs.updated", { workspace, handoff_id: handoffId, status: "accepted" });
       return reply.send({ ok: true });
     },
@@ -119,6 +129,16 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       if (!ok) {
         return reply.code(404).send({ error: "Handoff not found" });
       }
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        action: "handoff.reject",
+        entityType: "handoff",
+        entityId: handoffId,
+        requestId: request.id,
+      });
+
       broadcast("handoffs.updated", { workspace, handoff_id: handoffId, status: "rejected" });
       return reply.send({ ok: true });
     },

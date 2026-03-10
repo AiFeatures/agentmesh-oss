@@ -3,17 +3,11 @@ import type {
   BlockerPayload,
   ClaimPayload,
   HandoffPayload,
+  MeshClientOptions,
   MeshEvent,
   RegisterPayload,
   RoutePayload,
 } from "./types.js";
-
-type MeshClientOptions = {
-  baseUrl?: string;
-  wsUrl?: string;
-  sharedSecret: string;
-  requestTimeoutMs?: number;
-};
 
 export class AgentMeshClient {
   private readonly baseUrl: string;
@@ -23,6 +17,8 @@ export class AgentMeshClient {
   private ws: WebSocket | null = null;
   private wsClosed = true;
   private wsBackoffMs = 1000;
+  private wsReconnectAttempts = 0;
+  private readonly maxReconnectAttempts: number;
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -31,6 +27,7 @@ export class AgentMeshClient {
     this.wsUrl = options.wsUrl ?? "ws://localhost:3777/ws";
     this.sharedSecret = options.sharedSecret;
     this.requestTimeoutMs = options.requestTimeoutMs ?? 30000;
+    this.maxReconnectAttempts = options.maxReconnectAttempts ?? 20;
   }
 
   async register(payload: RegisterPayload): Promise<unknown> {
@@ -53,6 +50,29 @@ export class AgentMeshClient {
     });
   }
 
+  async listWorkspaces(): Promise<unknown> {
+    return await this.request("/api/v1/workspaces", { method: "GET" });
+  }
+
+  async createWorkspace(
+    workspace: string,
+    displayName: string,
+    basePath?: string,
+  ): Promise<unknown> {
+    return await this.request("/api/v1/workspaces", {
+      method: "POST",
+      body: JSON.stringify({
+        workspace_id: workspace,
+        display_name: displayName,
+        base_path: basePath,
+      }),
+    });
+  }
+
+  async getWorkspaceStats(workspace: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/stats`, { method: "GET" });
+  }
+
   async updateWorkspace(
     workspace: string,
     updates: { display_name?: string; base_path?: string },
@@ -69,8 +89,36 @@ export class AgentMeshClient {
     });
   }
 
+  async listAgents(
+    workspace: string,
+    opts?: { status?: string; limit?: number; offset?: number },
+  ): Promise<unknown> {
+    const params = new URLSearchParams();
+    if (opts?.status) params.set("status", opts.status);
+    if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
+    if (opts?.offset !== undefined) params.set("offset", String(opts.offset));
+    const qs = params.toString();
+    return await this.request(`/api/v1/workspaces/${workspace}/agents${qs ? `?${qs}` : ""}`, {
+      method: "GET",
+    });
+  }
+
   async getHandoff(workspace: string, handoffId: string): Promise<unknown> {
     return await this.request(`/api/v1/workspaces/${workspace}/handoffs/${handoffId}`, {
+      method: "GET",
+    });
+  }
+
+  async listHandoffs(
+    workspace: string,
+    opts?: { status?: string; limit?: number; offset?: number },
+  ): Promise<unknown> {
+    const params = new URLSearchParams();
+    if (opts?.status) params.set("status", opts.status);
+    if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
+    if (opts?.offset !== undefined) params.set("offset", String(opts.offset));
+    const qs = params.toString();
+    return await this.request(`/api/v1/workspaces/${workspace}/handoffs${qs ? `?${qs}` : ""}`, {
       method: "GET",
     });
   }
@@ -96,6 +144,21 @@ export class AgentMeshClient {
       method: "PATCH",
       body: JSON.stringify({ status }),
     });
+  }
+
+  async getAgentHistory(
+    workspace: string,
+    agentId: string,
+    opts?: { limit?: number; offset?: number },
+  ): Promise<unknown> {
+    const params = new URLSearchParams();
+    if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
+    if (opts?.offset !== undefined) params.set("offset", String(opts.offset));
+    const qs = params.toString();
+    return await this.request(
+      `/api/v1/workspaces/${workspace}/agents/${agentId}/history${qs ? `?${qs}` : ""}`,
+      { method: "GET" },
+    );
   }
 
   startHeartbeat(workspace: string, agentId: string, intervalMs = 10000): () => void {
@@ -192,8 +255,48 @@ export class AgentMeshClient {
     });
   }
 
+  async listBlockers(
+    workspace: string,
+    opts?: { status?: string; limit?: number; offset?: number },
+  ): Promise<unknown> {
+    const params = new URLSearchParams();
+    if (opts?.status) params.set("status", opts.status);
+    if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
+    if (opts?.offset !== undefined) params.set("offset", String(opts.offset));
+    const qs = params.toString();
+    return await this.request(`/api/v1/workspaces/${workspace}/blockers${qs ? `?${qs}` : ""}`, {
+      method: "GET",
+    });
+  }
+
+  async resolveBlocker(
+    workspace: string,
+    blockerId: string,
+    resolution: string,
+    resolvedBy?: string,
+  ): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/blockers/${blockerId}/resolve`, {
+      method: "POST",
+      body: JSON.stringify({ note: resolution, resolved_by: resolvedBy }),
+    });
+  }
+
   async getClaim(workspace: string, claimId: string): Promise<unknown> {
     return await this.request(`/api/v1/workspaces/${workspace}/claims/${claimId}`, {
+      method: "GET",
+    });
+  }
+
+  async listClaims(
+    workspace: string,
+    opts?: { status?: string; limit?: number; offset?: number },
+  ): Promise<unknown> {
+    const params = new URLSearchParams();
+    if (opts?.status) params.set("status", opts.status);
+    if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
+    if (opts?.offset !== undefined) params.set("offset", String(opts.offset));
+    const qs = params.toString();
+    return await this.request(`/api/v1/workspaces/${workspace}/claims${qs ? `?${qs}` : ""}`, {
       method: "GET",
     });
   }
@@ -216,6 +319,7 @@ export class AgentMeshClient {
       this.ws = new WebSocket(this.wsUrl);
       this.ws.on("open", () => {
         this.wsBackoffMs = 1000;
+        this.wsReconnectAttempts = 0;
       });
       this.ws.on("message", (data: RawData) => {
         try {
@@ -226,6 +330,11 @@ export class AgentMeshClient {
       });
       this.ws.on("close", () => {
         if (!this.wsClosed) {
+          this.wsReconnectAttempts++;
+          if (this.wsReconnectAttempts > this.maxReconnectAttempts) {
+            this.wsClosed = true;
+            return;
+          }
           if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
           this.reconnectTimer = setTimeout(connect, this.wsBackoffMs);
           this.wsBackoffMs = Math.min(this.wsBackoffMs * 2, 30000);
@@ -249,6 +358,24 @@ export class AgentMeshClient {
     this.ws?.close();
     this.ws = null;
     this.stopHeartbeat();
+  }
+
+  subscribeWorkspace(workspace: string): void {
+    if (this.ws && this.ws.readyState === 1) {
+      this.ws.send(JSON.stringify({ type: "subscribe", workspace }));
+    }
+  }
+
+  unsubscribeWorkspace(workspace: string): void {
+    if (this.ws && this.ws.readyState === 1) {
+      this.ws.send(JSON.stringify({ type: "unsubscribe", workspace }));
+    }
+  }
+
+  async garbageCollectClaims(workspace: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/claims/gc`, {
+      method: "POST",
+    });
   }
 
   private async request(path: string, init: RequestInit): Promise<unknown> {

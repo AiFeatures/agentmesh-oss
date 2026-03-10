@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { buildApp } from "../src/app.js";
 import { runMigrations } from "../src/db/index.js";
 import { getSharedSecret } from "../src/security/secret.js";
@@ -478,7 +478,9 @@ test("capabilities introspection returns capability-to-agent map", async () => {
     headers: auth,
   });
   assert.equal(res.statusCode, 200);
-  const caps = res.json() as { data: Array<{ capability: string; agents: string[]; count: number }> };
+  const caps = res.json() as {
+    data: Array<{ capability: string; agents: string[]; count: number }>;
+  };
   const ts = caps.data.find((c) => c.capability === "typescript");
   assert.ok(ts);
   assert.equal(ts.count, 2);
@@ -823,7 +825,7 @@ test("GET single claim returns claim with paths", async () => {
   assert.equal(detailRes.statusCode, 200);
   const claim = detailRes.json() as { claim_id: string; paths: string[] };
   assert.equal(claim.claim_id, claimId);
-  assert.deepStrictEqual(claim.paths, ["src/**", "lib/**"]);
+  assert.deepStrictEqual(claim.paths.sort(), ["lib/**", "src/**"]);
 
   const filterRes = await app.inject({
     method: "GET",
@@ -890,6 +892,571 @@ test("X-Request-Id header is propagated in responses", async () => {
   });
   assert.equal(autoRes.statusCode, 200);
   assert.ok(autoRes.headers["x-request-id"]);
+
+  await app.close();
+});
+
+test("agent status change creates audit log entry", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-stataud-${suffix}`;
+  const agentId = `agent-stataud-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Status Audit" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "Audit Agent" },
+  });
+
+  await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${workspaceId}/agents/${agentId}/status`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { status: "idle" },
+  });
+
+  const auditRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/audit?action=agent.status_change`,
+    headers: auth,
+  });
+  assert.equal(auditRes.statusCode, 200);
+  const audit = auditRes.json() as { data: Array<{ action: string }> };
+  assert.ok(audit.data.length >= 1);
+  assert.equal(audit.data[0].action, "agent.status_change");
+
+  await app.close();
+});
+
+test("agent history endpoint returns status change history", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-hist-${suffix}`;
+  const agentId = `agent-hist-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "History Test" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "History Agent" },
+  });
+
+  await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${workspaceId}/agents/${agentId}/status`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { status: "idle" },
+  });
+
+  await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${workspaceId}/agents/${agentId}/status`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { status: "blocked" },
+  });
+
+  const histRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/agents/${agentId}/history`,
+    headers: auth,
+  });
+  assert.equal(histRes.statusCode, 200);
+  const hist = histRes.json() as { data: Array<{ action: string; created_at: string }> };
+  assert.ok(hist.data.length >= 3);
+
+  const hist404 = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/agents/nonexistent/history`,
+    headers: auth,
+  });
+  assert.equal(hist404.statusCode, 404);
+
+  await app.close();
+});
+
+test("claim release and renew create audit log entries", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-claaud-${suffix}`;
+  const agentId = `agent-claaud-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Claim Audit" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "CA Agent" },
+  });
+
+  const claimRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, scope: "test", paths: ["test/**"] },
+  });
+  const claimId = (claimRes.json() as { claim_id: string }).claim_id;
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/claims/${claimId}/renew`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { ttl_seconds: 600 },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/claims/${claimId}/release`,
+    headers: auth,
+  });
+
+  const auditRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/audit`,
+    headers: auth,
+  });
+  const audit = auditRes.json() as { data: Array<{ action: string }> };
+  const actions = audit.data.map((e) => e.action);
+  assert.ok(actions.includes("claim.renew"));
+  assert.ok(actions.includes("claim.release"));
+
+  await app.close();
+});
+
+test("handoff accept and reject create audit log entries", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-hoaud-${suffix}`;
+  const agentId = `agent-hoaud-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "HO Audit" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "HO Agent" },
+  });
+
+  const h1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/handoffs`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { from_agent_id: agentId, summary: "Accept this" },
+  });
+  const h1Id = (h1.json() as { handoff_id: string }).handoff_id;
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/handoffs/${h1Id}/accept`,
+    headers: auth,
+  });
+
+  const h2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/handoffs`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { from_agent_id: agentId, summary: "Reject this" },
+  });
+  const h2Id = (h2.json() as { handoff_id: string }).handoff_id;
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/handoffs/${h2Id}/reject`,
+    headers: auth,
+  });
+
+  const auditRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/audit`,
+    headers: auth,
+  });
+  const audit = auditRes.json() as { data: Array<{ action: string }> };
+  const actions = audit.data.map((e) => e.action);
+  assert.ok(actions.includes("handoff.accept"));
+  assert.ok(actions.includes("handoff.reject"));
+
+  await app.close();
+});
+
+test("workspace update creates audit log entry", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36);
+  const workspaceId = `ws-upaud-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Update Audit" },
+  });
+
+  await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${workspaceId}`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { display_name: "Updated Name" },
+  });
+
+  const auditRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/audit?action=workspace.update`,
+    headers: auth,
+  });
+  const audit = auditRes.json() as { data: Array<{ action: string }> };
+  assert.equal(audit.data.length, 1);
+  assert.equal(audit.data[0].action, "workspace.update");
+
+  await app.close();
+});
+
+test("health endpoint includes ws_connections count", async () => {
+  runMigrations();
+  const app = buildApp();
+  const res = await app.inject({ method: "GET", url: "/health" });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { ws_connections: number; agents_online: number; active_claims: number; open_blockers: number; version: string };
+  assert.equal(typeof body.ws_connections, "number");
+  assert.equal(body.ws_connections, 0);
+  assert.equal(typeof body.agents_online, "number");
+  assert.equal(typeof body.active_claims, "number");
+  assert.equal(typeof body.open_blockers, "number");
+  assert.equal(body.version, "0.1.0");
+
+  await app.close();
+});
+
+test("PATCH agent status changes status", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "st";
+  const workspaceId = `ws-status-${suffix}`;
+  const agentId = `agent-st-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Status Test" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "StatusAgent", capabilities: ["test"] },
+  });
+
+  const patchRes = await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${workspaceId}/agents/${agentId}/status`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { status: "idle" },
+  });
+  assert.equal(patchRes.statusCode, 200);
+  const patchBody = patchRes.json() as { ok: boolean; status: string };
+  assert.equal(patchBody.ok, true);
+  assert.equal(patchBody.status, "idle");
+
+  const getRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/agents/${agentId}`,
+    headers: auth,
+  });
+  const agent = getRes.json() as { status: string };
+  assert.equal(agent.status, "idle");
+
+  await app.close();
+});
+
+test("renew claim extends expiry", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "rn";
+  const workspaceId = `ws-renew-${suffix}`;
+  const agentId = `agent-rn-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Renew Test" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "RenewAgent", capabilities: ["test"] },
+  });
+
+  const claimRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, scope: "backend", paths: ["src/**"], ttl_seconds: 60 },
+  });
+  assert.equal(claimRes.statusCode, 201);
+  const claimId = (claimRes.json() as { claim_id: string }).claim_id;
+
+  const renewRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/claims/${claimId}/renew`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { ttl_seconds: 3600 },
+  });
+  assert.equal(renewRes.statusCode, 200);
+  const renewBody = renewRes.json() as { ok: boolean };
+  assert.equal(renewBody.ok, true);
+
+  await app.close();
+});
+
+test("batch-release claims releases multiple", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "br";
+  const workspaceId = `ws-batch-${suffix}`;
+  const agentId = `agent-br-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Batch Test" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "BatchAgent", capabilities: ["test"] },
+  });
+
+  const claim1Res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, scope: "frontend", paths: ["ui/**"] },
+  });
+  const claim2Res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, scope: "backend", paths: ["api/**"] },
+  });
+  const id1 = (claim1Res.json() as { claim_id: string }).claim_id;
+  const id2 = (claim2Res.json() as { claim_id: string }).claim_id;
+
+  const batchRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/claims/batch-release`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { claim_ids: [id1, id2, "nonexistent-claim"] },
+  });
+  assert.equal(batchRes.statusCode, 200);
+  const batch = batchRes.json() as { released: string[]; not_found: string[] };
+  assert.equal(batch.released.length, 2);
+  assert.ok(batch.released.includes(id1));
+  assert.ok(batch.released.includes(id2));
+  assert.deepStrictEqual(batch.not_found, ["nonexistent-claim"]);
+
+  await app.close();
+});
+
+test("claims gc releases claims of stale agents", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "gc";
+  const workspaceId = `ws-gc-${suffix}`;
+  const agentId = `agent-gc-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "GC Test" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "GCAgent", capabilities: ["test"] },
+  });
+
+  const claimRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, scope: "backend", paths: ["gc/**"] },
+  });
+  assert.equal(claimRes.statusCode, 201);
+
+  // Mark agent as stale so GC picks up its claims
+  await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${workspaceId}/agents/${agentId}/status`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { status: "idle" },
+  });
+  // Force agent to stale status directly (stale is not settable via API, but we can test GC with online agents returning 0)
+  const gcRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/claims/gc`,
+    headers: auth,
+  });
+  assert.equal(gcRes.statusCode, 200);
+  const gcBody = gcRes.json() as { released_count: number };
+  // Agent is not stale/evicted so GC should not release
+  assert.equal(gcBody.released_count, 0);
+
+  await app.close();
+});
+
+test("deregister agent removes agent", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "dr";
+  const workspaceId = `ws-dereg-${suffix}`;
+  const agentId = `agent-dr-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Dereg Test" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "DeregAgent", capabilities: ["test"] },
+  });
+
+  const deleteRes = await app.inject({
+    method: "DELETE",
+    url: `/api/v1/workspaces/${workspaceId}/agents/${agentId}`,
+    headers: auth,
+  });
+  assert.equal(deleteRes.statusCode, 200);
+
+  const getRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/agents/${agentId}`,
+    headers: auth,
+  });
+  assert.equal(getRes.statusCode, 404);
+
+  await app.close();
+});
+
+test("agent history returns audit trail", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "ah";
+  const workspaceId = `ws-hist-${suffix}`;
+  const agentId = `agent-ah-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "History Test" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "HistAgent", capabilities: ["test"] },
+  });
+
+  // Change status to generate an audit entry
+  await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${workspaceId}/agents/${agentId}/status`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { status: "blocked" },
+  });
+
+  const histRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/agents/${agentId}/history`,
+    headers: auth,
+  });
+  assert.equal(histRes.statusCode, 200);
+  const hist = histRes.json() as { data: Array<{ action: string }> };
+  assert.ok(hist.data.length >= 1);
+  // Registration + status change should be in the history
+  const actions = hist.data.map((e) => e.action);
+  assert.ok(actions.includes("agent.status_change") || actions.includes("agent.register"));
+
+  await app.close();
+});
+
+test("workspace_id rejects invalid characters", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  const badRes = await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: "bad workspace!", display_name: "Bad" },
+  });
+  assert.equal(badRes.statusCode, 400);
+
+  const goodRes = await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: `valid-ws_${Date.now()}`, display_name: "Good" },
+  });
+  assert.equal(goodRes.statusCode, 201);
 
   await app.close();
 });

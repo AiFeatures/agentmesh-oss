@@ -21,7 +21,10 @@ export function routeByCapability(workspaceId: string, capabilityTag: string): s
       caps: parseJsonSafe(String(row.capabilities ?? "[]"), [] as string[]),
     }))
     .filter((row) => Array.isArray(row.caps) && row.caps.includes(capabilityTag))
-    .sort((a, b) => Number(a.active_claims) - Number(b.active_claims));
+    .sort(
+      (a, b) =>
+        Number(a.active_claims) - Number(b.active_claims) || a.agent_id.localeCompare(b.agent_id),
+    );
 
   return candidates[0]?.agent_id ?? null;
 }

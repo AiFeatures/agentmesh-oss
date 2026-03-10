@@ -60,3 +60,11 @@ export type MeshEvent = {
   event: MeshEventName | string;
   [key: string]: unknown;
 };
+
+export type MeshClientOptions = {
+  baseUrl?: string;
+  wsUrl?: string;
+  sharedSecret: string;
+  requestTimeoutMs?: number;
+  maxReconnectAttempts?: number;
+};

@@ -118,6 +118,16 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
         ...params,
       );
 
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "system",
+        action: "workspace.update",
+        entityType: "workspace",
+        entityId: workspace,
+        requestId: request.id,
+        payload: body,
+      });
+
       return reply.send({ ok: true });
     },
   );
@@ -203,7 +213,12 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
           required: ["display_name"],
           additionalProperties: false,
           properties: {
-            workspace_id: { type: "string", minLength: 1, maxLength: 128 },
+            workspace_id: {
+              type: "string",
+              minLength: 1,
+              maxLength: 128,
+              pattern: "^[a-zA-Z0-9][a-zA-Z0-9_-]*$",
+            },
             display_name: { type: "string", minLength: 1, maxLength: 256 },
             base_path: { type: "string", maxLength: 1024 },
           },

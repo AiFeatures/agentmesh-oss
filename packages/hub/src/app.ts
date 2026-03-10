@@ -11,7 +11,7 @@ import { handoffRoutes } from "./routes/handoffs.js";
 import { routingRoutes } from "./routes/route.js";
 import { workspaceRoutes } from "./routes/workspaces.js";
 import { authGuard, validateSecret } from "./security/auth.js";
-import { registerSocket } from "./ws/gateway.js";
+import { getSocketCount, registerSocket } from "./ws/gateway.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -35,11 +35,26 @@ export function buildApp() {
 
   app.get("/health", { config: { rateLimit: { max: 300 } } }, async () => {
     const dbCheck = db.prepare("SELECT 1 as ok").get() as { ok: number } | undefined;
+    const agentCount = db
+      .prepare("SELECT count(*) as c FROM agents WHERE status IN ('online','idle')")
+      .get() as { c: number };
+    const activeClaimCount = db
+      .prepare("SELECT count(*) as c FROM claims WHERE status = 'active'")
+      .get() as { c: number };
+    const openBlockerCount = db
+      .prepare("SELECT count(*) as c FROM blockers WHERE status = 'open'")
+      .get() as { c: number };
+    const dbOk = dbCheck?.ok === 1;
     return {
-      status: dbCheck?.ok === 1 ? "ok" : "degraded",
+      status: dbOk ? "ok" : "degraded",
       service: "agentmesh-hub",
+      version: "0.1.0",
       uptime: Math.floor(process.uptime()),
-      db: dbCheck?.ok === 1 ? "connected" : "error",
+      db: dbOk ? "connected" : "error",
+      ws_connections: getSocketCount(),
+      agents_online: agentCount.c,
+      active_claims: activeClaimCount.c,
+      open_blockers: openBlockerCount.c,
     };
   });
 
@@ -61,6 +76,26 @@ export function buildApp() {
   app.register(handoffRoutes);
   app.register(blockerRoutes);
   app.register(routingRoutes);
+
+  app.setNotFoundHandler((_request, reply) => {
+    return reply.code(404).send({ error: "Not found", status: 404 });
+  });
+
+  app.setErrorHandler((error, request, reply) => {
+    if (error.validation) {
+      return reply.code(400).send({
+        error: "Validation failed",
+        status: 400,
+        details: error.message,
+      });
+    }
+    request.log.error(error);
+    const status = error.statusCode ?? 500;
+    return reply.code(status).send({
+      error: status >= 500 ? "Internal server error" : error.message,
+      status,
+    });
+  });
 
   return app;
 }
