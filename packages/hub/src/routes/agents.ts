@@ -2443,4 +2443,42 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-245: Agent last activity
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/last-activity",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const agents = db
+        .prepare(
+          `SELECT agent_id, display_name, last_heartbeat_at, updated_at FROM agents WHERE workspace_id = ?`,
+        )
+        .all(workspace) as {
+        agent_id: string;
+        display_name: string;
+        last_heartbeat_at: string | null;
+        updated_at: string;
+      }[];
+
+      const now = Date.now();
+      const result = agents
+        .map((a) => {
+          const lastActive = a.last_heartbeat_at || a.updated_at;
+          const idleHours = lastActive
+            ? Math.round(((now - new Date(lastActive).getTime()) / 3600000) * 100) / 100
+            : null;
+          return {
+            agent_id: a.agent_id,
+            display_name: a.display_name,
+            last_active: lastActive,
+            idle_hours: idleHours,
+          };
+        })
+        .sort((a, b) => (b.idle_hours ?? 0) - (a.idle_hours ?? 0));
+
+      return reply.send({ workspace, agents: result });
+    },
+  );
 };

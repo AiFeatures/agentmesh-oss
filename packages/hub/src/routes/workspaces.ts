@@ -2216,4 +2216,35 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-246: Workspace claim summary
+  app.get(
+    "/api/v1/workspaces/:workspace/claim-summary",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const claims = db
+        .prepare(`SELECT status FROM claims WHERE workspace_id = ?`)
+        .all(workspace) as { status: string }[];
+
+      const total = claims.length;
+      const byStatus: Record<string, number> = {};
+      for (const c of claims) {
+        byStatus[c.status] = (byStatus[c.status] || 0) + 1;
+      }
+
+      const active = byStatus.active || 0;
+      const released = byStatus.released || 0;
+      const expired = byStatus.expired || 0;
+      const activeRate = total > 0 ? Math.round((active / total) * 10000) / 100 : 0;
+
+      return reply.send({
+        workspace,
+        total_claims: total,
+        by_status: byStatus,
+        active_rate_percent: activeRate,
+      });
+    },
+  );
 };
