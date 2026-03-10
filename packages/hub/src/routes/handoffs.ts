@@ -2511,4 +2511,32 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, pairs: rows });
     },
   );
+
+  // F-355 stale-pending
+  app.get<{ Params: { workspace: string }; Querystring: { hours?: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/stale-pending",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const hours = Math.max(1, Math.min(720, Number(req.query.hours) || 24));
+      const rows = db
+        .prepare(
+          `SELECT handoff_id, from_agent_id, to_agent_id, summary, created_at,
+                  CAST((julianday('now') - julianday(created_at)) * 24 AS INTEGER) AS hours_pending
+           FROM handoffs
+           WHERE workspace_id = ? AND status = 'pending'
+             AND julianday('now') - julianday(created_at) > ? / 24.0
+           ORDER BY created_at ASC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace, hours) as {
+        handoff_id: string;
+        from_agent_id: string;
+        to_agent_id: string;
+        summary: string;
+        created_at: string;
+        hours_pending: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, threshold_hours: hours, stale: rows });
+    },
+  );
 };

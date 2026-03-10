@@ -11963,3 +11963,32 @@ test("GET /claims/agent-claim-count-ranking returns ranking", async () => {
   assert.ok(Array.isArray(body.ranking));
   await app.close();
 });
+
+// F-355 stale-pending
+test("GET /handoffs/stale-pending returns stale handoffs", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "stlpnd-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/stale-pending`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.stale));
+  assert.ok(typeof body.threshold_hours === "number");
+  await app.close();
+});
+
+// F-356 capability-count-ranking
+test("GET /agents/capability-count-ranking returns ranking", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "capcr-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/capability-count-ranking`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.ranking));
+  await app.close();
+});

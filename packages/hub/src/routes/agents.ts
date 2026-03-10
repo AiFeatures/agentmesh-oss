@@ -3252,4 +3252,36 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, tags: stats });
     },
   );
+
+  // F-356 capability-count-ranking
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/capability-count-ranking",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const agents = db
+        .prepare(
+          `SELECT agent_id, display_name, capabilities
+           FROM agents
+           WHERE workspace_id = ?
+           ORDER BY agent_id`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        capabilities: string;
+      }[];
+
+      const ranking = agents
+        .map((a) => {
+          let count = 0;
+          try {
+            count = JSON.parse(a.capabilities || "[]").length;
+          } catch {}
+          return { agent_id: a.agent_id, display_name: a.display_name, capability_count: count };
+        })
+        .sort((a, b) => b.capability_count - a.capability_count);
+
+      reply.send({ workspace: req.params.workspace, ranking });
+    },
+  );
 };
