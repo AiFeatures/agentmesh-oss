@@ -3088,4 +3088,21 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-431 workspace-archived-count
+  app.get(
+    "/api/v1/workspaces/workspace-archived-count",
+    { preHandler: app.authGuard },
+    async (_req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) FILTER (WHERE archived = 1) AS archived,
+                  COUNT(*) FILTER (WHERE archived = 0 OR archived IS NULL) AS active,
+                  COUNT(*) AS total
+           FROM workspaces`,
+        )
+        .get() as { archived: number; active: number; total: number };
+      reply.send(row);
+    },
+  );
 };

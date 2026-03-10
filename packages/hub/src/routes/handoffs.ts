@@ -2915,4 +2915,31 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, handoffs: rows });
     },
   );
+
+  // F-432 handoff-chain-depth
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-chain-depth",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `WITH RECURSIVE chain(handoff_id, depth) AS (
+             SELECT handoff_id, 1 FROM handoffs
+             WHERE workspace_id = ? AND parent_handoff_id IS NULL
+             UNION ALL
+             SELECT h.handoff_id, c.depth + 1
+             FROM handoffs h
+             JOIN chain c ON h.parent_handoff_id = c.handoff_id
+           )
+           SELECT MAX(depth) AS max_depth, AVG(depth) AS avg_depth, COUNT(*) AS total
+           FROM chain`,
+        )
+        .get(req.params.workspace) as {
+        max_depth: number | null;
+        avg_depth: number | null;
+        total: number;
+      };
+      reply.send({ workspace: req.params.workspace, ...rows });
+    },
+  );
 };

@@ -13030,3 +13030,29 @@ test("GET /blockers/blocker-resolution-speed returns speed data", async () => {
   assert.ok(Array.isArray(body.blockers));
   await app.close();
 });
+
+// F-431 workspace-archived-count
+test("GET /workspaces/workspace-archived-count returns counts", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const res = await app.inject({ method: "GET", url: "/api/v1/workspaces/workspace-archived-count", headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(typeof body.total === "number");
+  await app.close();
+});
+
+// F-432 handoff-chain-depth
+test("GET /handoffs/handoff-chain-depth returns depth stats", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "hcd-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-chain-depth`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(typeof body.total === "number");
+  await app.close();
+});
