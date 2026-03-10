@@ -2941,4 +2941,22 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, statuses: rows });
     },
   );
+
+  // F-389 workspace-audit-entity-type-breakdown
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/audit-entity-type-breakdown",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT entity_type, COUNT(*) AS count
+           FROM audit_log
+           WHERE workspace_id = ?
+           GROUP BY entity_type
+           ORDER BY count DESC`,
+        )
+        .all(req.params.workspace) as { entity_type: string; count: number }[];
+      reply.send({ workspace: req.params.workspace, entity_types: rows });
+    },
+  );
 };

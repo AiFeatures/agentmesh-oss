@@ -2896,4 +2896,27 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, days: rows });
     },
   );
+
+  // F-390 claim-scope-prefix-stats
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/scope-prefix-stats",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT CASE
+                    WHEN INSTR(scope, '.') > 0 THEN SUBSTR(scope, 1, INSTR(scope, '.') - 1)
+                    ELSE scope
+                  END AS prefix,
+                  COUNT(*) AS count
+           FROM claims
+           WHERE workspace_id = ?
+           GROUP BY prefix
+           ORDER BY count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as { prefix: string; count: number }[];
+      reply.send({ workspace: req.params.workspace, prefixes: rows });
+    },
+  );
 };
