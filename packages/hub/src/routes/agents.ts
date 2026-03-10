@@ -2984,4 +2984,27 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, capabilities: rare });
     },
   );
+
+  // F-315 recent-deregistrations
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/recent-deregistrations",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT agent_id, display_name, status, updated_at
+           FROM agents
+           WHERE workspace_id = ? AND status = 'offline'
+           ORDER BY updated_at DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        status: string;
+        updated_at: string | null;
+      }[];
+      reply.send({ workspace: req.params.workspace, agents: rows });
+    },
+  );
 };

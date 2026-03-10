@@ -2290,4 +2290,33 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: rows });
     },
   );
+
+  // F-316 orphan-detection
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/orphan-detection",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT h.handoff_id, h.from_agent_id, h.to_agent_id, h.status, h.created_at
+           FROM handoffs h
+           LEFT JOIN agents a ON h.to_agent_id = a.agent_id AND h.workspace_id = a.workspace_id
+           WHERE h.workspace_id = ? AND h.status = 'pending'
+             AND (h.to_agent_id IS NULL OR a.agent_id IS NULL OR a.status = 'offline')
+           ORDER BY h.created_at ASC`,
+        )
+        .all(req.params.workspace) as {
+        handoff_id: string;
+        from_agent_id: string;
+        to_agent_id: string | null;
+        status: string;
+        created_at: string;
+      }[];
+      reply.send({
+        workspace: req.params.workspace,
+        orphans: rows,
+        count: rows.length,
+      });
+    },
+  );
 };
