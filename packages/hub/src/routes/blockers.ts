@@ -1416,4 +1416,50 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-210: Blocker severity impact analysis
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/severity-impact",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const blockers = db
+        .prepare(`SELECT severity, status, agent_id FROM blockers WHERE workspace_id = ?`)
+        .all(workspace) as { severity: string; status: string; agent_id: string }[];
+
+      const weights: Record<string, number> = { critical: 10, high: 5, medium: 2, low: 1 };
+
+      const bySeverity: Record<
+        string,
+        { count: number; open: number; resolved: number; weight: number }
+      > = {};
+      let totalWeight = 0;
+      for (const b of blockers) {
+        if (!bySeverity[b.severity])
+          bySeverity[b.severity] = { count: 0, open: 0, resolved: 0, weight: 0 };
+        bySeverity[b.severity].count++;
+        const w = weights[b.severity] || 1;
+        bySeverity[b.severity].weight += w;
+        totalWeight += w;
+        if (b.status === "open") bySeverity[b.severity].open++;
+        else if (b.status === "resolved") bySeverity[b.severity].resolved++;
+      }
+
+      const impactedAgents = new Set(
+        blockers.filter((b) => b.status === "open").map((b) => b.agent_id),
+      ).size;
+
+      return reply.send({
+        workspace,
+        total_blockers: blockers.length,
+        total_weight: totalWeight,
+        impacted_agents: impactedAgents,
+        by_severity: Object.entries(bySeverity).map(([severity, stats]) => ({
+          severity,
+          ...stats,
+        })),
+      });
+    },
+  );
 };

@@ -1945,4 +1945,44 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, days: totalDays, trend });
     },
   );
+
+  // F-209: Handoff creation trend
+  app.get(
+    "/api/v1/workspaces/:workspace/handoff-trend",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { days = "7" } = request.query as { days?: string };
+      const totalDays = Math.min(Number.parseInt(days, 10) || 7, 90);
+      const now = new Date();
+
+      const handoffs = db
+        .prepare(`SELECT created_at, status FROM handoffs WHERE workspace_id = ?`)
+        .all(workspace) as { created_at: string; status: string }[];
+
+      const trend: { date: string; created: number; accepted: number; rejected: number }[] = [];
+      for (let i = totalDays - 1; i >= 0; i--) {
+        const dayStart = new Date(now);
+        dayStart.setDate(dayStart.getDate() - i);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(dayStart);
+        dayEnd.setDate(dayEnd.getDate() + 1);
+        const dateStr = dayStart.toISOString().split("T")[0];
+
+        const dayHandoffs = handoffs.filter((h) => {
+          const t = new Date(h.created_at).getTime();
+          return t >= dayStart.getTime() && t < dayEnd.getTime();
+        });
+
+        trend.push({
+          date: dateStr,
+          created: dayHandoffs.length,
+          accepted: dayHandoffs.filter((h) => h.status === "accepted").length,
+          rejected: dayHandoffs.filter((h) => h.status === "rejected").length,
+        });
+      }
+
+      return reply.send({ workspace, days: totalDays, trend });
+    },
+  );
 };
