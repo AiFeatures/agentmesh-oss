@@ -10447,3 +10447,39 @@ test("GET /claims/scope-popularity returns popular scopes", async () => {
   assert.ok(Array.isArray(body3.most_popular));
   await app.close();
 });
+
+// ---------- F-255: Agent task summary ----------
+test("GET /agents/task-summary returns task breakdown per agent", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ag-tasksumm-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/task-summary`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_tasks === "number");
+  assert.ok(Array.isArray(body.agents));
+  await app.close();
+});
+
+// ---------- F-256: Workspace audit frequency ----------
+test("GET /workspace audit-frequency returns event breakdown", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ws-audfreq-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/audit-frequency`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_events === "number");
+  assert.ok(typeof body.unique_actions === "number");
+  assert.ok(Array.isArray(body.top_actions));
+  assert.ok(Array.isArray(body.daily));
+  await app.close();
+});

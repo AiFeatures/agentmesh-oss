@@ -2276,4 +2276,42 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-256: Workspace audit frequency
+  app.get(
+    "/api/v1/workspaces/:workspace/audit-frequency",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const events = db
+        .prepare(`SELECT action, created_at FROM audit_log WHERE workspace_id = ?`)
+        .all(workspace) as { action: string; created_at: string }[];
+
+      const actionCounts: Record<string, number> = {};
+      const dailyCounts: Record<string, number> = {};
+
+      for (const e of events) {
+        actionCounts[e.action] = (actionCounts[e.action] || 0) + 1;
+        const day = e.created_at.slice(0, 10);
+        dailyCounts[day] = (dailyCounts[day] || 0) + 1;
+      }
+
+      const actions = Object.entries(actionCounts)
+        .map(([action, count]) => ({ action, count }))
+        .sort((a, b) => b.count - a.count);
+
+      const daily = Object.entries(dailyCounts)
+        .map(([day, count]) => ({ day, count }))
+        .sort((a, b) => a.day.localeCompare(b.day));
+
+      return reply.send({
+        workspace,
+        total_events: events.length,
+        unique_actions: actions.length,
+        top_actions: actions.slice(0, 20),
+        daily,
+      });
+    },
+  );
 };

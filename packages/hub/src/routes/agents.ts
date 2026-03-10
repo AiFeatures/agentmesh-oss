@@ -2548,4 +2548,32 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-255: Agent task summary
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/task-summary",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const tasks = db
+        .prepare(`SELECT agent_id, status FROM agent_tasks WHERE workspace_id = ?`)
+        .all(workspace) as { agent_id: string; status: string }[];
+
+      const agentMap: Record<string, Record<string, number>> = {};
+      for (const t of tasks) {
+        if (!agentMap[t.agent_id]) agentMap[t.agent_id] = {};
+        agentMap[t.agent_id][t.status] = (agentMap[t.agent_id][t.status] || 0) + 1;
+      }
+
+      const agents = Object.entries(agentMap)
+        .map(([agent_id, statuses]) => {
+          const total = Object.values(statuses).reduce((s, v) => s + v, 0);
+          return { agent_id, total_tasks: total, by_status: statuses };
+        })
+        .sort((a, b) => b.total_tasks - a.total_tasks);
+
+      return reply.send({ workspace, total_tasks: tasks.length, agents });
+    },
+  );
 };
