@@ -1061,4 +1061,35 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: overlaps, count: overlaps.length });
     },
   );
+
+  /* ── F-122  claim renewal trends ────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/renewal-trends",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const rows = db
+        .prepare(
+          `SELECT claim_id, agent_id, scope, renewal_count
+           FROM claims
+           WHERE workspace_id = ? AND renewal_count > 0
+           ORDER BY renewal_count DESC
+           LIMIT 50`,
+        )
+        .all(workspace);
+      const total =
+        (
+          db
+            .prepare("SELECT SUM(renewal_count) as s FROM claims WHERE workspace_id = ?")
+            .get(workspace) as { s: number | null }
+        ).s ?? 0;
+      return reply.send({ total_renewals: total, data: rows });
+    },
+  );
 };

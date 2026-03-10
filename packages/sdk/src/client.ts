@@ -1014,6 +1014,25 @@ export class AgentMeshClient {
     return this.request(`/api/v1/workspaces/${workspace}/blockers/correlation`, { method: "GET" });
   }
 
+  /* ── F-120  workspace health score ──────────────── */
+  async getWorkspaceHealthScore(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/health-score`, { method: "GET" });
+  }
+
+  /* ── F-121  agent collaboration matrix ──────────── */
+  async getCollaborationMatrix(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/agents/collaboration-matrix`, {
+      method: "GET",
+    });
+  }
+
+  /* ── F-122  claim renewal trends ────────────────── */
+  async getClaimRenewalTrends(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/claims/renewal-trends`, {
+      method: "GET",
+    });
+  }
+
   private async request<T = unknown>(path: string, init: RequestInit): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);

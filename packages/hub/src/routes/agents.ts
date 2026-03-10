@@ -1299,4 +1299,32 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-121  agent collaboration matrix ──────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/collaboration-matrix",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const rows = db
+        .prepare(
+          `SELECT
+             CASE WHEN from_agent_id < to_agent_id THEN from_agent_id ELSE to_agent_id END as agent_a,
+             CASE WHEN from_agent_id < to_agent_id THEN to_agent_id ELSE from_agent_id END as agent_b,
+             COUNT(*) as interactions
+           FROM handoffs
+           WHERE workspace_id = ? AND to_agent_id IS NOT NULL
+           GROUP BY agent_a, agent_b
+           ORDER BY interactions DESC`,
+        )
+        .all(workspace);
+      return reply.send({ data: rows });
+    },
+  );
 };

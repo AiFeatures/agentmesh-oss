@@ -5954,3 +5954,106 @@ test("blocker correlation returns agents with multiple blockers", async () => {
 
   await app.close();
 });
+
+/* ── F-120  workspace health score ─────────────────── */
+test("workspace health score returns composite score", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "hs";
+  const ws = `ws-hs-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Health Score" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/health-score`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { score: number; factors: Record<string, number> };
+  assert.equal(body.score, 100); // no agents, no blockers = perfect
+  assert.equal(body.factors.open_blockers, 0);
+
+  await app.close();
+});
+
+/* ── F-121  agent collaboration matrix ─────────────── */
+test("agent collaboration matrix returns interaction pairs", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "cm";
+  const ws = `ws-cm-${suffix}`;
+  const a1 = `cm-a1-${suffix}`;
+  const a2 = `cm-a2-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Collab" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: a1, display_name: "C1", capabilities: ["test"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: a2, display_name: "C2", capabilities: ["test"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { from_agent_id: a1, to_agent_id: a2, summary: "collab" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/collaboration-matrix`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const data = res.json().data as Array<{ agent_a: string; agent_b: string; interactions: number }>;
+  assert.equal(data.length, 1);
+  assert.equal(data[0].interactions, 1);
+
+  await app.close();
+});
+
+/* ── F-122  claim renewal trends ───────────────────── */
+test("claim renewal trends returns renewal data", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "rt";
+  const ws = `ws-rt-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Renewal Trends" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/renewal-trends`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { total_renewals: number; data: unknown[] };
+  assert.equal(body.total_renewals, 0);
+
+  await app.close();
+});

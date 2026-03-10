@@ -971,4 +971,60 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
     }
     return reply.send({ data: results });
   });
+
+  /* ── F-120  workspace health score ──────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/health-score",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const totalAgents = (
+        db.prepare("SELECT COUNT(*) as c FROM agents WHERE workspace_id = ?").get(workspace) as {
+          c: number;
+        }
+      ).c;
+      const onlineAgents = (
+        db
+          .prepare("SELECT COUNT(*) as c FROM agents WHERE workspace_id = ? AND status = 'online'")
+          .get(workspace) as { c: number }
+      ).c;
+      const openBlockers = (
+        db
+          .prepare("SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status = 'open'")
+          .get(workspace) as { c: number }
+      ).c;
+      const pendingHandoffs = (
+        db
+          .prepare(
+            "SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND status = 'pending'",
+          )
+          .get(workspace) as { c: number }
+      ).c;
+
+      let score = 100;
+      if (totalAgents > 0) {
+        const onlineRatio = onlineAgents / totalAgents;
+        score -= Math.round((1 - onlineRatio) * 30);
+      }
+      score -= Math.min(openBlockers * 5, 30);
+      score -= Math.min(pendingHandoffs * 2, 20);
+      score = Math.max(score, 0);
+
+      return reply.send({
+        score,
+        factors: {
+          total_agents: totalAgents,
+          online_agents: onlineAgents,
+          open_blockers: openBlockers,
+          pending_handoffs: pendingHandoffs,
+        },
+      });
+    },
+  );
 };
