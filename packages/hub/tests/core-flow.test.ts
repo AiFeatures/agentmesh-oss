@@ -1608,3 +1608,137 @@ test("blocker detail includes timeline", async () => {
 
   await app.close();
 });
+
+test("PATCH agent capabilities updates capabilities", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "cp";
+  const workspaceId = `ws-caps-${suffix}`;
+  const agentId = `agent-cp-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Caps Test" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "CapsAgent", capabilities: ["test"] },
+  });
+
+  const patchRes = await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${workspaceId}/agents/${agentId}/capabilities`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { capabilities: ["typescript", "python", "review"] },
+  });
+  assert.equal(patchRes.statusCode, 200);
+  const body = patchRes.json() as { ok: boolean; capabilities: string[] };
+  assert.equal(body.ok, true);
+  assert.deepStrictEqual(body.capabilities, ["typescript", "python", "review"]);
+
+  const getRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/agents/${agentId}`,
+    headers: auth,
+  });
+  const agent = getRes.json() as { capabilities: string[] };
+  assert.deepStrictEqual(agent.capabilities, ["typescript", "python", "review"]);
+
+  await app.close();
+});
+
+test("workspace metrics returns grouped counts", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "mx";
+  const workspaceId = `ws-metrics-${suffix}`;
+  const agentId = `agent-mx-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Metrics Test" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "MXAgent", capabilities: ["test"] },
+  });
+
+  const metricsRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/metrics`,
+    headers: auth,
+  });
+  assert.equal(metricsRes.statusCode, 200);
+  const metrics = metricsRes.json() as {
+    workspace_id: string;
+    agents: Record<string, number>;
+    claims: Record<string, number>;
+    audit_events_24h: number;
+  };
+  assert.equal(metrics.workspace_id, workspaceId);
+  assert.equal(metrics.agents.online, 1);
+  assert.ok(typeof metrics.audit_events_24h === "number");
+
+  await app.close();
+});
+
+test("handoff detail includes timeline", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "ht";
+  const workspaceId = `ws-htl-${suffix}`;
+  const agentId = `agent-ht-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "Handoff TL" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: agentId, display_name: "HTAgent", capabilities: ["test"] },
+  });
+
+  const handoffRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/handoffs`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: {
+      from_agent_id: agentId,
+      capability_tag: "test",
+      summary: "Review needed",
+    },
+  });
+  assert.equal(handoffRes.statusCode, 201);
+  const handoffId = (handoffRes.json() as { handoff_id: string }).handoff_id;
+
+  const detailRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/handoffs/${handoffId}`,
+    headers: auth,
+  });
+  assert.equal(detailRes.statusCode, 200);
+  const detail = detailRes.json() as {
+    handoff_id: string;
+    timeline: Array<{ action: string }>;
+  };
+  assert.equal(detail.handoff_id, handoffId);
+  assert.ok(Array.isArray(detail.timeline));
+  assert.ok(detail.timeline.length >= 1);
+
+  await app.close();
+});

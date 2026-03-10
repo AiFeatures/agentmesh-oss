@@ -252,6 +252,57 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
   );
 
   app.get(
+    "/api/v1/workspaces/:workspace/metrics",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+
+      const agentsByStatus = db
+        .prepare(
+          "SELECT status, COUNT(*) as count FROM agents WHERE workspace_id = ? GROUP BY status",
+        )
+        .all(workspace) as Array<{ status: string; count: number }>;
+      const claimsByStatus = db
+        .prepare(
+          "SELECT status, COUNT(*) as count FROM claims WHERE workspace_id = ? GROUP BY status",
+        )
+        .all(workspace) as Array<{ status: string; count: number }>;
+      const handoffsByStatus = db
+        .prepare(
+          "SELECT status, COUNT(*) as count FROM handoffs WHERE workspace_id = ? GROUP BY status",
+        )
+        .all(workspace) as Array<{ status: string; count: number }>;
+      const blockersBySeverity = db
+        .prepare(
+          "SELECT severity, COUNT(*) as count FROM blockers WHERE workspace_id = ? AND status = 'open' GROUP BY severity",
+        )
+        .all(workspace) as Array<{ severity: string; count: number }>;
+      const auditLast24h = db
+        .prepare(
+          "SELECT COUNT(*) as count FROM audit_log WHERE workspace_id = ? AND created_at >= datetime('now', '-1 day')",
+        )
+        .get(workspace) as { count: number };
+
+      return reply.send({
+        workspace_id: workspace,
+        agents: Object.fromEntries(agentsByStatus.map((r) => [r.status, r.count])),
+        claims: Object.fromEntries(claimsByStatus.map((r) => [r.status, r.count])),
+        handoffs: Object.fromEntries(handoffsByStatus.map((r) => [r.status, r.count])),
+        open_blockers_by_severity: Object.fromEntries(
+          blockersBySeverity.map((r) => [r.severity, r.count]),
+        ),
+        audit_events_24h: auditLast24h.count,
+      });
+    },
+  );
+
+  app.get(
     "/api/v1/workspaces/:workspace/export",
     { preHandler: app.authGuard },
     async (request, reply) => {

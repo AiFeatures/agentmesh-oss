@@ -188,7 +188,12 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(404).send({ error: "Handoff not found" });
       }
       row.context = parseJsonSafe(String(row.context ?? ""), null);
-      return reply.send(row);
+      const timeline = db
+        .prepare(
+          "SELECT action, actor_type, actor_id, payload, created_at FROM audit_log WHERE entity_type = 'handoff' AND entity_id = ? ORDER BY created_at ASC",
+        )
+        .all(handoffId) as Array<Record<string, unknown>>;
+      return reply.send({ ...row, timeline });
     },
   );
 };

@@ -336,4 +336,58 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data, total: data.length });
     },
   );
+
+  app.patch(
+    "/api/v1/workspaces/:workspace/agents/:agentId/capabilities",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["capabilities"],
+          additionalProperties: false,
+          properties: {
+            capabilities: {
+              type: "array",
+              minItems: 1,
+              maxItems: 128,
+              items: { type: "string", minLength: 1, maxLength: 128 },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as {
+        workspace: string;
+        agentId: string;
+      };
+      const { capabilities } = request.body as { capabilities: string[] };
+
+      const agent = db
+        .prepare("SELECT agent_id FROM agents WHERE agent_id = ? AND workspace_id = ?")
+        .get(agentId, workspace);
+      if (!agent) {
+        return reply.code(404).send({ error: "Agent not found" });
+      }
+
+      db.prepare(
+        "UPDATE agents SET capabilities = ?, updated_at = CURRENT_TIMESTAMP WHERE agent_id = ?",
+      ).run(JSON.stringify(capabilities), agentId);
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        actorId: agentId,
+        action: "agent.capabilities_update",
+        entityType: "agent",
+        entityId: agentId,
+        requestId: request.id,
+        payload: { capabilities },
+      });
+
+      broadcast("agents.updated", { workspace, agent_id: agentId, capabilities });
+      return reply.send({ ok: true, capabilities });
+    },
+  );
 };

@@ -249,6 +249,23 @@ export class AgentMeshClient {
     });
   }
 
+  async updateAgentCapabilities(
+    workspace: string,
+    agentId: string,
+    capabilities: string[],
+  ): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}/capabilities`, {
+      method: "PATCH",
+      body: JSON.stringify({ capabilities }),
+    });
+  }
+
+  async getWorkspaceMetrics(workspace: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/metrics`, {
+      method: "GET",
+    });
+  }
+
   async getBlocker(workspace: string, blockerId: string): Promise<unknown> {
     return await this.request(`/api/v1/workspaces/${workspace}/blockers/${blockerId}`, {
       method: "GET",
