@@ -2590,4 +2590,32 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, distribution: rows });
     },
   );
+
+  // F-404 severity-resolution-time
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/severity-resolution-time",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT severity,
+                  COUNT(*) AS count,
+                  CAST(AVG(strftime('%s', resolved_at) - strftime('%s', created_at)) AS INTEGER) AS avg_seconds,
+                  CAST(MIN(strftime('%s', resolved_at) - strftime('%s', created_at)) AS INTEGER) AS min_seconds,
+                  CAST(MAX(strftime('%s', resolved_at) - strftime('%s', created_at)) AS INTEGER) AS max_seconds
+           FROM blockers
+           WHERE workspace_id = ? AND resolved_at IS NOT NULL
+           GROUP BY severity
+           ORDER BY avg_seconds DESC`,
+        )
+        .all(req.params.workspace) as {
+        severity: string;
+        count: number;
+        avg_seconds: number;
+        min_seconds: number;
+        max_seconds: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, stats: rows });
+    },
+  );
 };

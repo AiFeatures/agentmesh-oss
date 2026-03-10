@@ -2737,4 +2737,25 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ...row });
     },
   );
+
+  // F-403 retry-count-distribution
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/retry-count-distribution",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT retry_count, COUNT(*) AS count
+           FROM handoffs
+           WHERE workspace_id = ?
+           GROUP BY retry_count
+           ORDER BY retry_count ASC`,
+        )
+        .all(req.params.workspace) as {
+        retry_count: number;
+        count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, distribution: rows });
+    },
+  );
 };
