@@ -2829,4 +2829,29 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: rows });
     },
   );
+
+  // F-375 claim-path-depth-stats
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/path-depth-stats",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT cp.path_pattern,
+                  LENGTH(cp.path_pattern) - LENGTH(REPLACE(cp.path_pattern, '/', '')) AS depth
+           FROM claim_paths cp
+           JOIN claims c ON c.claim_id = cp.claim_id
+           WHERE c.workspace_id = ?
+           ORDER BY depth DESC
+           LIMIT 50`,
+        )
+        .all(req.params.workspace) as { path_pattern: string; depth: number }[];
+      const avg_depth = rows.length > 0 ? rows.reduce((s, r) => s + r.depth, 0) / rows.length : 0;
+      reply.send({
+        workspace: req.params.workspace,
+        paths: rows,
+        avg_depth: Math.round(avg_depth * 100) / 100,
+      });
+    },
+  );
 };

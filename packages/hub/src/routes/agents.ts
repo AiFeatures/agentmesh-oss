@@ -3357,4 +3357,27 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: rows });
     },
   );
+
+  // F-376 agent-online-offline-ratio
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/online-offline-ratio",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS total,
+                  SUM(CASE WHEN status = 'online' THEN 1 ELSE 0 END) AS online,
+                  SUM(CASE WHEN status = 'offline' THEN 1 ELSE 0 END) AS offline
+           FROM agents
+           WHERE workspace_id = ?`,
+        )
+        .get(req.params.workspace) as { total: number; online: number; offline: number };
+      const ratio = row.offline > 0 ? row.online / row.offline : row.online > 0 ? Infinity : 0;
+      reply.send({
+        workspace: req.params.workspace,
+        ...row,
+        ratio: Number.isFinite(ratio) ? Math.round(ratio * 100) / 100 : null,
+      });
+    },
+  );
 };
