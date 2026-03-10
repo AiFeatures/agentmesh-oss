@@ -2431,4 +2431,26 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, scopes: rows });
     },
   );
+
+  // F-297 priority-histogram
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/priority-histogram",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT priority, status, COUNT(*) as count
+           FROM claims
+           WHERE workspace_id = ?
+           GROUP BY priority, status
+           ORDER BY priority DESC, count DESC`,
+        )
+        .all(req.params.workspace) as {
+        priority: number | null;
+        status: string;
+        count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, buckets: rows });
+    },
+  );
 };

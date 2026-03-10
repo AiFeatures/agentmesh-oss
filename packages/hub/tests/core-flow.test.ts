@@ -11134,3 +11134,31 @@ test("GET /handoffs/round-trip-time returns pair timing data", async () => {
   assert.ok(Array.isArray(body.pairs));
   await app.close();
 });
+
+// F-297 priority-histogram
+test("GET /claims/priority-histogram returns priority buckets", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "prihist-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/priority-histogram`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.buckets));
+  await app.close();
+});
+
+// F-298 resolution-pattern
+test("GET /blockers/resolution-pattern returns resolution patterns", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "respat-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/resolution-pattern`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.patterns));
+  await app.close();
+});

@@ -2043,4 +2043,34 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, blockers: rows, avg_watchers: avg });
     },
   );
+
+  // F-298 resolution-pattern
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/resolution-pattern",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT severity,
+                  COUNT(*) as total,
+                  SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved,
+                  AVG(CASE WHEN resolved_at IS NOT NULL THEN (julianday(resolved_at) - julianday(created_at)) * 86400 END) as avg_resolution_secs,
+                  MIN(CASE WHEN resolved_at IS NOT NULL THEN (julianday(resolved_at) - julianday(created_at)) * 86400 END) as min_resolution_secs,
+                  MAX(CASE WHEN resolved_at IS NOT NULL THEN (julianday(resolved_at) - julianday(created_at)) * 86400 END) as max_resolution_secs
+           FROM blockers
+           WHERE workspace_id = ?
+           GROUP BY severity
+           ORDER BY total DESC`,
+        )
+        .all(req.params.workspace) as {
+        severity: string;
+        total: number;
+        resolved: number;
+        avg_resolution_secs: number | null;
+        min_resolution_secs: number | null;
+        max_resolution_secs: number | null;
+      }[];
+      reply.send({ workspace: req.params.workspace, patterns: rows });
+    },
+  );
 };
