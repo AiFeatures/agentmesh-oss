@@ -3059,4 +3059,28 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, modes: rows });
     },
   );
+
+  // F-457 handoff-timeout-seconds-stats
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-timeout-seconds-stats",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS total,
+                  AVG(timeout_seconds) AS avg_timeout,
+                  MAX(timeout_seconds) AS max_timeout,
+                  MIN(timeout_seconds) AS min_timeout
+           FROM handoffs
+           WHERE workspace_id = ? AND timeout_seconds IS NOT NULL`,
+        )
+        .get(req.params.workspace) as {
+        total: number;
+        avg_timeout: number | null;
+        max_timeout: number | null;
+        min_timeout: number | null;
+      };
+      reply.send({ workspace: req.params.workspace, ...row });
+    },
+  );
 };

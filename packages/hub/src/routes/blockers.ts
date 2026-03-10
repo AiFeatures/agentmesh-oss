@@ -2893,4 +2893,28 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, blockers: rows });
     },
   );
+
+  // F-458 blocker-open-age
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/blocker-open-age",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT blocker_id, title, severity,
+                  ROUND((julianday('now') - julianday(created_at)) * 24, 2) AS age_hours
+           FROM blockers
+           WHERE workspace_id = ? AND status != 'resolved'
+           ORDER BY age_hours DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        blocker_id: string;
+        title: string;
+        severity: string;
+        age_hours: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, blockers: rows });
+    },
+  );
 };
