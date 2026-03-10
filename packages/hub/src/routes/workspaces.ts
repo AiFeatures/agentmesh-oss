@@ -3327,4 +3327,37 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ...row });
     },
   );
+
+  // F-503 workspace-handoff-density
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/workspace-handoff-density",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT
+             (SELECT COUNT(*) FROM handoffs WHERE workspace_id = ?) AS total_handoffs,
+             (SELECT COUNT(*) FROM agents WHERE workspace_id = ?) AS total_agents,
+             ROUND(
+               CASE WHEN (SELECT COUNT(*) FROM agents WHERE workspace_id = ?) > 0
+                 THEN 1.0 * (SELECT COUNT(*) FROM handoffs WHERE workspace_id = ?)
+                       / (SELECT COUNT(*) FROM agents WHERE workspace_id = ?)
+                 ELSE 0
+               END, 2
+             ) AS handoffs_per_agent`,
+        )
+        .get(
+          req.params.workspace,
+          req.params.workspace,
+          req.params.workspace,
+          req.params.workspace,
+          req.params.workspace,
+        ) as {
+        total_handoffs: number;
+        total_agents: number;
+        handoffs_per_agent: number;
+      };
+      reply.send({ workspace: req.params.workspace, ...row });
+    },
+  );
 };

@@ -3104,4 +3104,28 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, timeline: rows });
     },
   );
+
+  // F-504 blocker-title-keyword-frequency
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/blocker-title-keyword-frequency",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(`SELECT title FROM blockers WHERE workspace_id = ? AND title IS NOT NULL`)
+        .all(req.params.workspace) as { title: string }[];
+      const freq: Record<string, number> = {};
+      for (const r of rows) {
+        const words = r.title
+          .toLowerCase()
+          .split(/\s+/)
+          .filter((w: string) => w.length > 2);
+        for (const w of words) freq[w] = (freq[w] || 0) + 1;
+      }
+      const sorted = Object.entries(freq)
+        .map(([word, count]) => ({ word, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 30);
+      reply.send({ workspace: req.params.workspace, keywords: sorted });
+    },
+  );
 };
