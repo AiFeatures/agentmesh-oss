@@ -16,7 +16,9 @@ type HandoffInput = {
 export function createHandoff(input: HandoffInput): { id: string; toAgentId: string | null } {
   const routed =
     input.toAgentId ??
-    (input.capabilityTag ? routeByCapability(input.workspaceId, input.capabilityTag) : null);
+    (input.capabilityTag
+      ? (routeByCapability(input.workspaceId, input.capabilityTag)?.agent_id ?? null)
+      : null);
 
   const id = handoffId();
   const timeoutSec = input.timeoutSeconds ?? null;

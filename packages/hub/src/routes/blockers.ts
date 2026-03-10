@@ -127,6 +127,7 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
           properties: {
             status: { type: "string", enum: ["open", "resolved"] },
             severity: { type: "string", enum: ["low", "medium", "high", "critical"] },
+            agent_id: { type: "string", maxLength: 128 },
             limit: { type: "string" },
             offset: { type: "string" },
           },
@@ -135,11 +136,12 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
     },
     async (request, reply) => {
       const { workspace } = request.params as { workspace: string };
-      const { limit, offset, status, severity } = request.query as {
+      const { limit, offset, status, severity, agent_id } = request.query as {
         limit?: string;
         offset?: string;
         status?: string;
         severity?: string;
+        agent_id?: string;
       };
       let all = listBlockers(workspace);
       if (status) {
@@ -147,6 +149,9 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       }
       if (severity) {
         all = all.filter((b) => b.severity === severity);
+      }
+      if (agent_id) {
+        all = all.filter((b) => b.agent_id === agent_id);
       }
       const start = Math.max(0, Number(offset) || 0);
       const count = Math.min(200, Math.max(1, Number(limit) || 50));

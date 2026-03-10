@@ -2173,3 +2173,28 @@ test("capability routing selects least-busy agent", async () => {
 
   await app.close();
 });
+
+/* ── F-32  duplicate workspace → 409 ──────────────────────────── */
+test("POST /workspaces with duplicate workspace_id returns 409", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "dup-ws-test";
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "First" },
+  });
+
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Second" },
+  });
+  assert.equal(res.statusCode, 409);
+  assert.equal(res.json().error, "Workspace already exists");
+
+  await app.close();
+});

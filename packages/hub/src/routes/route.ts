@@ -24,12 +24,16 @@ export const routingRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(400).send({ error: "capability is required" });
       }
 
-      const agentId = routeByCapability(workspace, body.capability);
-      if (!agentId) {
+      const result = routeByCapability(workspace, body.capability);
+      if (!result) {
         return reply.code(404).send({ error: "No matching online agent" });
       }
 
-      return reply.send({ agent_id: agentId });
+      return reply.send({
+        agent_id: result.agent_id,
+        active_claims: result.active_claims,
+        metadata: result.metadata,
+      });
     },
   );
 };

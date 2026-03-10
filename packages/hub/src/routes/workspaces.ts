@@ -234,9 +234,16 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       };
       const id = body.workspace_id ?? generateWorkspaceId();
 
-      db.prepare(
-        "INSERT INTO workspaces (workspace_id, display_name, base_path) VALUES (?, ?, ?)",
-      ).run(id, body.display_name, body.base_path ?? null);
+      try {
+        db.prepare(
+          "INSERT INTO workspaces (workspace_id, display_name, base_path) VALUES (?, ?, ?)",
+        ).run(id, body.display_name, body.base_path ?? null);
+      } catch (err: unknown) {
+        if (err instanceof Error && err.message.includes("UNIQUE constraint failed")) {
+          return reply.code(409).send({ error: "Workspace already exists" });
+        }
+        throw err;
+      }
 
       writeAuditLog({
         workspaceId: id,
