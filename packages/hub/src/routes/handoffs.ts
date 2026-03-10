@@ -1531,4 +1531,42 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-217: Handoff direction analysis
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/direction-analysis",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const handoffs = db
+        .prepare(
+          `SELECT from_agent_id, to_agent_id FROM handoffs WHERE workspace_id = ? AND to_agent_id IS NOT NULL`,
+        )
+        .all(workspace) as { from_agent_id: string; to_agent_id: string }[];
+
+      const sentCount: Record<string, number> = {};
+      const recvCount: Record<string, number> = {};
+      for (const h of handoffs) {
+        sentCount[h.from_agent_id] = (sentCount[h.from_agent_id] || 0) + 1;
+        recvCount[h.to_agent_id] = (recvCount[h.to_agent_id] || 0) + 1;
+      }
+
+      const allAgents = new Set([...Object.keys(sentCount), ...Object.keys(recvCount)]);
+      const agents = [...allAgents].map((id) => {
+        const sent = sentCount[id] || 0;
+        const received = recvCount[id] || 0;
+        return {
+          agent_id: id,
+          sent,
+          received,
+          net: sent - received,
+          role: sent > received ? "delegator" : received > sent ? "executor" : "balanced",
+        };
+      });
+
+      agents.sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+      return reply.send({ workspace, total_handoffs: handoffs.length, agents });
+    },
+  );
 };

@@ -1844,4 +1844,46 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-218: Claim renewal rate
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/renewal-rate",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const totalClaims = (
+        db.prepare(`SELECT COUNT(*) as c FROM claims WHERE workspace_id = ?`).get(workspace) as {
+          c: number;
+        }
+      ).c;
+
+      const renewals = db
+        .prepare(
+          `SELECT cr.claim_id, COUNT(*) as renewal_count
+           FROM claim_renewal_history cr
+           JOIN claims c ON c.claim_id = cr.claim_id
+           WHERE c.workspace_id = ?
+           GROUP BY cr.claim_id`,
+        )
+        .all(workspace) as { claim_id: string; renewal_count: number }[];
+
+      const claimsWithRenewals = renewals.length;
+      const totalRenewals = renewals.reduce((s, r) => s + r.renewal_count, 0);
+      const renewalRate =
+        totalClaims > 0 ? Math.round((claimsWithRenewals / totalClaims) * 10000) / 100 : 0;
+      const avgRenewals =
+        claimsWithRenewals > 0 ? Math.round((totalRenewals / claimsWithRenewals) * 100) / 100 : 0;
+
+      return reply.send({
+        workspace,
+        total_claims: totalClaims,
+        claims_with_renewals: claimsWithRenewals,
+        total_renewals: totalRenewals,
+        renewal_rate_percent: renewalRate,
+        avg_renewals_per_claim: avgRenewals,
+        top_renewed: renewals.sort((a, b) => b.renewal_count - a.renewal_count).slice(0, 10),
+      });
+    },
+  );
 };

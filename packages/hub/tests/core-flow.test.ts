@@ -9722,3 +9722,45 @@ test("GET /agents/inactive-report returns inactive agents", async () => {
   assert.ok(Array.isArray(body2.inactive));
   await app.close();
 });
+
+// ---------- F-217: Handoff direction analysis ----------
+test("GET /handoffs/direction-analysis returns flow analysis", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ho-diranalysis-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/direction-analysis`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_handoffs === "number");
+  assert.ok(Array.isArray(body.agents));
+  const a1 = body.agents.find((a: any) => a.agent_id === "a1");
+  assert.ok(a1);
+  assert.equal(a1.role, "delegator");
+  await app.close();
+});
+
+// ---------- F-218: Claim renewal rate ----------
+test("GET /claims/renewal-rate returns renewal statistics", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `cl-renewrate-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/renewal-rate`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_claims === "number");
+  assert.ok(typeof body.renewal_rate_percent === "number");
+  assert.ok(typeof body.total_renewals === "number");
+  assert.ok(Array.isArray(body.top_renewed));
+  await app.close();
+});
