@@ -288,6 +288,24 @@ export class AgentMeshClient {
     });
   }
 
+  async archiveWorkspace(workspace: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/archive`, {
+      method: "POST",
+    });
+  }
+
+  async unarchiveWorkspace(workspace: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/unarchive`, {
+      method: "POST",
+    });
+  }
+
+  async escalateBlocker(workspace: string, blockerId: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/blockers/${blockerId}/escalate`, {
+      method: "POST",
+    });
+  }
+
   async getAuditLog(
     workspace: string,
     opts?: { action?: string; limit?: number; offset?: number },

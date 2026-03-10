@@ -2954,3 +2954,130 @@ test("agent register with group and filter by group", async () => {
 
   await app.close();
 });
+
+/* ── F-57  enhanced health check ──────────────────────────────── */
+test("health check returns extended fields", async () => {
+  const app = await buildApp();
+  const res = await app.inject({ method: "GET", url: "/health" });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok("pending_handoffs" in body);
+  assert.ok("workspaces" in body);
+  assert.ok("memory_mb" in body);
+  assert.ok(typeof body.memory_mb === "number");
+  await app.close();
+});
+
+/* ── F-58  blocker escalation ─────────────────────────────────── */
+test("blocker escalation increments escalation_level", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `esc-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "EscWS" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "esc-agent", display_name: "Esc" },
+  });
+  const b = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: {
+      agent_id: "esc-agent",
+      title: "Escalation test",
+      severity: "high",
+    },
+  });
+  const blockerId = b.json().blocker_id;
+
+  // escalate once
+  const e1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers/${blockerId}/escalate`,
+    headers: auth,
+  });
+  assert.equal(e1.statusCode, 200);
+  assert.equal(e1.json().escalation_level, 1);
+
+  // escalate again
+  const e2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers/${blockerId}/escalate`,
+    headers: auth,
+  });
+  assert.equal(e2.statusCode, 200);
+  assert.equal(e2.json().escalation_level, 2);
+
+  // resolve and try escalate — should fail
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers/${blockerId}/resolve`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: {},
+  });
+  const e3 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers/${blockerId}/escalate`,
+    headers: auth,
+  });
+  assert.equal(e3.statusCode, 422);
+
+  await app.close();
+});
+
+/* ── F-59  workspace archive/unarchive ────────────────────────── */
+test("workspace archive and unarchive", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `arch-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "ArchWS" },
+  });
+
+  // archive
+  const a1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/archive`,
+    headers: auth,
+  });
+  assert.equal(a1.statusCode, 200);
+  assert.equal(a1.json().ok, true);
+
+  // double archive — 422
+  const a2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/archive`,
+    headers: auth,
+  });
+  assert.equal(a2.statusCode, 422);
+
+  // unarchive
+  const u1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/unarchive`,
+    headers: auth,
+  });
+  assert.equal(u1.statusCode, 200);
+
+  // double unarchive — 422
+  const u2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/unarchive`,
+    headers: auth,
+  });
+  assert.equal(u2.statusCode, 422);
+
+  await app.close();
+});

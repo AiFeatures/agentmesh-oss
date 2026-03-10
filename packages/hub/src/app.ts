@@ -44,6 +44,12 @@ export function buildApp() {
     const openBlockerCount = db
       .prepare("SELECT count(*) as c FROM blockers WHERE status = 'open'")
       .get() as { c: number };
+    const pendingHandoffs = db
+      .prepare("SELECT count(*) as c FROM handoffs WHERE status = 'pending'")
+      .get() as { c: number };
+    const workspaceCount = db.prepare("SELECT count(*) as c FROM workspaces").get() as {
+      c: number;
+    };
     const dbOk = dbCheck?.ok === 1;
     return {
       status: dbOk ? "ok" : "degraded",
@@ -52,9 +58,12 @@ export function buildApp() {
       uptime: Math.floor(process.uptime()),
       db: dbOk ? "connected" : "error",
       ws_connections: getSocketCount(),
+      workspaces: workspaceCount.c,
       agents_online: agentCount.c,
       active_claims: activeClaimCount.c,
       open_blockers: openBlockerCount.c,
+      pending_handoffs: pendingHandoffs.c,
+      memory_mb: Math.round(process.memoryUsage().rss / 1048576),
     };
   });
 

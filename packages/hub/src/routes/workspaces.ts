@@ -168,6 +168,67 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  /* ── F-59  workspace archive/unarchive ──────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/archive",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id, archived FROM workspaces WHERE workspace_id = ?")
+        .get(workspace) as { workspace_id: string; archived: number } | undefined;
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      if (ws.archived === 1) {
+        return reply.code(422).send({ error: "Workspace already archived" });
+      }
+
+      db.prepare("UPDATE workspaces SET archived = 1 WHERE workspace_id = ?").run(workspace);
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "system",
+        action: "workspace.archive",
+        entityType: "workspace",
+        entityId: workspace,
+        requestId: request.id,
+      });
+
+      return reply.send({ ok: true });
+    },
+  );
+
+  app.post(
+    "/api/v1/workspaces/:workspace/unarchive",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id, archived FROM workspaces WHERE workspace_id = ?")
+        .get(workspace) as { workspace_id: string; archived: number } | undefined;
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      if (ws.archived !== 1) {
+        return reply.code(422).send({ error: "Workspace is not archived" });
+      }
+
+      db.prepare("UPDATE workspaces SET archived = 0 WHERE workspace_id = ?").run(workspace);
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "system",
+        action: "workspace.unarchive",
+        entityType: "workspace",
+        entityId: workspace,
+        requestId: request.id,
+      });
+
+      return reply.send({ ok: true });
+    },
+  );
+
   app.get(
     "/api/v1/workspaces/:workspace/audit",
     {

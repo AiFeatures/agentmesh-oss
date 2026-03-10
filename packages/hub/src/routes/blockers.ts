@@ -116,6 +116,49 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  /* ── F-58  blocker escalation ───────────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/blockers/:blockerId/escalate",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { blockerId, workspace } = request.params as {
+        blockerId: string;
+        workspace: string;
+      };
+      const row = db
+        .prepare("SELECT * FROM blockers WHERE blocker_id = ? AND workspace_id = ?")
+        .get(blockerId, workspace) as Record<string, unknown> | undefined;
+      if (!row) {
+        return reply.code(404).send({ error: "Blocker not found" });
+      }
+      if (row.status === "resolved") {
+        return reply.code(422).send({ error: "Cannot escalate resolved blocker" });
+      }
+
+      const newLevel = Number(row.escalation_level ?? 0) + 1;
+      db.prepare("UPDATE blockers SET escalation_level = ? WHERE blocker_id = ?").run(
+        newLevel,
+        blockerId,
+      );
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "system",
+        action: "blocker.escalate",
+        entityType: "blocker",
+        entityId: blockerId,
+        payload: { escalation_level: newLevel },
+      });
+
+      broadcast("blocker.escalated", {
+        workspace,
+        blocker_id: blockerId,
+        escalation_level: newLevel,
+      });
+      return reply.send({ ok: true, escalation_level: newLevel });
+    },
+  );
+
   app.get(
     "/api/v1/workspaces/:workspace/blockers",
     {
