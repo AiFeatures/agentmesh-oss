@@ -701,4 +701,35 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows });
     },
   );
+
+  /* ── F-125  blocker age distribution ──────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/age-distribution",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const rows = db
+        .prepare(
+          `SELECT
+             CASE
+               WHEN (julianday('now') - julianday(created_at)) * 24 < 1 THEN 'under_1h'
+               WHEN (julianday('now') - julianday(created_at)) * 24 < 24 THEN '1h_to_24h'
+               WHEN (julianday('now') - julianday(created_at)) < 7 THEN '1d_to_7d'
+               ELSE 'over_7d'
+             END as bucket,
+             COUNT(*) as count
+           FROM blockers
+           WHERE workspace_id = ? AND status = 'open'
+           GROUP BY bucket`,
+        )
+        .all(workspace);
+      return reply.send({ data: rows });
+    },
+  );
 };

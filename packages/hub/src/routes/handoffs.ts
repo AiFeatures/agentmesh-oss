@@ -612,4 +612,38 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send(row);
     },
   );
+
+  /* ── F-123  handoff latency percentiles ───────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/latency-percentiles",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const rows = db
+        .prepare(
+          `SELECT (julianday(updated_at) - julianday(created_at)) * 86400 as latency_seconds
+           FROM handoffs
+           WHERE workspace_id = ? AND status = 'accepted'
+           ORDER BY latency_seconds ASC`,
+        )
+        .all(workspace) as Array<{ latency_seconds: number }>;
+      const n = rows.length;
+      if (n === 0) {
+        return reply.send({ count: 0, p50: null, p90: null, p99: null });
+      }
+      const p = (pct: number) => rows[Math.min(Math.floor(n * pct), n - 1)].latency_seconds;
+      return reply.send({
+        count: n,
+        p50: Math.round(p(0.5)),
+        p90: Math.round(p(0.9)),
+        p99: Math.round(p(0.99)),
+      });
+    },
+  );
 };

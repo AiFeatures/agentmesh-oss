@@ -6057,3 +6057,107 @@ test("claim renewal trends returns renewal data", async () => {
 
   await app.close();
 });
+
+/* ── F-123  handoff latency percentiles ────────────── */
+test("handoff latency percentiles when no data", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "lp";
+  const ws = `ws-lp-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Latency" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/latency-percentiles`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { count: number; p50: null };
+  assert.equal(body.count, 0);
+  assert.equal(body.p50, null);
+
+  await app.close();
+});
+
+/* ── F-124  agent registration history ─────────────── */
+test("agent registration history returns audit events", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "rh";
+  const ws = `ws-rh-${suffix}`;
+  const aid = `rh-a1-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "RegHistory" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: aid, display_name: "RHAgent", capabilities: ["test"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/registration-history`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const data = res.json().data as Array<{ action: string }>;
+  assert.ok(data.length >= 1);
+  assert.ok(data.some((r) => r.action === "agent.register"));
+
+  await app.close();
+});
+
+/* ── F-125  blocker age distribution ───────────────── */
+test("blocker age distribution returns buckets", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "ad";
+  const ws = `ws-ad-${suffix}`;
+  const aid = `ad-a1-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "AgeDist" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: aid, display_name: "ADAgent", capabilities: ["test"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: aid, title: "Age test", severity: "low" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/age-distribution`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const data = res.json().data as Array<{ bucket: string; count: number }>;
+  assert.ok(data.length >= 1);
+  assert.ok(data.some((d) => d.bucket === "under_1h"));
+
+  await app.close();
+});

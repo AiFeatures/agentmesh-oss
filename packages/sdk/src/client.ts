@@ -1033,6 +1033,28 @@ export class AgentMeshClient {
     });
   }
 
+  /* ── F-123  handoff latency percentiles ─────────── */
+  async getHandoffLatencyPercentiles(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/handoffs/latency-percentiles`, {
+      method: "GET",
+    });
+  }
+
+  /* ── F-124  agent registration history ──────────── */
+  async getAgentRegistrationHistory(workspace: string, limit?: number): Promise<unknown> {
+    const qs = limit ? `?limit=${limit}` : "";
+    return this.request(`/api/v1/workspaces/${workspace}/agents/registration-history${qs}`, {
+      method: "GET",
+    });
+  }
+
+  /* ── F-125  blocker age distribution ────────────── */
+  async getBlockerAgeDistribution(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/blockers/age-distribution`, {
+      method: "GET",
+    });
+  }
+
   private async request<T = unknown>(path: string, init: RequestInit): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
