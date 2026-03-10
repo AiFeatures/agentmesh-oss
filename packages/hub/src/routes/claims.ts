@@ -1792,4 +1792,56 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-213: Claim expiry timeline
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/expiry-timeline",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { hours = "24" } = request.query as { hours?: string };
+      const totalHours = Math.min(Number.parseInt(hours, 10) || 24, 168);
+      const now = Date.now();
+
+      const active = db
+        .prepare(
+          `SELECT claim_id, agent_id, scope, expires_at
+           FROM claims WHERE workspace_id = ? AND status = 'active' AND expires_at IS NOT NULL`,
+        )
+        .all(workspace) as {
+        claim_id: string;
+        agent_id: string;
+        scope: string;
+        expires_at: string;
+      }[];
+
+      const buckets: { label: string; count: number; claims: string[] }[] = [];
+      const intervals = [1, 2, 4, 8, 12, 24];
+      let prev = 0;
+      for (const h of intervals.filter((i) => i <= totalHours)) {
+        const claims = active.filter((c) => {
+          const remaining = (new Date(c.expires_at).getTime() - now) / 3600000;
+          return remaining > prev && remaining <= h;
+        });
+        buckets.push({
+          label: `${prev}-${h}h`,
+          count: claims.length,
+          claims: claims.map((c) => c.claim_id),
+        });
+        prev = h;
+      }
+
+      const expiredSoon = active.filter((c) => {
+        const remaining = (new Date(c.expires_at).getTime() - now) / 3600000;
+        return remaining <= 1;
+      });
+
+      return reply.send({
+        workspace,
+        active_claims: active.length,
+        expiring_within_1h: expiredSoon.length,
+        buckets,
+      });
+    },
+  );
 };
