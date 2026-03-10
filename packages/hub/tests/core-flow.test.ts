@@ -9319,3 +9319,46 @@ test("GET /agents/heartbeat-health returns health analysis", async () => {
   assert.ok(Array.isArray(body.agents));
   await app.close();
 });
+
+// ---------- F-197: Blocker recurrence rate ----------
+test("GET /blockers/recurrence-rate returns recurrence analysis", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `blk-recur-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "flaky test", severity: "medium" } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "flaky test", severity: "low" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/recurrence-rate`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.equal(body.total_blockers, 2);
+  assert.ok(body.recurring_groups >= 1);
+  assert.ok(body.recurrence_rate_percent > 0);
+  assert.ok(Array.isArray(body.top_recurring));
+  await app.close();
+});
+
+// ---------- F-198: Handoff avg acceptance time ----------
+test("GET /handoffs/avg-acceptance-time returns acceptance stats", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ho-avgacc-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] } });
+  const h = await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" } });
+  const hId = JSON.parse(h.payload).handoff_id;
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs/${hId}/accept`, headers: auth, payload: { agent_id: "a2" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/avg-acceptance-time`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.overall_avg_seconds === "number");
+  assert.ok(typeof body.total_accepted === "number");
+  assert.ok(Array.isArray(body.agents));
+  await app.close();
+});

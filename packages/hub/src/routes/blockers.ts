@@ -1323,4 +1323,57 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-197: Blocker recurrence rate — detect similar titles that recur
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/recurrence-rate",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const allBlockers = db
+        .prepare(
+          `SELECT blocker_id, title, status, created_at FROM blockers WHERE workspace_id = ? ORDER BY created_at`,
+        )
+        .all(workspace) as {
+        blocker_id: string;
+        title: string;
+        status: string;
+        created_at: string;
+      }[];
+
+      // Group by normalized title (lowercase, trimmed)
+      const groups: Record<string, typeof allBlockers> = {};
+      for (const b of allBlockers) {
+        const key = b.title.toLowerCase().trim();
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(b);
+      }
+
+      const recurring = Object.entries(groups)
+        .filter(([_, items]) => items.length > 1)
+        .map(([title, items]) => ({
+          title,
+          count: items.length,
+          first_seen: items[0].created_at,
+          last_seen: items[items.length - 1].created_at,
+        }))
+        .sort((a, b) => b.count - a.count);
+
+      const totalRecurring = recurring.reduce((s, r) => s + r.count, 0);
+      const recurrenceRate =
+        allBlockers.length > 0
+          ? Math.round((totalRecurring / allBlockers.length) * 10000) / 100
+          : 0;
+
+      return reply.send({
+        workspace,
+        total_blockers: allBlockers.length,
+        recurring_groups: recurring.length,
+        recurring_blocker_count: totalRecurring,
+        recurrence_rate_percent: recurrenceRate,
+        top_recurring: recurring.slice(0, 10),
+      });
+    },
+  );
 };

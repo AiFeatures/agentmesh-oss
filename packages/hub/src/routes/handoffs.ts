@@ -1331,4 +1331,56 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, agents: workload });
     },
   );
+
+  // F-198: Average acceptance time per agent
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/avg-acceptance-time",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const accepted = db
+        .prepare(
+          `SELECT to_agent_id, created_at, updated_at
+           FROM handoffs
+           WHERE workspace_id = ? AND status = 'accepted' AND to_agent_id IS NOT NULL`,
+        )
+        .all(workspace) as { to_agent_id: string; created_at: string; updated_at: string }[];
+
+      const byAgent: Record<string, number[]> = {};
+      for (const h of accepted) {
+        const elapsed =
+          (new Date(h.updated_at).getTime() - new Date(h.created_at).getTime()) / 1000;
+        if (elapsed >= 0) {
+          if (!byAgent[h.to_agent_id]) byAgent[h.to_agent_id] = [];
+          byAgent[h.to_agent_id].push(elapsed);
+        }
+      }
+
+      const agentStats = Object.entries(byAgent).map(([agent_id, times]) => {
+        const avg = times.reduce((s, t) => s + t, 0) / times.length;
+        return {
+          agent_id,
+          avg_acceptance_seconds: Math.round(avg * 100) / 100,
+          total_accepted: times.length,
+        };
+      });
+      agentStats.sort((a, b) => a.avg_acceptance_seconds - b.avg_acceptance_seconds);
+
+      const overallTimes = accepted.map(
+        (h) => (new Date(h.updated_at).getTime() - new Date(h.created_at).getTime()) / 1000,
+      );
+      const overallAvg =
+        overallTimes.length > 0
+          ? Math.round((overallTimes.reduce((s, t) => s + t, 0) / overallTimes.length) * 100) / 100
+          : 0;
+
+      return reply.send({
+        workspace,
+        total_accepted: accepted.length,
+        overall_avg_seconds: overallAvg,
+        agents: agentStats,
+      });
+    },
+  );
 };
