@@ -2366,4 +2366,28 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, templates: rows });
     },
   );
+
+  // F-330 context-size-stats
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/context-size-stats",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS total,
+                  AVG(LENGTH(context)) AS avg_size,
+                  MAX(LENGTH(context)) AS max_size,
+                  MIN(LENGTH(context)) AS min_size
+           FROM handoffs
+           WHERE workspace_id = ? AND context IS NOT NULL`,
+        )
+        .get(req.params.workspace) as {
+        total: number;
+        avg_size: number | null;
+        max_size: number | null;
+        min_size: number | null;
+      };
+      reply.send({ workspace: req.params.workspace, ...row });
+    },
+  );
 };

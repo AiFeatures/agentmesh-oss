@@ -2613,4 +2613,30 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, prefixes: tree });
     },
   );
+
+  // F-329 overlapping-scopes
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/overlapping-scopes",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT c1.claim_id AS claim_a, c2.claim_id AS claim_b,
+                  c1.scope AS scope_a, c2.scope AS scope_b
+           FROM claims c1
+           JOIN claims c2 ON c1.workspace_id = c2.workspace_id
+             AND c1.claim_id < c2.claim_id
+             AND c1.scope = c2.scope
+           WHERE c1.workspace_id = ? AND c1.status = 'active' AND c2.status = 'active'
+           LIMIT 50`,
+        )
+        .all(req.params.workspace) as {
+        claim_a: string;
+        claim_b: string;
+        scope_a: string;
+        scope_b: string;
+      }[];
+      reply.send({ workspace: req.params.workspace, overlaps: rows });
+    },
+  );
 };
