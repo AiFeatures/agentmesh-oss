@@ -1993,4 +1993,41 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-230: Claim scope distribution
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/scope-distribution",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const claims = db
+        .prepare(`SELECT scope, status FROM claims WHERE workspace_id = ?`)
+        .all(workspace) as { scope: string; status: string }[];
+
+      const scopeMap: Record<
+        string,
+        { total: number; active: number; released: number; expired: number }
+      > = {};
+      for (const c of claims) {
+        if (!scopeMap[c.scope])
+          scopeMap[c.scope] = { total: 0, active: 0, released: 0, expired: 0 };
+        scopeMap[c.scope].total++;
+        if (c.status === "active") scopeMap[c.scope].active++;
+        if (c.status === "released") scopeMap[c.scope].released++;
+        if (c.status === "expired") scopeMap[c.scope].expired++;
+      }
+
+      const scopes = Object.entries(scopeMap)
+        .map(([scope, v]) => ({ scope, ...v }))
+        .sort((a, b) => b.total - a.total);
+
+      return reply.send({
+        workspace,
+        total_claims: claims.length,
+        unique_scopes: scopes.length,
+        scopes,
+      });
+    },
+  );
 };

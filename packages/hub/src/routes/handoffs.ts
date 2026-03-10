@@ -1634,4 +1634,42 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-229: Handoff latency trend
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/latency-trend",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const handoffs = db
+        .prepare(
+          `SELECT created_at, updated_at, status FROM handoffs WHERE workspace_id = ? AND status IN ('accepted', 'completed')`,
+        )
+        .all(workspace) as { created_at: string; updated_at: string; status: string }[];
+
+      const daily: Record<string, number[]> = {};
+      for (const h of handoffs) {
+        const day = h.created_at.slice(0, 10);
+        const latencyMs = new Date(h.updated_at).getTime() - new Date(h.created_at).getTime();
+        const latencyHours = Math.round((latencyMs / 3600000) * 100) / 100;
+        if (!daily[day]) daily[day] = [];
+        daily[day].push(latencyHours);
+      }
+
+      const trend = Object.entries(daily)
+        .map(([day, latencies]) => {
+          const avg =
+            Math.round((latencies.reduce((s, v) => s + v, 0) / latencies.length) * 100) / 100;
+          return { day, count: latencies.length, avg_latency_hours: avg };
+        })
+        .sort((a, b) => a.day.localeCompare(b.day));
+
+      return reply.send({
+        workspace,
+        total_resolved: handoffs.length,
+        trend,
+      });
+    },
+  );
 };

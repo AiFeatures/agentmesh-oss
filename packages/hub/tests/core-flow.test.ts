@@ -9954,3 +9954,40 @@ test("GET /agents/registration-rate returns registration trend", async () => {
   assert.ok(Array.isArray(body.daily));
   await app.close();
 });
+
+// ---------- F-229: Handoff latency trend ----------
+test("GET /handoffs/latency-trend returns daily latency trend", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ho-lattrd-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", summary: "task" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/latency-trend`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_resolved === "number");
+  assert.ok(Array.isArray(body.trend));
+  await app.close();
+});
+
+// ---------- F-230: Claim scope distribution ----------
+test("GET /claims/scope-distribution returns scope breakdown", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `cl-scopedist-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/scope-distribution`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_claims === "number");
+  assert.ok(typeof body.unique_scopes === "number");
+  assert.ok(Array.isArray(body.scopes));
+  await app.close();
+});
