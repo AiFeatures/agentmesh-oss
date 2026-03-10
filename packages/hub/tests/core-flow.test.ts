@@ -9524,3 +9524,43 @@ test("GET /agents/task-completion-rate returns completion rates", async () => {
   assert.ok(Array.isArray(body.agents));
   await app.close();
 });
+
+// ---------- F-207: Handoff timeout analysis ----------
+test("GET /handoffs/timeout-analysis returns timeout stats", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ho-timeout-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task", timeout_seconds: 60 } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/timeout-analysis`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_handoffs === "number");
+  assert.ok(typeof body.timed_out === "number");
+  assert.ok(typeof body.timeout_rate_percent === "number");
+  assert.ok(body.with_timeout >= 1);
+  await app.close();
+});
+
+// ---------- F-208: Claim path frequency ----------
+test("GET /claims/path-frequency returns path frequency", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `cl-pathfreq-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "myscope", paths: ["src/main.ts"], ttl_seconds: 3600 } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/path-frequency`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(Array.isArray(body.most_claimed_paths));
+  assert.ok(Array.isArray(body.most_active_paths));
+  assert.ok(body.most_claimed_paths.length >= 1);
+  await app.close();
+});

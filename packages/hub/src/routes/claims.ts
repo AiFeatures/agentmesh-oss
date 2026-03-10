@@ -1751,4 +1751,45 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total_claims: claims.length, agents });
     },
   );
+
+  // F-208: Path frequency — most frequently claimed paths
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/path-frequency",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { limit = "20" } = request.query as { limit?: string };
+      const maxResults = Math.min(Number.parseInt(limit, 10) || 20, 100);
+
+      const paths = db
+        .prepare(
+          `SELECT cp.path_pattern, COUNT(*) as claim_count
+           FROM claim_paths cp
+           JOIN claims c ON c.claim_id = cp.claim_id
+           WHERE c.workspace_id = ?
+           GROUP BY cp.path_pattern
+           ORDER BY claim_count DESC
+           LIMIT ?`,
+        )
+        .all(workspace, maxResults) as { path_pattern: string; claim_count: number }[];
+
+      const activePaths = db
+        .prepare(
+          `SELECT cp.path_pattern, COUNT(*) as active_count
+           FROM claim_paths cp
+           JOIN claims c ON c.claim_id = cp.claim_id
+           WHERE c.workspace_id = ? AND c.status = 'active'
+           GROUP BY cp.path_pattern
+           ORDER BY active_count DESC
+           LIMIT ?`,
+        )
+        .all(workspace, maxResults) as { path_pattern: string; active_count: number }[];
+
+      return reply.send({
+        workspace,
+        most_claimed_paths: paths,
+        most_active_paths: activePaths,
+      });
+    },
+  );
 };

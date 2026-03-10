@@ -1414,4 +1414,56 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total, distribution });
     },
   );
+
+  // F-207: Handoff timeout analysis
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/timeout-analysis",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const handoffs = db
+        .prepare(
+          `SELECT handoff_id, from_agent_id, to_agent_id, status, timeout_seconds, expires_at, created_at
+           FROM handoffs WHERE workspace_id = ?`,
+        )
+        .all(workspace) as {
+        handoff_id: string;
+        from_agent_id: string;
+        to_agent_id: string | null;
+        status: string;
+        timeout_seconds: number | null;
+        expires_at: string | null;
+        created_at: string;
+      }[];
+
+      const withTimeout = handoffs.filter(
+        (h) => h.timeout_seconds != null && h.timeout_seconds > 0,
+      );
+      const timedOut = handoffs.filter(
+        (h) =>
+          h.status === "expired" ||
+          (h.expires_at && new Date(h.expires_at).getTime() < Date.now() && h.status === "pending"),
+      );
+      const completed = handoffs.filter((h) => h.status === "accepted");
+
+      const timeoutRate =
+        handoffs.length > 0 ? Math.round((timedOut.length / handoffs.length) * 10000) / 100 : 0;
+
+      return reply.send({
+        workspace,
+        total_handoffs: handoffs.length,
+        with_timeout: withTimeout.length,
+        timed_out: timedOut.length,
+        completed: completed.length,
+        timeout_rate_percent: timeoutRate,
+        recent_timeouts: timedOut.slice(-10).map((h) => ({
+          handoff_id: h.handoff_id,
+          from_agent_id: h.from_agent_id,
+          to_agent_id: h.to_agent_id,
+          timeout_seconds: h.timeout_seconds,
+        })),
+      });
+    },
+  );
 };
