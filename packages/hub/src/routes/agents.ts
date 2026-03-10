@@ -199,6 +199,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
               type: "string",
               enum: ["online", "idle", "stale", "evicted", "blocked"],
             },
+            capability: { type: "string", maxLength: 64 },
             limit: { type: "string" },
             offset: { type: "string" },
           },
@@ -207,14 +208,20 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     },
     async (request, reply) => {
       const { workspace } = request.params as { workspace: string };
-      const { limit, offset, status } = request.query as {
+      const { limit, offset, status, capability } = request.query as {
         limit?: string;
         offset?: string;
         status?: string;
+        capability?: string;
       };
       let all = listAgents(workspace);
       if (status) {
         all = all.filter((a) => a.status === status);
+      }
+      if (capability) {
+        all = all.filter(
+          (a) => Array.isArray(a.capabilities) && a.capabilities.includes(capability),
+        );
       }
       const start = Math.max(0, Number(offset) || 0);
       const count = Math.min(200, Math.max(1, Number(limit) || 50));
@@ -297,6 +304,18 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(404).send({ error: "Agent not found" });
       }
 
+      // Force-release active claims before cascade delete
+      const activeClaims = db
+        .prepare(
+          "SELECT claim_id FROM claims WHERE agent_id = ? AND workspace_id = ? AND status = 'active'",
+        )
+        .all(agentId, workspace) as Array<{ claim_id: string }>;
+      if (activeClaims.length > 0) {
+        db.prepare(
+          "UPDATE claims SET status = 'force_released', released_at = CURRENT_TIMESTAMP WHERE agent_id = ? AND workspace_id = ? AND status = 'active'",
+        ).run(agentId, workspace);
+      }
+
       db.prepare("DELETE FROM agents WHERE agent_id = ? AND workspace_id = ?").run(
         agentId,
         workspace,
@@ -309,6 +328,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
         entityType: "agent",
         entityId: agentId,
         requestId: request.id,
+        payload: { released_claims: activeClaims.length },
       });
 
       broadcast("agents.updated", { workspace, agent_id: agentId, status: "deregistered" });

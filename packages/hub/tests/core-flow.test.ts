@@ -2292,3 +2292,91 @@ test("claim renewal increments renewal_count", async () => {
 
   await app.close();
 });
+
+/* ── F-37  workspace settings ─────────────────────────────────── */
+test("GET/PATCH /workspaces/:ws/settings", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "settings-ws";
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Settings Test" },
+  });
+
+  // Default settings is empty object
+  const getRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/settings`,
+    headers: auth,
+  });
+  assert.equal(getRes.statusCode, 200);
+  assert.deepEqual(getRes.json(), {});
+
+  // Patch settings
+  const patchRes = await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/settings`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { claim_ttl: 3600, max_agents: 10 },
+  });
+  assert.equal(patchRes.statusCode, 200);
+  assert.equal(patchRes.json().claim_ttl, 3600);
+
+  // Settings merge (not replace)
+  await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/settings`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { max_agents: 20 },
+  });
+  const getRes2 = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/settings`,
+    headers: auth,
+  });
+  assert.equal(getRes2.json().claim_ttl, 3600);
+  assert.equal(getRes2.json().max_agents, 20);
+
+  await app.close();
+});
+
+/* ── F-38  agent list filter by capability ────────────────────── */
+test("GET /agents?capability= filters by capability", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "cap-filter-ws";
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Cap Filter" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "cf-a", display_name: "A", capabilities: ["code", "test"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "cf-b", display_name: "B", capabilities: ["deploy"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents?capability=code`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().data.length, 1);
+  assert.equal(res.json().data[0].agent_id, "cf-a");
+
+  await app.close();
+});

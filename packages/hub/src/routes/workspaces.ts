@@ -354,4 +354,63 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  app.get(
+    "/api/v1/workspaces/:workspace/settings",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const row = db
+        .prepare("SELECT settings FROM workspaces WHERE workspace_id = ?")
+        .get(workspace) as { settings: string } | undefined;
+      if (!row) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      return reply.send(JSON.parse(row.settings || "{}"));
+    },
+  );
+
+  app.patch(
+    "/api/v1/workspaces/:workspace/settings",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          additionalProperties: true,
+          maxProperties: 50,
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const body = request.body as Record<string, unknown>;
+
+      const row = db
+        .prepare("SELECT settings FROM workspaces WHERE workspace_id = ?")
+        .get(workspace) as { settings: string } | undefined;
+      if (!row) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+
+      const current = JSON.parse(row.settings || "{}");
+      const merged = { ...current, ...body };
+      db.prepare("UPDATE workspaces SET settings = ? WHERE workspace_id = ?").run(
+        JSON.stringify(merged),
+        workspace,
+      );
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "system",
+        action: "workspace.settings_update",
+        entityType: "workspace",
+        entityId: workspace,
+        requestId: request.id,
+        payload: body,
+      });
+
+      return reply.send(merged);
+    },
+  );
 };

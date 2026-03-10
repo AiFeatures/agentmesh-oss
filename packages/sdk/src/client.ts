@@ -460,6 +460,22 @@ export class AgentMeshClient {
     });
   }
 
+  async getWorkspaceSettings(workspace: string): Promise<Record<string, unknown>> {
+    return await this.request(`/api/v1/workspaces/${workspace}/settings`, {
+      method: "GET",
+    });
+  }
+
+  async updateWorkspaceSettings(
+    workspace: string,
+    settings: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    return await this.request(`/api/v1/workspaces/${workspace}/settings`, {
+      method: "PATCH",
+      body: JSON.stringify(settings),
+    });
+  }
+
   private async request<T = unknown>(path: string, init: RequestInit): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
