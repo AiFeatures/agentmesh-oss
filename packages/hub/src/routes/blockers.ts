@@ -2377,4 +2377,30 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, trend: rows });
     },
   );
+
+  // F-352 open-duration-ranking
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/open-duration-ranking",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT blocker_id, agent_id, title, severity, created_at,
+                  CAST((julianday('now') - julianday(created_at)) * 86400 AS INTEGER) AS open_seconds
+           FROM blockers
+           WHERE workspace_id = ? AND status = 'open'
+           ORDER BY open_seconds DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        blocker_id: string;
+        agent_id: string;
+        title: string;
+        severity: string;
+        created_at: string;
+        open_seconds: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, blockers: rows });
+    },
+  );
 };

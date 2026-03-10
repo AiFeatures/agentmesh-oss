@@ -3227,4 +3227,29 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: rows });
     },
   );
+
+  // F-351 tag-usage-stats
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/tag-usage-stats",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const agents = db
+        .prepare(`SELECT tags FROM agents WHERE workspace_id = ? AND tags IS NOT NULL`)
+        .all(req.params.workspace) as { tags: string }[];
+
+      const counts: Record<string, number> = {};
+      for (const a of agents) {
+        try {
+          const arr: string[] = JSON.parse(a.tags);
+          for (const t of arr) {
+            counts[t] = (counts[t] || 0) + 1;
+          }
+        } catch {}
+      }
+      const stats = Object.entries(counts)
+        .map(([tag, count]) => ({ tag, count }))
+        .sort((a, b) => b.count - a.count);
+      reply.send({ workspace: req.params.workspace, tags: stats });
+    },
+  );
 };
