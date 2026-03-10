@@ -5843,3 +5843,114 @@ test("claim overlap matrix detects shared scopes", async () => {
 
   await app.close();
 });
+
+/* ── F-117  handoff retry stats ────────────────────── */
+test("handoff retry stats returns aggregate retry info", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "rs";
+  const ws = `ws-rs-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "RetryStats" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/retry-stats`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { total_handoffs: number; total_retries: number };
+  assert.equal(body.total_handoffs, 0);
+
+  await app.close();
+});
+
+/* ── F-118  capability gap analysis ────────────────── */
+test("capability gap analysis returns missing capabilities", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "cg";
+  const ws = `ws-cg-${suffix}`;
+  const aid = `cg-a1-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "CapGaps" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: aid, display_name: "CGAgent", capabilities: ["coding"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/capability-gaps`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { gaps: string[]; available: string[] };
+  assert.ok(body.available.includes("coding"));
+
+  await app.close();
+});
+
+/* ── F-119  blocker correlation ────────────────────── */
+test("blocker correlation returns agents with multiple blockers", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "bc";
+  const ws = `ws-bc-${suffix}`;
+  const aid = `bc-a1-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Correlation" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: aid, display_name: "BCAgent", capabilities: ["test"] },
+  });
+
+  // create two blockers for same agent
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: aid, title: "Blocker A", severity: "low" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: aid, title: "Blocker B", severity: "medium" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/correlation`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const data = res.json().data as Array<{ agent_id: string; blocker_count: number }>;
+  assert.equal(data.length, 1);
+  assert.equal(data[0].agent_id, aid);
+  assert.equal(data[0].blocker_count, 2);
+
+  await app.close();
+});

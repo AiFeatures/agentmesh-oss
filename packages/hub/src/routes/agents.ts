@@ -1259,4 +1259,44 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows });
     },
   );
+
+  /* ── F-118  agent capability gap analysis ─────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/capability-gaps",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      // capability tags requested in handoffs
+      const requested = db
+        .prepare(
+          "SELECT DISTINCT capability_tag FROM handoffs WHERE workspace_id = ? AND route_mode = 'capability' AND capability_tag IS NOT NULL",
+        )
+        .all(workspace) as Array<{ capability_tag: string }>;
+      // capabilities available in agents
+      const agentRows = db
+        .prepare("SELECT capabilities FROM agents WHERE workspace_id = ?")
+        .all(workspace) as Array<{ capabilities: string }>;
+      const available = new Set<string>();
+      for (const row of agentRows) {
+        try {
+          const caps = JSON.parse(row.capabilities);
+          if (Array.isArray(caps)) {
+            for (const c of caps) available.add(c);
+          }
+        } catch {}
+      }
+      const gaps = requested.map((r) => r.capability_tag).filter((tag) => !available.has(tag));
+      return reply.send({
+        gaps,
+        available: [...available],
+        requested: requested.map((r) => r.capability_tag),
+      });
+    },
+  );
 };

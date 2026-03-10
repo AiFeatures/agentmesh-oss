@@ -586,4 +586,30 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ total, compliant, breached, compliance_rate: rate });
     },
   );
+
+  /* ── F-117  handoff retry stats ─────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/retry-stats",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) as total_handoffs,
+                  SUM(CASE WHEN retry_count > 0 THEN 1 ELSE 0 END) as retried_handoffs,
+                  SUM(retry_count) as total_retries,
+                  MAX(retry_count) as max_retries
+           FROM handoffs
+           WHERE workspace_id = ?`,
+        )
+        .get(workspace) as Record<string, number>;
+      return reply.send(row);
+    },
+  );
 };

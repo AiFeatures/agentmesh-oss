@@ -674,4 +674,31 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows });
     },
   );
+
+  /* ── F-119  blocker correlation ─────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/correlation",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const rows = db
+        .prepare(
+          `SELECT agent_id, COUNT(*) as blocker_count,
+                  GROUP_CONCAT(title, ' | ') as titles
+           FROM blockers
+           WHERE workspace_id = ?
+           GROUP BY agent_id
+           HAVING COUNT(*) > 1
+           ORDER BY blocker_count DESC`,
+        )
+        .all(workspace);
+      return reply.send({ data: rows });
+    },
+  );
 };
