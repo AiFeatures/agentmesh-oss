@@ -11277,3 +11277,32 @@ test("GET /agents/multi-workspace returns multi-workspace agents", async () => {
   assert.ok(Array.isArray(body.agents));
   await app.close();
 });
+
+// F-307 top-reporters
+test("GET /blockers/top-reporters returns reporter data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "toprep-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/top-reporters`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.reporters));
+  await app.close();
+});
+
+// F-308 rejection-reasons
+test("GET /handoffs/rejection-reasons returns rejection data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "rejrsn-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/rejection-reasons`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.rejections));
+  assert.ok(typeof body.total_rejected === "number");
+  await app.close();
+});

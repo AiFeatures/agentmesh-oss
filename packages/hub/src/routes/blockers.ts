@@ -2112,4 +2112,30 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-307 top-reporters
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/top-reporters",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT agent_id, COUNT(*) as reported_count,
+                  SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved_count,
+                  SUM(CASE WHEN severity = 'critical' THEN 1 ELSE 0 END) as critical_count
+           FROM blockers
+           WHERE workspace_id = ?
+           GROUP BY agent_id
+           ORDER BY reported_count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        reported_count: number;
+        resolved_count: number;
+        critical_count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, reporters: rows });
+    },
+  );
 };

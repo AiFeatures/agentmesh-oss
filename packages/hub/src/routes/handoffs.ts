@@ -2233,4 +2233,33 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-308 rejection-reasons
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/rejection-reasons",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT to_agent_id, COUNT(*) as rejection_count,
+                  from_agent_id
+           FROM handoffs
+           WHERE workspace_id = ? AND status = 'rejected'
+           GROUP BY to_agent_id, from_agent_id
+           ORDER BY rejection_count DESC
+           LIMIT 30`,
+        )
+        .all(req.params.workspace) as {
+        to_agent_id: string | null;
+        from_agent_id: string;
+        rejection_count: number;
+      }[];
+      const totalRejected = rows.reduce((s, r) => s + r.rejection_count, 0);
+      reply.send({
+        workspace: req.params.workspace,
+        rejections: rows,
+        total_rejected: totalRejected,
+      });
+    },
+  );
 };
