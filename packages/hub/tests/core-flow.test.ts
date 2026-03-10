@@ -9838,3 +9838,41 @@ test("GET /blockers/response-time returns resolution speed metrics", async () =>
   assert.ok(typeof body.median_response_hours === "number");
   await app.close();
 });
+
+// ---------- F-223: Agent capability trend ----------
+test("GET /agents/capability-trend returns capability growth over time", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ag-captrend-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code", "review"] } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/capability-trend`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_agents === "number");
+  assert.ok(typeof body.unique_capabilities === "number");
+  assert.ok(Array.isArray(body.capabilities));
+  assert.ok(Array.isArray(body.trend));
+  await app.close();
+});
+
+// ---------- F-224: Handoff success rate ----------
+test("GET /handoffs/success-rate returns success metrics", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ho-succrate-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", summary: "task" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/success-rate`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_handoffs === "number");
+  assert.ok(typeof body.success_rate_percent === "number");
+  assert.ok(typeof body.rejection_rate_percent === "number");
+  await app.close();
+});

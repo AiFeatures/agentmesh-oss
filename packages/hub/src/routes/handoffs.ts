@@ -1600,4 +1600,38 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-224: Handoff success rate
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/success-rate",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const handoffs = db
+        .prepare(`SELECT status FROM handoffs WHERE workspace_id = ?`)
+        .all(workspace) as { status: string }[];
+
+      const total = handoffs.length;
+      const accepted = handoffs.filter((h) => h.status === "accepted").length;
+      const rejected = handoffs.filter((h) => h.status === "rejected").length;
+      const pending = handoffs.filter((h) => h.status === "pending").length;
+      const completed = handoffs.filter((h) => h.status === "completed").length;
+      const successCount = accepted + completed;
+      const successRate = total > 0 ? Math.round((successCount / total) * 10000) / 100 : 0;
+      const rejectionRate = total > 0 ? Math.round((rejected / total) * 10000) / 100 : 0;
+
+      return reply.send({
+        workspace,
+        total_handoffs: total,
+        accepted,
+        completed,
+        rejected,
+        pending,
+        success_count: successCount,
+        success_rate_percent: successRate,
+        rejection_rate_percent: rejectionRate,
+      });
+    },
+  );
 };

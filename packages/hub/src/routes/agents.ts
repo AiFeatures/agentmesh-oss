@@ -2298,4 +2298,44 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-223: Agent capability trend
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/capability-trend",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const agents = db
+        .prepare(`SELECT agent_id, capabilities, created_at FROM agents WHERE workspace_id = ?`)
+        .all(workspace) as { agent_id: string; capabilities: string; created_at: string }[];
+
+      const capTimeline: Record<string, number> = {};
+      for (const a of agents) {
+        const caps = JSON.parse(a.capabilities || "[]") as string[];
+        const day = a.created_at.slice(0, 10);
+        for (const cap of caps) {
+          const key = `${day}|${cap}`;
+          capTimeline[key] = (capTimeline[key] || 0) + 1;
+        }
+      }
+
+      const entries = Object.entries(capTimeline)
+        .map(([key, count]) => {
+          const [day, capability] = key.split("|");
+          return { day, capability, count };
+        })
+        .sort((a, b) => a.day.localeCompare(b.day));
+
+      const allCaps = [...new Set(entries.map((e) => e.capability))];
+
+      return reply.send({
+        workspace,
+        total_agents: agents.length,
+        unique_capabilities: allCaps.length,
+        capabilities: allCaps,
+        trend: entries,
+      });
+    },
+  );
 };
