@@ -2868,4 +2868,28 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, pairs: rows });
     },
   );
+
+  // F-422 handoff-retry-stats
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-retry-stats",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS total,
+                  SUM(CASE WHEN retry_count > 0 THEN 1 ELSE 0 END) AS retried,
+                  AVG(retry_count) AS avg_retries,
+                  MAX(retry_count) AS max_retries
+           FROM handoffs
+           WHERE workspace_id = ?`,
+        )
+        .get(req.params.workspace) as {
+        total: number;
+        retried: number;
+        avg_retries: number | null;
+        max_retries: number | null;
+      };
+      reply.send({ workspace: req.params.workspace, ...row });
+    },
+  );
 };
