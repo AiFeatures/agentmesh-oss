@@ -2146,4 +2146,35 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, recipients: rows });
     },
   );
+
+  // F-296 round-trip-time
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/round-trip-time",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT from_agent_id, to_agent_id,
+                  COUNT(*) as total,
+                  AVG((julianday(updated_at) - julianday(created_at)) * 86400) as avg_seconds,
+                  MIN((julianday(updated_at) - julianday(created_at)) * 86400) as min_seconds,
+                  MAX((julianday(updated_at) - julianday(created_at)) * 86400) as max_seconds
+           FROM handoffs
+           WHERE workspace_id = ?
+             AND status IN ('accepted', 'rejected', 'completed')
+             AND updated_at IS NOT NULL
+           GROUP BY from_agent_id, to_agent_id
+           ORDER BY avg_seconds DESC`,
+        )
+        .all(req.params.workspace) as {
+        from_agent_id: string;
+        to_agent_id: string | null;
+        total: number;
+        avg_seconds: number | null;
+        min_seconds: number | null;
+        max_seconds: number | null;
+      }[];
+      reply.send({ workspace: req.params.workspace, pairs: rows });
+    },
+  );
 };

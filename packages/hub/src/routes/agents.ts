@@ -2830,4 +2830,52 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, tags });
     },
   );
+
+  // F-295 capability-retirement
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/capability-retirement",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const agents = db
+        .prepare("SELECT agent_id, display_name, capabilities FROM agents WHERE workspace_id = ?")
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        capabilities: string | null;
+      }[];
+
+      const recentTags = db
+        .prepare(
+          `SELECT DISTINCT capability_tag FROM handoffs
+           WHERE workspace_id = ? AND created_at >= datetime('now', '-7 days')
+             AND capability_tag IS NOT NULL`,
+        )
+        .all(req.params.workspace) as { capability_tag: string }[];
+
+      const usedSet = new Set(recentTags.map((r) => r.capability_tag));
+
+      const results = agents.map((a) => {
+        let caps: string[] = [];
+        try {
+          caps = JSON.parse(a.capabilities || "[]") as string[];
+        } catch {
+          /* skip */
+        }
+        const retired = caps.filter((c) => !usedSet.has(c));
+        return {
+          agent_id: a.agent_id,
+          display_name: a.display_name,
+          total_capabilities: caps.length,
+          retired_capabilities: retired,
+          retired_count: retired.length,
+        };
+      });
+
+      reply.send({
+        workspace: req.params.workspace,
+        agents: results.filter((r) => r.retired_count > 0),
+        total_retired: results.reduce((s, r) => s + r.retired_count, 0),
+      });
+    },
+  );
 };
