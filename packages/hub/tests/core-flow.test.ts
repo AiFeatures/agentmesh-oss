@@ -12076,3 +12076,31 @@ test("GET /workspaces/blocker-resolution-rate returns rate", async () => {
   assert.ok(typeof body.rate === "number");
   await app.close();
 });
+
+// F-363 claim-status-transition-counts
+test("GET /claims/status-transition-counts returns transitions", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "cstc-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/status-transition-counts`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.transitions));
+  await app.close();
+});
+
+// F-364 handoff-pending-duration-ranking
+test("GET /handoffs/pending-duration-ranking returns ranking", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "hpdr-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/pending-duration-ranking`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.ranking));
+  await app.close();
+});

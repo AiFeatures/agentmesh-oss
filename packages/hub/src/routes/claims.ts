@@ -2788,4 +2788,22 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, distribution: rows });
     },
   );
+
+  // F-363 claim-status-transition-counts
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/status-transition-counts",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT status, COUNT(*) AS count
+           FROM claims
+           WHERE workspace_id = ?
+           GROUP BY status
+           ORDER BY count DESC`,
+        )
+        .all(req.params.workspace) as { status: string; count: number }[];
+      reply.send({ workspace: req.params.workspace, transitions: rows });
+    },
+  );
 };

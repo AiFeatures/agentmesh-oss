@@ -2563,4 +2563,30 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ...row });
     },
   );
+
+  // F-364 handoff-pending-duration-ranking
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/pending-duration-ranking",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT handoff_id, from_agent_id, to_agent_id, summary, created_at,
+                  CAST((julianday('now') - julianday(created_at)) * 86400 AS INTEGER) AS pending_seconds
+           FROM handoffs
+           WHERE workspace_id = ? AND status = 'pending'
+           ORDER BY pending_seconds DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        handoff_id: string;
+        from_agent_id: string;
+        to_agent_id: string | null;
+        summary: string;
+        created_at: string;
+        pending_seconds: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, ranking: rows });
+    },
+  );
 };
