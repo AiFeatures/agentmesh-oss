@@ -7267,3 +7267,92 @@ test("batch accept handles multiple handoffs", async () => {
 
   await app.close();
 });
+
+// --------------- F-148: Blocker auto-assign ---------------
+test("blocker auto_assign_capability adds watcher automatically", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-baa-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "blocker-agent", display_name: "BA", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "reviewer", display_name: "R", capabilities: ["review"] },
+  });
+
+  // Create blocker with auto-assign
+  const b = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: {
+      agent_id: "blocker-agent",
+      title: "Need review",
+      severity: "high",
+      auto_assign_capability: "review",
+    },
+  });
+  assert.equal(b.statusCode, 201);
+  assert.equal(b.json().assigned_to, "reviewer");
+
+  // Verify watcher was added
+  const wl = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/${b.json().blocker_id}/watchers`,
+    headers: auth,
+  });
+  assert.equal(wl.json().data.length, 1);
+  assert.equal(wl.json().data[0].agent_id, "reviewer");
+
+  await app.close();
+});
+
+test("blocker auto_assign with no matching capability returns no assignment", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-baan-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "solo-agent", display_name: "SA", capabilities: ["code"] },
+  });
+
+  const b = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: {
+      agent_id: "solo-agent",
+      title: "Need nonexistent skill",
+      severity: "low",
+      auto_assign_capability: "quantum_computing",
+    },
+  });
+  assert.equal(b.statusCode, 201);
+  assert.ok(!b.json().assigned_to);
+
+  await app.close();
+});

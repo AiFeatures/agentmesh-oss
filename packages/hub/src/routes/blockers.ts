@@ -39,6 +39,7 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
             details: { type: "string", maxLength: 5000 },
             severity: { type: "string", enum: ["low", "medium", "high", "critical"] },
             deadline_seconds: { type: "integer", minimum: 60, maximum: 604800 },
+            auto_assign_capability: { type: "string", maxLength: 128 },
             depends_on: {
               type: "array",
               maxItems: 20,
@@ -57,6 +58,7 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
         severity: "low" | "medium" | "high" | "critical";
         deadline_seconds?: number;
         depends_on?: string[];
+        auto_assign_capability?: string;
       };
 
       const agentExists = db
@@ -96,7 +98,40 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
 
       broadcast("blocker.created", { workspace, blocker_id: id, severity: body.severity });
-      return reply.code(201).send({ blocker_id: id });
+
+      let assigned_to: string | null = null;
+      if (body.auto_assign_capability) {
+        const agents = db
+          .prepare(
+            "SELECT agent_id, capabilities FROM agents WHERE workspace_id = ? AND status = 'online' AND agent_id != ?",
+          )
+          .all(workspace, body.agent_id) as Array<{
+          agent_id: string;
+          capabilities: string;
+        }>;
+        const cap = body.auto_assign_capability;
+        const match = agents.find((a) => {
+          try {
+            return (JSON.parse(a.capabilities) as string[]).includes(cap);
+          } catch {
+            return false;
+          }
+        });
+        if (match) {
+          db.prepare(
+            "INSERT OR IGNORE INTO blocker_watchers (blocker_id, agent_id, workspace_id) VALUES (?, ?, ?)",
+          ).run(id, match.agent_id, workspace);
+          assigned_to = match.agent_id;
+          broadcast("blocker.watcher_notify", {
+            workspace,
+            blocker_id: id,
+            trigger: "auto_assigned",
+            watchers: [match.agent_id],
+          });
+        }
+      }
+
+      return reply.code(201).send({ blocker_id: id, ...(assigned_to ? { assigned_to } : {}) });
     },
   );
 
