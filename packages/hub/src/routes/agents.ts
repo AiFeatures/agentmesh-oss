@@ -390,4 +390,56 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ ok: true, capabilities });
     },
   );
+
+  app.patch(
+    "/api/v1/workspaces/:workspace/agents/:agentId/metadata",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["metadata"],
+          additionalProperties: false,
+          properties: {
+            metadata: { type: "object", additionalProperties: true, maxProperties: 50 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as {
+        workspace: string;
+        agentId: string;
+      };
+      const { metadata } = request.body as { metadata: Record<string, unknown> };
+
+      const agent = db
+        .prepare("SELECT agent_id, metadata FROM agents WHERE agent_id = ? AND workspace_id = ?")
+        .get(agentId, workspace) as { agent_id: string; metadata: string | null } | undefined;
+      if (!agent) {
+        return reply.code(404).send({ error: "Agent not found" });
+      }
+
+      const existing = agent.metadata ? JSON.parse(agent.metadata) : {};
+      const merged = { ...existing, ...metadata };
+
+      db.prepare(
+        "UPDATE agents SET metadata = ?, updated_at = CURRENT_TIMESTAMP WHERE agent_id = ?",
+      ).run(JSON.stringify(merged), agentId);
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        actorId: agentId,
+        action: "agent.metadata_update",
+        entityType: "agent",
+        entityId: agentId,
+        requestId: request.id,
+        payload: { metadata },
+      });
+
+      broadcast("agents.updated", { workspace, agent_id: agentId });
+      return reply.send({ ok: true, metadata: merged });
+    },
+  );
 };

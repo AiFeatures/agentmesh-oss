@@ -94,6 +94,8 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
               type: "string",
               enum: ["active", "released", "expired", "force_released"],
             },
+            scope: { type: "string", maxLength: 128 },
+            agent_id: { type: "string", maxLength: 128 },
             limit: { type: "string" },
             offset: { type: "string" },
           },
@@ -102,14 +104,22 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
     },
     async (request, reply) => {
       const { workspace } = request.params as { workspace: string };
-      const { limit, offset, status } = request.query as {
+      const { limit, offset, status, scope, agent_id } = request.query as {
         limit?: string;
         offset?: string;
         status?: string;
+        scope?: string;
+        agent_id?: string;
       };
       let all = listClaims(workspace);
       if (status) {
         all = all.filter((c) => c.status === status);
+      }
+      if (scope) {
+        all = all.filter((c) => c.scope === scope);
+      }
+      if (agent_id) {
+        all = all.filter((c) => c.agent_id === agent_id);
       }
       const start = Math.max(0, Number(offset) || 0);
       const count = Math.min(200, Math.max(1, Number(limit) || 50));

@@ -1888,3 +1888,155 @@ test("DELETE workspace also removes its audit_log entries", async () => {
 
   await app.close();
 });
+
+// ------- Error path tests -------
+test("claim create returns 404 for non-existent workspace", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces/no-such-ws/claims",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "ag-1", scope: "s", paths: ["a.ts"] },
+  });
+  assert.equal(res.statusCode, 404);
+  await app.close();
+});
+
+test("claim create returns 404 for non-existent agent", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `err-ws-${Date.now()}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Err" },
+  });
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "no-such-agent", scope: "s", paths: ["a.ts"] },
+  });
+  assert.equal(res.statusCode, 404);
+  await app.close();
+});
+
+test("release claim returns 404 for non-existent claim", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `err-ws2-${Date.now()}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Err2" },
+  });
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims/nonexistent/release`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 404);
+  await app.close();
+});
+
+test("handoff accept returns 404 for non-existent handoff", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `err-ws3-${Date.now()}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Err3" },
+  });
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs/nonexistent/accept`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 404);
+  await app.close();
+});
+
+test("blocker resolve returns 404 for non-existent blocker", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `err-ws4-${Date.now()}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Err4" },
+  });
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers/nonexistent/resolve`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { note: "fix" },
+  });
+  assert.equal(res.statusCode, 404);
+  await app.close();
+});
+
+test("request without auth returns 401", async () => {
+  const app = await buildApp();
+  const res = await app.inject({
+    method: "GET",
+    url: "/api/v1/workspaces",
+  });
+  assert.equal(res.statusCode, 401);
+  await app.close();
+});
+
+// ------- Agent metadata update -------
+test("PATCH agent metadata merges with existing metadata", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `meta-${Date.now()}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Meta" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: {
+      agent_id: "meta-agent",
+      display_name: "MetaAgent",
+      capabilities: ["code"],
+      metadata: { version: "1.0", env: "dev" },
+    },
+  });
+
+  // Update metadata (should merge)
+  const res = await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/agents/meta-agent/metadata`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { metadata: { version: "2.0", priority: "high" } },
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { ok: boolean; metadata: Record<string, unknown> };
+  assert.equal(body.ok, true);
+  assert.equal(body.metadata.version, "2.0");
+  assert.equal(body.metadata.env, "dev");
+  assert.equal(body.metadata.priority, "high");
+
+  // Verify via GET
+  const getRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/meta-agent`,
+    headers: auth,
+  });
+  const agent = getRes.json() as { metadata: Record<string, unknown> };
+  assert.equal(agent.metadata.version, "2.0");
+  assert.equal(agent.metadata.priority, "high");
+
+  await app.close();
+});

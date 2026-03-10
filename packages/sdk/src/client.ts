@@ -270,6 +270,17 @@ export class AgentMeshClient {
     });
   }
 
+  async updateAgentMetadata(
+    workspace: string,
+    agentId: string,
+    metadata: Record<string, unknown>,
+  ): Promise<{ ok: true; metadata: Record<string, unknown> }> {
+    return await this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}/metadata`, {
+      method: "PATCH",
+      body: JSON.stringify({ metadata }),
+    });
+  }
+
   async getWorkspaceMetrics(workspace: string): Promise<unknown> {
     return await this.request(`/api/v1/workspaces/${workspace}/metrics`, {
       method: "GET",
