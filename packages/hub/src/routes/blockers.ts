@@ -847,4 +847,42 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows });
     },
   );
+
+  /* ── F-151  blocker impact analysis ────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/impact",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      // Find how many agents are affected by each open blocker
+      const blockers = db
+        .prepare(
+          `SELECT b.blocker_id, b.title, b.severity, b.agent_id,
+           (SELECT COUNT(*) FROM blocker_watchers w WHERE w.blocker_id = b.blocker_id) as watcher_count,
+           (SELECT COUNT(*) FROM blocker_dependencies d WHERE d.depends_on_blocker_id = b.blocker_id) as dependent_count,
+           CAST((julianday('now') - julianday(b.created_at)) * 24 AS INTEGER) as hours_open
+           FROM blockers b
+           WHERE b.workspace_id = ? AND b.status = 'open'
+           ORDER BY (watcher_count + dependent_count) DESC, b.created_at ASC`,
+        )
+        .all(workspace) as Array<{
+        blocker_id: string;
+        title: string;
+        severity: string;
+        agent_id: string;
+        watcher_count: number;
+        dependent_count: number;
+        hours_open: number;
+      }>;
+
+      const totalImpact = blockers.reduce((sum, b) => sum + b.watcher_count + b.dependent_count, 0);
+
+      return reply.send({
+        total_open: blockers.length,
+        total_impact_score: totalImpact,
+        blockers,
+      });
+    },
+  );
 };

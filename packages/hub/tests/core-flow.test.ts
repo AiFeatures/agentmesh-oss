@@ -7446,3 +7446,93 @@ test("workspace snapshot returns current state", async () => {
 
   await app.close();
 });
+
+/* ── F-151  blocker impact analysis ───────────────── */
+test("blocker impact analysis returns open blockers with impact scores", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `impact_${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "imp-a1", display_name: "agent-imp-1", capabilities: ["debug"] },
+  });
+
+  // create a blocker
+  const cr = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "imp-a1", title: "DB down", severity: "critical" },
+  });
+  assert.equal(cr.statusCode, 201);
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/impact`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.total_open === "number");
+  assert.ok(body.total_open >= 1);
+  assert.ok(typeof body.total_impact_score === "number");
+  assert.ok(Array.isArray(body.blockers));
+  assert.ok(body.blockers[0].blocker_id);
+  assert.ok(typeof body.blockers[0].hours_open === "number");
+
+  await app.close();
+});
+
+/* ── F-152  claim health / expiry forecast ────────── */
+test("claim health returns active claim stats and at-risk list", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `clhealth_${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "ch-a1", display_name: "agent-ch-1", capabilities: ["db"] },
+  });
+
+  // create a claim that expires soon
+  const cr = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "ch-a1", scope: "service-db", paths: ["/service/db"], ttl_seconds: 300 },
+  });
+  assert.equal(cr.statusCode, 201);
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/health`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.total_active === "number");
+  assert.ok(typeof body.renewal_rate === "number");
+  assert.ok(typeof body.avg_renewals === "number");
+  assert.ok(Array.isArray(body.at_risk_claims));
+
+  await app.close();
+});

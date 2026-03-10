@@ -1172,4 +1172,59 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows });
     },
   );
+
+  /* ── F-152  claim health / expiry forecast ─────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/health",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const summary = db
+        .prepare(
+          `SELECT
+             COUNT(*) as total_active,
+             SUM(CASE WHEN renewal_count > 0 THEN 1 ELSE 0 END) as renewed_count,
+             AVG(renewal_count) as avg_renewals,
+             SUM(CASE WHEN expires_at IS NOT NULL AND datetime(expires_at) < datetime('now', '+1 hour') THEN 1 ELSE 0 END) as expiring_soon,
+             SUM(CASE WHEN expires_at IS NOT NULL AND datetime(expires_at) < datetime('now') THEN 1 ELSE 0 END) as already_expired,
+             AVG(CASE WHEN expires_at IS NOT NULL THEN CAST((julianday(expires_at) - julianday('now')) * 24 * 60 AS INTEGER) END) as avg_ttl_minutes
+           FROM claims
+           WHERE workspace_id = ? AND status = 'active'`,
+        )
+        .get(workspace) as {
+        total_active: number;
+        renewed_count: number;
+        avg_renewals: number;
+        expiring_soon: number;
+        already_expired: number;
+        avg_ttl_minutes: number | null;
+      };
+
+      const atRisk = db
+        .prepare(
+          `SELECT claim_id, agent_id, scope, expires_at,
+             CAST((julianday(expires_at) - julianday('now')) * 24 * 60 AS INTEGER) as minutes_remaining
+           FROM claims
+           WHERE workspace_id = ? AND status = 'active'
+             AND expires_at IS NOT NULL
+             AND datetime(expires_at) < datetime('now', '+1 hour')
+           ORDER BY expires_at ASC LIMIT 20`,
+        )
+        .all(workspace) as Array<{
+        claim_id: string;
+        agent_id: string;
+        scope: string;
+        expires_at: string;
+        minutes_remaining: number;
+      }>;
+
+      return reply.send({
+        ...summary,
+        renewal_rate:
+          summary.total_active > 0 ? +(summary.renewed_count / summary.total_active).toFixed(3) : 0,
+        at_risk_claims: atRisk,
+      });
+    },
+  );
 };
