@@ -2801,4 +2801,25 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, blockers: rows });
     },
   );
+
+  // F-439 blocker-escalation-trend
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/blocker-escalation-trend",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT escalation_level, COUNT(*) AS count
+           FROM blockers
+           WHERE workspace_id = ?
+           GROUP BY escalation_level
+           ORDER BY escalation_level ASC`,
+        )
+        .all(req.params.workspace) as {
+        escalation_level: number | null;
+        count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, levels: rows });
+    },
+  );
 };

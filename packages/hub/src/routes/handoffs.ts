@@ -2967,4 +2967,26 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, notes: rows });
     },
   );
+
+  // F-440 handoff-template-usage
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-template-usage",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT template_id, name, COUNT(*) AS usage_count
+           FROM handoff_templates
+           WHERE workspace_id = ?
+           GROUP BY template_id
+           ORDER BY usage_count DESC`,
+        )
+        .all(req.params.workspace) as {
+        template_id: string;
+        name: string;
+        usage_count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, templates: rows });
+    },
+  );
 };
