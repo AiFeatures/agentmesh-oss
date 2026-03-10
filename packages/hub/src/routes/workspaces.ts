@@ -3228,4 +3228,26 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, key_count: keyCount });
     },
   );
+
+  // F-471 workspace-total-entities
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/workspace-total-entities",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const ws = req.params.workspace;
+      const count = (t: string) =>
+        (
+          db.prepare(`SELECT COUNT(*) AS c FROM ${t} WHERE workspace_id = ?`).get(ws) as {
+            c: number;
+          }
+        ).c;
+      reply.send({
+        workspace: ws,
+        agents: count("agents"),
+        handoffs: count("handoffs"),
+        claims: count("claims"),
+        blockers: count("blockers"),
+      });
+    },
+  );
 };

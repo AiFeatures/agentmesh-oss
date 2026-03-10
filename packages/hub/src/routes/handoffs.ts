@@ -3156,4 +3156,31 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, tags: rows });
     },
   );
+
+  // F-472 handoff-retry-success-rate
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-retry-success-rate",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS total_retried,
+                  SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
+                  ROUND(
+                    CASE WHEN COUNT(*) > 0
+                      THEN 100.0 * SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) / COUNT(*)
+                      ELSE 0
+                    END, 2
+                  ) AS success_rate
+           FROM handoffs
+           WHERE workspace_id = ? AND retry_count > 0`,
+        )
+        .get(req.params.workspace) as {
+        total_retried: number;
+        completed: number;
+        success_rate: number;
+      };
+      reply.send({ workspace: req.params.workspace, ...row });
+    },
+  );
 };
