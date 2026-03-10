@@ -2762,4 +2762,30 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ranking: rows });
     },
   );
+
+  // F-359 expiry-distribution
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/expiry-distribution",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT
+            CASE
+              WHEN expires_at IS NULL THEN 'no_expiry'
+              WHEN julianday(expires_at) <= julianday('now') THEN 'expired'
+              WHEN julianday(expires_at) - julianday('now') < 1 THEN 'under_24h'
+              WHEN julianday(expires_at) - julianday('now') < 7 THEN '1d_to_7d'
+              ELSE 'over_7d'
+            END AS bucket,
+            COUNT(*) AS count
+           FROM claims
+           WHERE workspace_id = ? AND status = 'active'
+           GROUP BY bucket
+           ORDER BY count DESC`,
+        )
+        .all(req.params.workspace) as { bucket: string; count: number }[];
+      reply.send({ workspace: req.params.workspace, distribution: rows });
+    },
+  );
 };
