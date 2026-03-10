@@ -982,6 +982,21 @@ export class AgentMeshClient {
     });
   }
 
+  /* ── F-114  workspace comparison ────────────────── */
+  async compareWorkspaces(ids: string[]): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/compare?ids=${ids.join(",")}`, { method: "GET" });
+  }
+
+  /* ── F-115  agent idle report ───────────────────── */
+  async getAgentIdleReport(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/agents/idle-report`, { method: "GET" });
+  }
+
+  /* ── F-116  claim overlap matrix ────────────────── */
+  async getClaimOverlapMatrix(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/claims/overlap-matrix`, { method: "GET" });
+  }
+
   private async request<T = unknown>(path: string, init: RequestInit): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);

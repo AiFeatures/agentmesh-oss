@@ -924,4 +924,51 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows });
     },
   );
+
+  /* ── F-114  workspace comparison ─────────────────────── */
+  app.get("/api/v1/workspaces/compare", { preHandler: app.authGuard }, async (request, reply) => {
+    const qs = request.query as { ids?: string };
+    if (!qs.ids) {
+      return reply.code(400).send({ error: "ids query parameter required" });
+    }
+    const ids = qs.ids
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 10);
+    if (ids.length < 2) {
+      return reply.code(400).send({ error: "At least 2 workspace IDs required" });
+    }
+    const results: Array<Record<string, unknown>> = [];
+    for (const wsId of ids) {
+      const agents = (
+        db.prepare("SELECT COUNT(*) as c FROM agents WHERE workspace_id = ?").get(wsId) as {
+          c: number;
+        }
+      ).c;
+      const claims = (
+        db
+          .prepare("SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND status = 'active'")
+          .get(wsId) as { c: number }
+      ).c;
+      const blockers = (
+        db
+          .prepare("SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status = 'open'")
+          .get(wsId) as { c: number }
+      ).c;
+      const handoffs = (
+        db.prepare("SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ?").get(wsId) as {
+          c: number;
+        }
+      ).c;
+      results.push({
+        workspace_id: wsId,
+        agents,
+        active_claims: claims,
+        open_blockers: blockers,
+        total_handoffs: handoffs,
+      });
+    }
+    return reply.send({ data: results });
+  });
 };

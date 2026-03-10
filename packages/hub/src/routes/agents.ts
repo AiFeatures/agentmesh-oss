@@ -1234,4 +1234,29 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows });
     },
   );
+
+  /* ── F-115  agent idle time report ────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/idle-report",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const rows = db
+        .prepare(
+          `SELECT agent_id, display_name, status, last_heartbeat_at,
+                  ROUND((julianday('now') - julianday(last_heartbeat_at)) * 86400) as idle_seconds
+           FROM agents
+           WHERE workspace_id = ? AND status IN ('idle', 'stale')
+           ORDER BY idle_seconds DESC`,
+        )
+        .all(workspace);
+      return reply.send({ data: rows });
+    },
+  );
 };

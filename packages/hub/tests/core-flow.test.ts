@@ -5726,3 +5726,120 @@ test("blocker resolution metrics by severity", async () => {
 
   await app.close();
 });
+
+/* ── F-114  workspace comparison ───────────────────── */
+test("workspace comparison returns stats for multiple workspaces", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "cmp";
+  const ws1 = `ws-cmp1-${suffix}`;
+  const ws2 = `ws-cmp2-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws1, display_name: "Cmp1" },
+  });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws2, display_name: "Cmp2" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/compare?ids=${ws1},${ws2}`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const data = res.json().data as Array<{ workspace_id: string; agents: number }>;
+  assert.equal(data.length, 2);
+  assert.equal(data[0].workspace_id, ws1);
+  assert.equal(data[1].workspace_id, ws2);
+
+  await app.close();
+});
+
+/* ── F-115  agent idle report ──────────────────────── */
+test("agent idle report returns idle/stale agents", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "ir";
+  const ws = `ws-ir-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Idle test" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/idle-report`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().data));
+
+  await app.close();
+});
+
+/* ── F-116  claim overlap matrix ───────────────────── */
+test("claim overlap matrix detects shared scopes", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "om";
+  const ws = `ws-om-${suffix}`;
+  const a1 = `om-a1-${suffix}`;
+  const a2 = `om-a2-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Overlap test" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: a1, display_name: "OA1", capabilities: ["test"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: a2, display_name: "OA2", capabilities: ["test"] },
+  });
+
+  // Agents claim different scopes - no conflict
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: a1, scope: "module-a", paths: ["a/**"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: a2, scope: "module-b", paths: ["b/**"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/overlap-matrix`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { data: unknown[]; count: number };
+  assert.equal(body.count, 0); // no overlap since different scopes
+
+  await app.close();
+});

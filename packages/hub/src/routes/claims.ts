@@ -1025,4 +1025,40 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ window_minutes: minutes, count: rows.length, data: rows });
     },
   );
+
+  /* ── F-116  claim overlap matrix ────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/overlap-matrix",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const activeClaims = db
+        .prepare(
+          "SELECT c.claim_id, c.agent_id, c.scope FROM claims c WHERE c.workspace_id = ? AND c.status = 'active'",
+        )
+        .all(workspace) as Array<{ claim_id: string; agent_id: string; scope: string }>;
+      const overlaps: Array<{ agent_a: string; agent_b: string; shared_scope: string }> = [];
+      for (let i = 0; i < activeClaims.length; i++) {
+        for (let j = i + 1; j < activeClaims.length; j++) {
+          if (
+            activeClaims[i].scope === activeClaims[j].scope &&
+            activeClaims[i].agent_id !== activeClaims[j].agent_id
+          ) {
+            overlaps.push({
+              agent_a: activeClaims[i].agent_id,
+              agent_b: activeClaims[j].agent_id,
+              shared_scope: activeClaims[i].scope,
+            });
+          }
+        }
+      }
+      return reply.send({ data: overlaps, count: overlaps.length });
+    },
+  );
 };
