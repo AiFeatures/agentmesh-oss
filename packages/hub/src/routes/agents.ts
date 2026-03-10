@@ -1765,4 +1765,52 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-167: Agent response time analytics
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/response-times",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const agents = db
+        .prepare(`SELECT agent_id, display_name FROM agents WHERE workspace_id = ?`)
+        .all(workspace) as Array<{ agent_id: string; display_name: string }>;
+
+      const responseTimes = agents.map((a) => {
+        const stats = db
+          .prepare(
+            `SELECT
+               COUNT(*) as total_accepted,
+               AVG((julianday(updated_at) - julianday(created_at)) * 86400) as avg_seconds,
+               MIN((julianday(updated_at) - julianday(created_at)) * 86400) as min_seconds,
+               MAX((julianday(updated_at) - julianday(created_at)) * 86400) as max_seconds
+             FROM handoffs
+             WHERE workspace_id = ? AND to_agent_id = ? AND status = 'accepted'`,
+          )
+          .get(workspace, a.agent_id) as {
+          total_accepted: number;
+          avg_seconds: number | null;
+          min_seconds: number | null;
+          max_seconds: number | null;
+        };
+
+        return {
+          agent_id: a.agent_id,
+          display_name: a.display_name,
+          total_accepted: stats.total_accepted,
+          avg_response_seconds: stats.avg_seconds ? Math.round(stats.avg_seconds * 100) / 100 : 0,
+          min_response_seconds: stats.min_seconds ? Math.round(stats.min_seconds * 100) / 100 : 0,
+          max_response_seconds: stats.max_seconds ? Math.round(stats.max_seconds * 100) / 100 : 0,
+        };
+      });
+
+      responseTimes.sort((a, b) => a.avg_response_seconds - b.avg_response_seconds);
+
+      return reply.send({
+        agent_count: responseTimes.length,
+        response_times: responseTimes,
+      });
+    },
+  );
 };

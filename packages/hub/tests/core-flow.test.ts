@@ -8174,3 +8174,84 @@ test("blocker cascade analysis returns dependency chains", async () => {
 
   await app.close();
 });
+
+// F-167: Agent response time analytics
+test("GET /agents/response-times returns response time stats", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `rt-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "rt-a1", display_name: "RT A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "rt-a2", display_name: "RT A2", capabilities: ["review"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/response-times`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.agent_count === "number");
+  assert.ok(Array.isArray(body.response_times));
+  assert.equal(body.agent_count, 2);
+  for (const rt of body.response_times) {
+    assert.ok(typeof rt.agent_id === "string");
+    assert.ok(typeof rt.avg_response_seconds === "number");
+    assert.ok(typeof rt.min_response_seconds === "number");
+    assert.ok(typeof rt.max_response_seconds === "number");
+    assert.ok(typeof rt.total_accepted === "number");
+  }
+
+  await app.close();
+});
+
+// F-168: Claim contention hotspots
+test("GET /claims/contention returns contention analysis", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `cont-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "cont-a1", display_name: "CONT A1", capabilities: ["code"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/contention`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.total_paths === "number");
+  assert.ok(typeof body.contested_paths === "number");
+  assert.ok(Array.isArray(body.hotspots));
+
+  await app.close();
+});

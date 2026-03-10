@@ -1333,4 +1333,53 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-168: Claim contention hotspots
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/contention",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      // Find paths that appear in multiple claims (active or expired)
+      const hotspots = db
+        .prepare(
+          `SELECT cp.path_pattern,
+                  COUNT(DISTINCT c.claim_id) as claim_count,
+                  COUNT(DISTINCT c.agent_id) as agent_count,
+                  SUM(CASE WHEN c.status = 'active' THEN 1 ELSE 0 END) as active_claims
+           FROM claim_paths cp
+           JOIN claims c ON cp.claim_id = c.claim_id
+           WHERE c.workspace_id = ?
+           GROUP BY cp.path_pattern
+           HAVING COUNT(DISTINCT c.claim_id) > 1
+           ORDER BY claim_count DESC
+           LIMIT 50`,
+        )
+        .all(workspace) as Array<{
+        path_pattern: string;
+        claim_count: number;
+        agent_count: number;
+        active_claims: number;
+      }>;
+
+      // Also get paths with single claims for overall stats
+      const totalPaths = (
+        db
+          .prepare(
+            `SELECT COUNT(DISTINCT cp.path_pattern) as c
+             FROM claim_paths cp
+             JOIN claims c ON cp.claim_id = c.claim_id
+             WHERE c.workspace_id = ?`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+
+      return reply.send({
+        total_paths: totalPaths,
+        contested_paths: hotspots.length,
+        hotspots,
+      });
+    },
+  );
 };
