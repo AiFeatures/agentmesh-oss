@@ -2510,4 +2510,41 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: ws, days, growth });
     },
   );
+
+  // F-302 entity-count
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/entity-count",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const ws = req.params.workspace;
+      const agentCount = (
+        db.prepare("SELECT COUNT(*) as c FROM agents WHERE workspace_id = ?").get(ws) as {
+          c: number;
+        }
+      ).c;
+      const handoffCount = (
+        db.prepare("SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ?").get(ws) as {
+          c: number;
+        }
+      ).c;
+      const blockerCount = (
+        db.prepare("SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ?").get(ws) as {
+          c: number;
+        }
+      ).c;
+      const claimCount = (
+        db.prepare("SELECT COUNT(*) as c FROM claims WHERE workspace_id = ?").get(ws) as {
+          c: number;
+        }
+      ).c;
+      reply.send({
+        workspace: ws,
+        agents: agentCount,
+        handoffs: handoffCount,
+        blockers: blockerCount,
+        claims: claimCount,
+        total: agentCount + handoffCount + blockerCount + claimCount,
+      });
+    },
+  );
 };

@@ -2453,4 +2453,29 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, buckets: rows });
     },
   );
+
+  // F-301 renewal-streak
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/renewal-streak",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT c.agent_id, COUNT(rh.id) as renewals,
+                  MAX(rh.new_expires_at) as latest_renewal
+           FROM claims c
+           JOIN claim_renewal_history rh ON rh.claim_id = c.claim_id
+           WHERE c.workspace_id = ?
+           GROUP BY c.agent_id
+           ORDER BY renewals DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        renewals: number;
+        latest_renewal: string | null;
+      }[];
+      reply.send({ workspace: req.params.workspace, streaks: rows });
+    },
+  );
 };
