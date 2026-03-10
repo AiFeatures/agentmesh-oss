@@ -8029,3 +8029,79 @@ test("blocker bulk severity update changes severity of multiple blockers", async
 
   await app.close();
 });
+
+/* ── F-163  claim scope tree ───────────────────────── */
+test("claim scope tree returns active claims grouped by path prefix", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `stree_${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "st-a1", display_name: "ST A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "st-a1", scope: "tree-scope", paths: ["/src/app.ts"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/scope-tree`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.total_active === "number");
+  assert.ok(Array.isArray(body.tree));
+  assert.ok(body.tree.length >= 1);
+  assert.ok(body.tree[0].path);
+  assert.ok(body.tree[0].claim_count >= 1);
+
+  await app.close();
+});
+
+/* ── F-164  handoff delegation depth warning ────────── */
+test("handoff delegation depth returns warnings for deep chains", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `depth_${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "dp-a1", display_name: "DP A1", capabilities: ["code"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/delegation-depth?threshold=1`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.threshold, 1);
+  assert.ok(typeof body.warnings_count === "number");
+  assert.ok(Array.isArray(body.warnings));
+
+  await app.close();
+});

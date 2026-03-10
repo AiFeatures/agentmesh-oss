@@ -973,4 +973,76 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-164  handoff delegation depth warning ────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/delegation-depth",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { threshold = "3" } = request.query as { threshold?: string };
+      const maxDepth = Math.max(Number.parseInt(threshold, 10) || 3, 1);
+
+      // Find handoff chains that exceed the threshold
+      const handoffs = db
+        .prepare(
+          `SELECT handoff_id, from_agent_id, to_agent_id, status, created_at, parent_handoff_id
+           FROM handoffs WHERE workspace_id = ?`,
+        )
+        .all(workspace) as Array<{
+        handoff_id: string;
+        from_agent_id: string;
+        to_agent_id: string | null;
+        status: string;
+        created_at: string;
+        parent_handoff_id: string | null;
+      }>;
+
+      // Build parent map
+      const byId = new Map(handoffs.map((h) => [h.handoff_id, h]));
+      const childrenOf = new Map<string, string[]>();
+      for (const h of handoffs) {
+        if (h.parent_handoff_id) {
+          const list = childrenOf.get(h.parent_handoff_id) ?? [];
+          list.push(h.handoff_id);
+          childrenOf.set(h.parent_handoff_id, list);
+        }
+      }
+
+      // Calculate depth for each root handoff
+      const warnings: Array<{ root_handoff_id: string; depth: number; chain: string[] }> = [];
+
+      const getDepth = (id: string, visited: Set<string>): string[] => {
+        if (visited.has(id)) return [];
+        visited.add(id);
+        const children = childrenOf.get(id) ?? [];
+        if (children.length === 0) return [id];
+        let longest: string[] = [id];
+        for (const cid of children) {
+          const path = [id, ...getDepth(cid, visited)];
+          if (path.length > longest.length) longest = path;
+        }
+        return longest;
+      };
+
+      // Find roots (no parent)
+      const roots = handoffs.filter((h) => !h.parent_handoff_id);
+      for (const root of roots) {
+        const chain = getDepth(root.handoff_id, new Set());
+        if (chain.length > maxDepth) {
+          warnings.push({
+            root_handoff_id: root.handoff_id,
+            depth: chain.length,
+            chain,
+          });
+        }
+      }
+
+      return reply.send({
+        threshold: maxDepth,
+        warnings_count: warnings.length,
+        warnings,
+      });
+    },
+  );
 };

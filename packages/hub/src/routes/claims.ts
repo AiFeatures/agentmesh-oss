@@ -1284,4 +1284,53 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-163  claim scope tree ────────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/scope-tree",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const claims = db
+        .prepare(
+          `SELECT c.claim_id, c.agent_id, c.scope, c.status, cp.path_pattern
+           FROM claims c
+           LEFT JOIN claim_paths cp ON cp.claim_id = c.claim_id
+           WHERE c.workspace_id = ? AND c.status = 'active'
+           ORDER BY cp.path_pattern ASC`,
+        )
+        .all(workspace) as Array<{
+        claim_id: string;
+        agent_id: string;
+        scope: string;
+        status: string;
+        path_pattern: string | null;
+      }>;
+
+      // Build tree structure from paths
+      const tree: Record<string, Array<{ claim_id: string; agent_id: string; scope: string }>> = {};
+      for (const c of claims) {
+        const path = c.path_pattern ?? "/";
+        const parts = path.split("/").filter(Boolean);
+        let key = "/";
+        if (parts.length > 0) {
+          key = `/${parts[0]}`;
+        }
+        if (!tree[key]) tree[key] = [];
+        tree[key].push({ claim_id: c.claim_id, agent_id: c.agent_id, scope: c.scope });
+      }
+
+      const nodes = Object.entries(tree).map(([path, claimList]) => ({
+        path,
+        claim_count: claimList.length,
+        claims: claimList,
+      }));
+
+      return reply.send({
+        total_active: claims.length,
+        tree: nodes,
+      });
+    },
+  );
 };
