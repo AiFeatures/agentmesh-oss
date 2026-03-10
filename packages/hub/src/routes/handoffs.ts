@@ -1672,4 +1672,47 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-234: Handoff pending age
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/pending-age",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const pending = db
+        .prepare(
+          `SELECT handoff_id, from_agent_id, to_agent_id, created_at, summary FROM handoffs WHERE workspace_id = ? AND status = 'pending'`,
+        )
+        .all(workspace) as {
+        handoff_id: string;
+        from_agent_id: string;
+        to_agent_id: string | null;
+        created_at: string;
+        summary: string;
+      }[];
+
+      const now = Date.now();
+      const aged = pending
+        .map((h) => {
+          const ageHours =
+            Math.round(((now - new Date(h.created_at).getTime()) / 3600000) * 100) / 100;
+          return { ...h, age_hours: ageHours };
+        })
+        .sort((a, b) => b.age_hours - a.age_hours);
+
+      const avgAge =
+        aged.length > 0
+          ? Math.round((aged.reduce((s, h) => s + h.age_hours, 0) / aged.length) * 100) / 100
+          : 0;
+
+      return reply.send({
+        workspace,
+        pending_count: aged.length,
+        avg_age_hours: avgAge,
+        oldest_age_hours: aged.length > 0 ? aged[0].age_hours : 0,
+        handoffs: aged.slice(0, 20),
+      });
+    },
+  );
 };

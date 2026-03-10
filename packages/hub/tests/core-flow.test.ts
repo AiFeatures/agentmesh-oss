@@ -10029,3 +10029,44 @@ test("GET /blockers/comment-stats returns comment statistics", async () => {
   assert.ok(Array.isArray(body.most_commented));
   await app.close();
 });
+
+// ---------- F-233: Agent capability frequency ----------
+test("GET /agents/capability-frequency returns capability counts", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ag-capfreq-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code", "review"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["code"] } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/capability-frequency`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_agents === "number");
+  assert.ok(typeof body.unique_capabilities === "number");
+  assert.ok(Array.isArray(body.capabilities));
+  const code = body.capabilities.find((c: any) => c.capability === "code");
+  assert.ok(code);
+  assert.equal(code.count, 2);
+  await app.close();
+});
+
+// ---------- F-234: Handoff pending age ----------
+test("GET /handoffs/pending-age returns pending handoff ages", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ho-pendage-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", summary: "task" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/pending-age`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.pending_count === "number");
+  assert.ok(typeof body.avg_age_hours === "number");
+  assert.ok(Array.isArray(body.handoffs));
+  await app.close();
+});

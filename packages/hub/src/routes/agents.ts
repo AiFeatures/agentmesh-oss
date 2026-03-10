@@ -2375,4 +2375,40 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-233: Agent capability frequency
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/capability-frequency",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const agents = db
+        .prepare(`SELECT capabilities FROM agents WHERE workspace_id = ?`)
+        .all(workspace) as { capabilities: string }[];
+
+      const freq: Record<string, number> = {};
+      for (const a of agents) {
+        const caps = JSON.parse(a.capabilities || "[]") as string[];
+        for (const cap of caps) {
+          freq[cap] = (freq[cap] || 0) + 1;
+        }
+      }
+
+      const capabilities = Object.entries(freq)
+        .map(([capability, count]) => ({
+          capability,
+          count,
+          percentage: agents.length > 0 ? Math.round((count / agents.length) * 10000) / 100 : 0,
+        }))
+        .sort((a, b) => b.count - a.count);
+
+      return reply.send({
+        workspace,
+        total_agents: agents.length,
+        unique_capabilities: capabilities.length,
+        capabilities,
+      });
+    },
+  );
 };
