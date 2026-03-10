@@ -9991,3 +9991,41 @@ test("GET /claims/scope-distribution returns scope breakdown", async () => {
   assert.ok(Array.isArray(body.scopes));
   await app.close();
 });
+
+// ---------- F-231: Workspace entity growth ----------
+test("GET /workspace entity-growth returns daily growth trend", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ws-entgrow-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/entity-growth`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(Array.isArray(body.trend));
+  assert.ok(body.trend.length > 0);
+  assert.ok(typeof body.trend[0].agents === "number");
+  await app.close();
+});
+
+// ---------- F-232: Blocker comment stats ----------
+test("GET /blockers/comment-stats returns comment statistics", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `bl-comstat-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "bug", severity: "medium" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/comment-stats`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_blockers === "number");
+  assert.ok(typeof body.total_comments === "number");
+  assert.ok(typeof body.avg_comments_per_blocker === "number");
+  assert.ok(Array.isArray(body.most_commented));
+  await app.close();
+});

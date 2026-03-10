@@ -1588,4 +1588,43 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-232: Blocker comment stats
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/comment-stats",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const blockers = db
+        .prepare(`SELECT blocker_id FROM blockers WHERE workspace_id = ?`)
+        .all(workspace) as { blocker_id: string }[];
+
+      const blockerIds = blockers.map((b) => b.blocker_id);
+      let totalComments = 0;
+      const commentCounts: { blocker_id: string; count: number }[] = [];
+
+      for (const id of blockerIds) {
+        const row = db
+          .prepare(`SELECT COUNT(*) as c FROM blocker_comments WHERE blocker_id = ?`)
+          .get(id) as { c: number };
+        totalComments += row.c;
+        if (row.c > 0) commentCounts.push({ blocker_id: id, count: row.c });
+      }
+
+      commentCounts.sort((a, b) => b.count - a.count);
+      const withComments = commentCounts.length;
+      const avgComments =
+        blockerIds.length > 0 ? Math.round((totalComments / blockerIds.length) * 100) / 100 : 0;
+
+      return reply.send({
+        workspace,
+        total_blockers: blockerIds.length,
+        blockers_with_comments: withComments,
+        total_comments: totalComments,
+        avg_comments_per_blocker: avgComments,
+        most_commented: commentCounts.slice(0, 10),
+      });
+    },
+  );
 };

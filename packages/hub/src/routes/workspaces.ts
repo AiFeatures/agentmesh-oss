@@ -2104,4 +2104,52 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-231: Workspace entity growth
+  app.get(
+    "/api/v1/workspaces/:workspace/entity-growth",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const agents = db
+        .prepare(`SELECT created_at FROM agents WHERE workspace_id = ?`)
+        .all(workspace) as { created_at: string }[];
+      const handoffs = db
+        .prepare(`SELECT created_at FROM handoffs WHERE workspace_id = ?`)
+        .all(workspace) as { created_at: string }[];
+      const claims = db
+        .prepare(`SELECT created_at FROM claims WHERE workspace_id = ?`)
+        .all(workspace) as { created_at: string }[];
+      const blockers = db
+        .prepare(`SELECT created_at FROM blockers WHERE workspace_id = ?`)
+        .all(workspace) as { created_at: string }[];
+
+      const daily: Record<
+        string,
+        { agents: number; handoffs: number; claims: number; blockers: number }
+      > = {};
+      const addDay = (
+        items: { created_at: string }[],
+        key: keyof typeof daily extends string ? string : never,
+        field: string,
+      ) => {
+        for (const item of items) {
+          const day = item.created_at.slice(0, 10);
+          if (!daily[day]) daily[day] = { agents: 0, handoffs: 0, claims: 0, blockers: 0 };
+          (daily[day] as any)[field]++;
+        }
+      };
+      addDay(agents, "", "agents");
+      addDay(handoffs, "", "handoffs");
+      addDay(claims, "", "claims");
+      addDay(blockers, "", "blockers");
+
+      const trend = Object.entries(daily)
+        .map(([day, counts]) => ({ day, ...counts }))
+        .sort((a, b) => a.day.localeCompare(b.day));
+
+      return reply.send({ workspace, trend });
+    },
+  );
 };
