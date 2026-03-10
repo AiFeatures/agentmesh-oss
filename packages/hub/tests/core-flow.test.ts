@@ -8513,3 +8513,83 @@ test("GET /handoffs/velocity returns throughput trends", async () => {
 
   await app.close();
 });
+
+// F-175: Workspace capacity
+test("GET /workspaces/:workspace/capacity returns capacity stats", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `cap-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "cap-a1", display_name: "CAP A1", capabilities: ["code"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/capacity`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.workspace_id, ws);
+  assert.equal(body.total_agents, 1);
+  assert.ok(typeof body.online_agents === "number");
+  assert.ok(typeof body.active_claims === "number");
+  assert.ok(typeof body.pending_handoffs === "number");
+  assert.ok(typeof body.open_blockers === "number");
+  assert.ok(typeof body.agent_utilization === "number");
+
+  await app.close();
+});
+
+// F-176: Blocker heatmap
+test("GET /blockers/heatmap returns creation heatmap", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `hm-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "hm-a1", display_name: "HM A1", capabilities: ["debug"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "hm-a1", title: "Heatmap blocker", severity: "medium" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/heatmap`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.total_blockers === "number");
+  assert.ok(typeof body.peak_hour === "number");
+  assert.ok(typeof body.peak_day === "string");
+  assert.ok(Array.isArray(body.heatmap));
+  assert.ok(body.total_blockers >= 1);
+
+  await app.close();
+});

@@ -1588,4 +1588,60 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-175: Workspace capacity analysis
+  app.get(
+    "/api/v1/workspaces/:workspace/capacity",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const agentCount = (
+        db.prepare(`SELECT COUNT(*) as c FROM agents WHERE workspace_id = ?`).get(workspace) as {
+          c: number;
+        }
+      ).c;
+
+      const onlineAgents = (
+        db
+          .prepare(`SELECT COUNT(*) as c FROM agents WHERE workspace_id = ? AND status = 'online'`)
+          .get(workspace) as { c: number }
+      ).c;
+
+      const activeClaims = (
+        db
+          .prepare(`SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND status = 'active'`)
+          .get(workspace) as { c: number }
+      ).c;
+
+      const pendingHandoffs = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND status = 'pending'`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+
+      const openBlockers = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status != 'resolved'`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+
+      const agentUtilization =
+        agentCount > 0 ? Math.round((onlineAgents / agentCount) * 10000) / 100 : 0;
+
+      return reply.send({
+        workspace_id: workspace,
+        total_agents: agentCount,
+        online_agents: onlineAgents,
+        active_claims: activeClaims,
+        pending_handoffs: pendingHandoffs,
+        open_blockers: openBlockers,
+        agent_utilization: agentUtilization,
+      });
+    },
+  );
 };

@@ -1094,4 +1094,50 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-176: Blocker creation heatmap
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/heatmap",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const rows = db
+        .prepare(
+          `SELECT strftime('%H', created_at) as hour, strftime('%w', created_at) as dow, COUNT(*) as count
+           FROM blockers WHERE workspace_id = ?
+           GROUP BY hour, dow
+           ORDER BY dow, hour`,
+        )
+        .all(workspace) as Array<{ hour: string; dow: string; count: number }>;
+
+      const dayNames = [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+      ];
+      const heatmap = rows.map((r) => ({
+        day_of_week: dayNames[Number.parseInt(r.dow, 10)] ?? r.dow,
+        hour: Number.parseInt(r.hour, 10),
+        count: r.count,
+      }));
+
+      const peakHour = rows.reduce((max, r) => (r.count > max.count ? r : max), {
+        hour: "0",
+        dow: "0",
+        count: 0,
+      });
+
+      return reply.send({
+        total_blockers: rows.reduce((s, r) => s + r.count, 0),
+        peak_hour: Number.parseInt(peakHour.hour, 10),
+        peak_day: dayNames[Number.parseInt(peakHour.dow, 10)] ?? peakHour.dow,
+        heatmap,
+      });
+    },
+  );
 };
