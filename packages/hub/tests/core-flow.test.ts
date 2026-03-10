@@ -1816,3 +1816,75 @@ test("force-release-all releases active claims and respects filters", async () =
 
   await app.close();
 });
+
+// ------- Admin maintenance endpoint -------
+test("POST /admin/maintenance returns integrity and page info", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/v1/admin/maintenance",
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as {
+    integrity: string;
+    page_count: number;
+    freelist_count: number;
+    vacuumed: boolean;
+  };
+  assert.equal(body.integrity, "ok");
+  assert.equal(typeof body.page_count, "number");
+  assert.equal(typeof body.freelist_count, "number");
+  assert.equal(typeof body.vacuumed, "boolean");
+  await app.close();
+});
+
+// ------- Workspace delete cleans up audit_log -------
+test("DELETE workspace also removes its audit_log entries", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const workspaceId = `del-audit-${Date.now()}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "DelAudit" },
+  });
+
+  // Register agent to generate audit entries
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "da-agent", display_name: "DA", capabilities: ["test"] },
+  });
+
+  // Verify audit entries exist
+  const auditBefore = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/audit`,
+    headers: auth,
+  });
+  const beforeData = (auditBefore.json() as { data: unknown[] }).data;
+  assert.ok(beforeData.length > 0);
+
+  // Delete workspace
+  const delRes = await app.inject({
+    method: "DELETE",
+    url: `/api/v1/workspaces/${workspaceId}`,
+    headers: auth,
+  });
+  assert.equal(delRes.statusCode, 200);
+
+  // Workspace should be gone
+  const wsCheck = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}`,
+    headers: auth,
+  });
+  assert.equal(wsCheck.statusCode, 404);
+
+  await app.close();
+});

@@ -58,6 +58,25 @@ export function buildApp() {
     };
   });
 
+  app.post("/api/v1/admin/maintenance", { preHandler: app.authGuard }, async (_request, reply) => {
+    const integrityResult = db.pragma("integrity_check") as Array<{ integrity_check: string }>;
+    const integrityOk = integrityResult[0]?.integrity_check === "ok";
+    db.pragma("optimize");
+    const pageCount = (db.pragma("page_count") as Array<{ page_count: number }>)[0]?.page_count;
+    const freelistCount = (db.pragma("freelist_count") as Array<{ freelist_count: number }>)[0]
+      ?.freelist_count;
+    const shouldVacuum = freelistCount > 0 && freelistCount > pageCount * 0.1;
+    if (shouldVacuum) {
+      db.exec("VACUUM");
+    }
+    return reply.send({
+      integrity: integrityOk ? "ok" : "error",
+      page_count: pageCount,
+      freelist_count: freelistCount,
+      vacuumed: shouldVacuum,
+    });
+  });
+
   app.register(async (wsApp) => {
     await wsApp.register(websocket);
     wsApp.get("/ws", { websocket: true }, (socket, request) => {

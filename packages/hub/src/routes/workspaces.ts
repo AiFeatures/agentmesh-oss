@@ -144,6 +144,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(404).send({ error: "Workspace not found" });
       }
 
+      db.prepare("DELETE FROM audit_log WHERE workspace_id = ?").run(workspace);
       db.prepare("DELETE FROM workspaces WHERE workspace_id = ?").run(workspace);
 
       writeAuditLog({

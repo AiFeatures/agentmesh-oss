@@ -31,17 +31,17 @@ export function blockersCommand(): Command {
     .command("create")
     .description("Create a new blocker")
     .requiredOption("--agent <agentId>", "agent ID raising the blocker")
-    .requiredOption("--scope <scope>", "blocker scope")
-    .requiredOption("--description <text>", "blocker description")
+    .requiredOption("--title <text>", "blocker title")
     .option("-w, --workspace <workspace>", "workspace override")
+    .option("--details <text>", "additional details")
     .option("--severity <severity>", "severity: low|medium|high|critical", "medium")
-    .option("--deadline <iso>", "ISO 8601 deadline")
+    .option("--deadline <seconds>", "deadline in seconds")
     .action(
       async (opts: {
         workspace?: string;
         agent: string;
-        scope: string;
-        description: string;
+        title: string;
+        details?: string;
         severity: string;
         deadline?: string;
       }) => {
@@ -49,11 +49,11 @@ export function blockersCommand(): Command {
         const workspace = opts.workspace ?? cfg.workspace;
         const body: Record<string, unknown> = {
           agent_id: opts.agent,
-          scope: opts.scope,
-          description: opts.description,
+          title: opts.title,
           severity: opts.severity,
         };
-        if (opts.deadline) body.deadline_at = opts.deadline;
+        if (opts.details) body.details = opts.details;
+        if (opts.deadline) body.deadline_seconds = Number(opts.deadline);
         const response = await fetch(`${cfg.hubUrl}/api/v1/workspaces/${workspace}/blockers`, {
           method: "POST",
           headers: authHeaders(),
