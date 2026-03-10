@@ -22,6 +22,7 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
             summary: { type: "string", minLength: 1, maxLength: 2000 },
             context: { type: "object", additionalProperties: true, maxProperties: 50 },
             timeout_seconds: { type: "integer", minimum: 60, maximum: 86400 },
+            max_retries: { type: "integer", minimum: 0, maximum: 10 },
           },
         },
       },
@@ -35,6 +36,7 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
         summary: string;
         context?: Record<string, unknown>;
         timeout_seconds?: number;
+        max_retries?: number;
       };
 
       const fromExists = db
@@ -60,6 +62,7 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
         summary: body.summary,
         context: body.context,
         timeoutSeconds: body.timeout_seconds,
+        maxRetries: body.max_retries,
       });
 
       writeAuditLog({
@@ -141,6 +144,48 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
 
       broadcast("handoffs.updated", { workspace, handoff_id: handoffId, status: "rejected" });
       return reply.send({ ok: true });
+    },
+  );
+
+  /* ── F-54  handoff retry ────────────────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/handoffs/:handoffId/retry",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { handoffId, workspace } = request.params as { handoffId: string; workspace: string };
+      const row = db
+        .prepare("SELECT * FROM handoffs WHERE handoff_id = ? AND workspace_id = ?")
+        .get(handoffId, workspace) as Record<string, unknown> | undefined;
+      if (!row) {
+        return reply.code(404).send({ error: "Handoff not found" });
+      }
+      if (row.status !== "rejected") {
+        return reply.code(422).send({ error: "Only rejected handoffs can be retried" });
+      }
+      if (Number(row.retry_count) >= Number(row.max_retries)) {
+        return reply.code(422).send({
+          error: "Max retries exceeded",
+          retry_count: row.retry_count,
+          max_retries: row.max_retries,
+        });
+      }
+
+      db.prepare(
+        "UPDATE handoffs SET status = 'pending', retry_count = retry_count + 1, updated_at = CURRENT_TIMESTAMP WHERE handoff_id = ?",
+      ).run(handoffId);
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        action: "handoff.retry",
+        entityType: "handoff",
+        entityId: handoffId,
+        requestId: request.id,
+        payload: { retry_count: Number(row.retry_count) + 1 },
+      });
+
+      broadcast("handoffs.updated", { workspace, handoff_id: handoffId, status: "pending" });
+      return reply.send({ ok: true, retry_count: Number(row.retry_count) + 1 });
     },
   );
 

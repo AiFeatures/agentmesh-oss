@@ -178,6 +178,10 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
           additionalProperties: false,
           properties: {
             action: { type: "string", maxLength: 128 },
+            entity_type: { type: "string", maxLength: 64 },
+            actor_id: { type: "string", maxLength: 128 },
+            created_after: { type: "string", maxLength: 30 },
+            created_before: { type: "string", maxLength: 30 },
             limit: { type: "integer", minimum: 1, maximum: 200, default: 50 },
             offset: { type: "integer", minimum: 0, default: 0 },
           },
@@ -186,8 +190,12 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
     },
     async (request, reply) => {
       const { workspace } = request.params as { workspace: string };
-      const { action, limit, offset } = request.query as {
+      const q = request.query as {
         action?: string;
+        entity_type?: string;
+        actor_id?: string;
+        created_after?: string;
+        created_before?: string;
         limit: number;
         offset: number;
       };
@@ -201,12 +209,28 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
 
       let sql = "SELECT * FROM audit_log WHERE workspace_id = ?";
       const params: unknown[] = [workspace];
-      if (action) {
+      if (q.action) {
         sql += " AND action = ?";
-        params.push(action);
+        params.push(q.action);
+      }
+      if (q.entity_type) {
+        sql += " AND entity_type = ?";
+        params.push(q.entity_type);
+      }
+      if (q.actor_id) {
+        sql += " AND actor_id = ?";
+        params.push(q.actor_id);
+      }
+      if (q.created_after) {
+        sql += " AND created_at >= ?";
+        params.push(q.created_after);
+      }
+      if (q.created_before) {
+        sql += " AND created_at <= ?";
+        params.push(q.created_before);
       }
       sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?";
-      params.push(limit, offset);
+      params.push(q.limit, q.offset);
 
       const rows = db.prepare(sql).all(...params);
       return reply.send({ data: rows });

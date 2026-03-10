@@ -2776,3 +2776,181 @@ test("claims list supports sort_by and sort_order", async () => {
 
   await app.close();
 });
+
+/* ── F-54  handoff retry ──────────────────────────────────────── */
+test("handoff retry resets rejected handoff to pending", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `hretry-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "HRetry" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "retry-from", display_name: "From" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "retry-to", display_name: "To" },
+  });
+
+  const h = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: {
+      from_agent_id: "retry-from",
+      to_agent_id: "retry-to",
+      summary: "retry test",
+      max_retries: 2,
+    },
+  });
+  const handoffId = h.json().handoff_id;
+
+  // reject it
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs/${handoffId}/reject`,
+    headers: auth,
+  });
+
+  // retry it
+  const retryRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs/${handoffId}/retry`,
+    headers: auth,
+  });
+  assert.equal(retryRes.statusCode, 200);
+  assert.equal(retryRes.json().ok, true);
+  assert.equal(retryRes.json().retry_count, 1);
+
+  // reject + retry again (retry_count becomes 2)
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs/${handoffId}/reject`,
+    headers: auth,
+  });
+  const retryRes2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs/${handoffId}/retry`,
+    headers: auth,
+  });
+  assert.equal(retryRes2.statusCode, 200);
+  assert.equal(retryRes2.json().retry_count, 2);
+
+  // reject + try retry beyond max — should fail
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs/${handoffId}/reject`,
+    headers: auth,
+  });
+  const retryRes3 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs/${handoffId}/retry`,
+    headers: auth,
+  });
+  assert.equal(retryRes3.statusCode, 422);
+
+  await app.close();
+});
+
+/* ── F-55  audit log entity_type filter ───────────────────────── */
+test("audit log filters by entity_type and actor_id", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `auditf-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "AuditFilter" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "auditf-agent", display_name: "AF" },
+  });
+
+  // filter by entity_type=agent
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/audit?entity_type=agent`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  for (const row of res.json().data) {
+    assert.equal(row.entity_type, "agent");
+  }
+
+  // filter by actor_id
+  const res2 = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/audit?actor_id=auditf-agent`,
+    headers: auth,
+  });
+  assert.equal(res2.statusCode, 200);
+  assert.ok(res2.json().data.length > 0);
+
+  await app.close();
+});
+
+/* ── F-56  agent groups ───────────────────────────────────────── */
+test("agent register with group and filter by group", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `grp-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "GrpWS" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "grp-a1", display_name: "G1", group: "frontend" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "grp-a2", display_name: "G2", group: "backend" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "grp-a3", display_name: "G3", group: "frontend" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents?group=frontend`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().data.length, 2);
+
+  // all agents
+  const res2 = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+  });
+  assert.equal(res2.statusCode, 200);
+  assert.equal(res2.json().data.length, 3);
+
+  await app.close();
+});

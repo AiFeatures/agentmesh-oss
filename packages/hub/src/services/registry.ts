@@ -9,14 +9,15 @@ export type AgentRegistration = {
   capabilities: string[];
   metadata?: Record<string, unknown>;
   tags?: string[];
+  group?: string;
 };
 
 export function registerAgent(input: AgentRegistration): void {
   db.prepare(
     `
       INSERT INTO agents (
-        agent_id, workspace_id, display_name, model, capabilities, status, metadata, tags, last_heartbeat_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, 'online', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        agent_id, workspace_id, display_name, model, capabilities, status, metadata, tags, "group", last_heartbeat_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 'online', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       ON CONFLICT(agent_id) DO UPDATE SET
         workspace_id = excluded.workspace_id,
         display_name = excluded.display_name,
@@ -25,6 +26,7 @@ export function registerAgent(input: AgentRegistration): void {
         status = 'online',
         metadata = excluded.metadata,
         tags = excluded.tags,
+        "group" = excluded."group",
         last_heartbeat_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP
     `,
@@ -36,6 +38,7 @@ export function registerAgent(input: AgentRegistration): void {
     JSON.stringify(input.capabilities),
     input.metadata ? JSON.stringify(input.metadata) : null,
     JSON.stringify(input.tags ?? []),
+    input.group ?? null,
   );
 }
 
@@ -52,7 +55,7 @@ export function listAgents(workspaceId: string): Record<string, unknown>[] {
   const rows = db
     .prepare(
       `
-        SELECT agent_id, workspace_id, display_name, model, capabilities, status, last_heartbeat_at, metadata, tags, created_at, updated_at
+        SELECT agent_id, workspace_id, display_name, model, capabilities, status, last_heartbeat_at, metadata, tags, "group", created_at, updated_at
         FROM agents
         WHERE workspace_id = ?
         ORDER BY updated_at DESC

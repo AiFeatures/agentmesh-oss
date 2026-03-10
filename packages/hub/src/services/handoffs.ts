@@ -11,6 +11,7 @@ type HandoffInput = {
   summary: string;
   context?: Record<string, unknown>;
   timeoutSeconds?: number;
+  maxRetries?: number;
 };
 
 export function createHandoff(input: HandoffInput): { id: string; toAgentId: string | null } {
@@ -22,11 +23,12 @@ export function createHandoff(input: HandoffInput): { id: string; toAgentId: str
 
   const id = handoffId();
   const timeoutSec = input.timeoutSeconds ?? null;
+  const maxRetries = input.maxRetries ?? 0;
   db.prepare(
     `
       INSERT INTO handoffs (
-        handoff_id, workspace_id, from_agent_id, to_agent_id, route_mode, capability_tag, summary, context, status, timeout_seconds, expires_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, CASE WHEN ? IS NOT NULL THEN datetime('now', '+' || ? || ' seconds') ELSE NULL END)
+        handoff_id, workspace_id, from_agent_id, to_agent_id, route_mode, capability_tag, summary, context, status, timeout_seconds, max_retries, expires_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, CASE WHEN ? IS NOT NULL THEN datetime('now', '+' || ? || ' seconds') ELSE NULL END)
     `,
   ).run(
     id,
@@ -38,6 +40,7 @@ export function createHandoff(input: HandoffInput): { id: string; toAgentId: str
     input.summary,
     input.context ? JSON.stringify(input.context) : null,
     timeoutSec,
+    maxRetries,
     timeoutSec,
     timeoutSec,
   );

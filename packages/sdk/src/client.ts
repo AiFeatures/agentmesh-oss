@@ -276,6 +276,12 @@ export class AgentMeshClient {
     });
   }
 
+  async retryHandoff(workspace: string, handoffId: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/handoffs/${handoffId}/retry`, {
+      method: "POST",
+    });
+  }
+
   async deleteWorkspace(workspace: string): Promise<unknown> {
     return await this.request(`/api/v1/workspaces/${workspace}`, {
       method: "DELETE",

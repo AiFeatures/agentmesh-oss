@@ -31,6 +31,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
               items: { type: "string", minLength: 1, maxLength: 64 },
               maxItems: 50,
             },
+            group: { type: "string", minLength: 1, maxLength: 64 },
           },
         },
       },
@@ -44,6 +45,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
         capabilities?: string[];
         metadata?: Record<string, unknown>;
         tags?: string[];
+        group?: string;
       };
 
       const ws = db
@@ -75,6 +77,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
         capabilities: body.capabilities ?? [],
         metadata: body.metadata,
         tags: body.tags,
+        group: body.group,
       });
 
       writeAuditLog({
@@ -222,6 +225,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
             },
             capability: { type: "string", maxLength: 64 },
             tag: { type: "string", maxLength: 64 },
+            group: { type: "string", maxLength: 64 },
             limit: { type: "string" },
             offset: { type: "string" },
           },
@@ -230,12 +234,13 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     },
     async (request, reply) => {
       const { workspace } = request.params as { workspace: string };
-      const { limit, offset, status, capability, tag } = request.query as {
+      const { limit, offset, status, capability, tag, group } = request.query as {
         limit?: string;
         offset?: string;
         status?: string;
         capability?: string;
         tag?: string;
+        group?: string;
       };
       let all = listAgents(workspace);
       if (status) {
@@ -248,6 +253,9 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       }
       if (tag) {
         all = all.filter((a) => Array.isArray(a.tags) && a.tags.includes(tag));
+      }
+      if (group) {
+        all = all.filter((a) => a.group === group);
       }
       const start = Math.max(0, Number(offset) || 0);
       const count = Math.min(200, Math.max(1, Number(limit) || 50));
