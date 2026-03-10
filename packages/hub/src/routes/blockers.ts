@@ -2403,4 +2403,47 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, blockers: rows });
     },
   );
+
+  // F-358 title-word-cloud
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/title-word-cloud",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(`SELECT title FROM blockers WHERE workspace_id = ?`)
+        .all(req.params.workspace) as { title: string }[];
+
+      const counts: Record<string, number> = {};
+      const stopWords = new Set([
+        "the",
+        "a",
+        "an",
+        "is",
+        "in",
+        "of",
+        "to",
+        "and",
+        "or",
+        "for",
+        "on",
+        "at",
+        "by",
+        "with",
+      ]);
+      for (const r of rows) {
+        const words = (r.title || "")
+          .toLowerCase()
+          .split(/\W+/)
+          .filter((w) => w.length > 2 && !stopWords.has(w));
+        for (const w of words) {
+          counts[w] = (counts[w] || 0) + 1;
+        }
+      }
+      const cloud = Object.entries(counts)
+        .map(([word, count]) => ({ word, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 30);
+      reply.send({ workspace: req.params.workspace, words: cloud });
+    },
+  );
 };

@@ -2797,4 +2797,23 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-357 audit-action-frequency
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/audit-action-frequency",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT action, COUNT(*) AS count
+           FROM audit_log
+           WHERE workspace_id = ?
+           GROUP BY action
+           ORDER BY count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as { action: string; count: number }[];
+      reply.send({ workspace: req.params.workspace, actions: rows });
+    },
+  );
 };
