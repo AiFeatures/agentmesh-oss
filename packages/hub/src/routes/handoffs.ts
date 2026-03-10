@@ -3306,4 +3306,36 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, handoffs: rows });
     },
   );
+
+  // F-494 handoff-from-agent-success-rate
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-from-agent-success-rate",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT from_agent_id,
+                  COUNT(*) AS total,
+                  SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
+                  ROUND(
+                    CASE WHEN COUNT(*) > 0
+                      THEN 100.0 * SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) / COUNT(*)
+                      ELSE 0
+                    END, 1
+                  ) AS success_rate
+           FROM handoffs
+           WHERE workspace_id = ?
+           GROUP BY from_agent_id
+           ORDER BY total DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        from_agent_id: string;
+        total: number;
+        completed: number;
+        success_rate: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, agents: rows });
+    },
+  );
 };

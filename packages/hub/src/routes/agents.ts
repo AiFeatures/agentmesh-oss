@@ -3934,4 +3934,28 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: result });
     },
   );
+
+  // F-493 agent-task-priority-breakdown
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/agent-task-priority-breakdown",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT at2.agent_id, a.display_name, at2.priority, COUNT(*) AS count
+           FROM agent_tasks at2
+           JOIN agents a ON a.agent_id = at2.agent_id AND a.workspace_id = at2.workspace_id
+           WHERE at2.workspace_id = ?
+           GROUP BY at2.agent_id, at2.priority
+           ORDER BY at2.agent_id, at2.priority`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        priority: number;
+        count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, breakdown: rows });
+    },
+  );
 };
