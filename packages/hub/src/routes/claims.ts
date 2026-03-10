@@ -3141,4 +3141,28 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, transfers: rows });
     },
   );
+
+  // F-442 claim-scope-collision
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/claim-scope-collision",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT scope, COUNT(*) AS claim_count, GROUP_CONCAT(DISTINCT agent_id) AS agents
+           FROM claims
+           WHERE workspace_id = ? AND status = 'active'
+           GROUP BY scope
+           HAVING COUNT(*) > 1
+           ORDER BY claim_count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        scope: string;
+        claim_count: number;
+        agents: string;
+      }[];
+      reply.send({ workspace: req.params.workspace, collisions: rows });
+    },
+  );
 };

@@ -3689,4 +3689,27 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-441 agent-status-transition
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/agent-status-transition",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT old_status, new_status, COUNT(*) AS transition_count
+           FROM agent_status_history
+           WHERE workspace_id = ?
+           GROUP BY old_status, new_status
+           ORDER BY transition_count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        old_status: string;
+        new_status: string;
+        transition_count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, transitions: rows });
+    },
+  );
 };
