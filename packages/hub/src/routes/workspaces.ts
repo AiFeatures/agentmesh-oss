@@ -7,7 +7,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
   app.get("/api/v1/workspaces", { preHandler: app.authGuard }, async (_request, reply) => {
     const rows = db
       .prepare(
-        "SELECT workspace_id, display_name, base_path, created_at FROM workspaces ORDER BY created_at ASC",
+        "SELECT workspace_id, display_name, description, base_path, created_at FROM workspaces ORDER BY created_at ASC",
       )
       .all();
     return reply.send({ data: rows });
@@ -20,7 +20,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       const { workspace } = request.params as { workspace: string };
       const row = db
         .prepare(
-          "SELECT workspace_id, display_name, base_path, created_at FROM workspaces WHERE workspace_id = ?",
+          "SELECT workspace_id, display_name, description, base_path, created_at FROM workspaces WHERE workspace_id = ?",
         )
         .get(workspace);
       if (!row) {
@@ -83,6 +83,7 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
           additionalProperties: false,
           properties: {
             display_name: { type: "string", minLength: 1, maxLength: 256 },
+            description: { type: "string", maxLength: 2000 },
             base_path: { type: "string", maxLength: 1024 },
           },
         },
@@ -90,7 +91,11 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
     },
     async (request, reply) => {
       const { workspace } = request.params as { workspace: string };
-      const body = request.body as { display_name?: string; base_path?: string };
+      const body = request.body as {
+        display_name?: string;
+        description?: string;
+        base_path?: string;
+      };
 
       const ws = db
         .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
@@ -108,6 +113,10 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       if (body.base_path !== undefined) {
         updates.push("base_path = ?");
         params.push(body.base_path);
+      }
+      if (body.description !== undefined) {
+        updates.push("description = ?");
+        params.push(body.description);
       }
       if (updates.length === 0) {
         return reply.code(400).send({ error: "No fields to update" });
@@ -230,14 +239,15 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       const body = request.body as {
         workspace_id?: string;
         display_name: string;
+        description?: string;
         base_path?: string;
       };
       const id = body.workspace_id ?? generateWorkspaceId();
 
       try {
         db.prepare(
-          "INSERT INTO workspaces (workspace_id, display_name, base_path) VALUES (?, ?, ?)",
-        ).run(id, body.display_name, body.base_path ?? null);
+          "INSERT INTO workspaces (workspace_id, display_name, description, base_path) VALUES (?, ?, ?, ?)",
+        ).run(id, body.display_name, body.description ?? null, body.base_path ?? null);
       } catch (err: unknown) {
         if (err instanceof Error && err.message.includes("UNIQUE constraint failed")) {
           return reply.code(409).send({ error: "Workspace already exists" });

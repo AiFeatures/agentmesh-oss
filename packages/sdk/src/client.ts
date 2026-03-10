@@ -347,6 +347,12 @@ export class AgentMeshClient {
     });
   }
 
+  async getBlockerStats(workspace: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/blockers/stats`, {
+      method: "GET",
+    });
+  }
+
   async getClaim(workspace: string, claimId: string): Promise<unknown> {
     return await this.request(`/api/v1/workspaces/${workspace}/claims/${claimId}`, {
       method: "GET",

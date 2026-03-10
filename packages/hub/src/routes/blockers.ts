@@ -181,4 +181,42 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ ...(row as Record<string, unknown>), timeline });
     },
   );
+
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/stats",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+
+      const byStatus = db
+        .prepare(
+          "SELECT status, COUNT(*) as count FROM blockers WHERE workspace_id = ? GROUP BY status",
+        )
+        .all(workspace) as Array<{ status: string; count: number }>;
+      const bySeverity = db
+        .prepare(
+          "SELECT severity, COUNT(*) as count FROM blockers WHERE workspace_id = ? GROUP BY severity",
+        )
+        .all(workspace) as Array<{ severity: string; count: number }>;
+      const avgResolutionTime = db
+        .prepare(
+          "SELECT AVG(julianday(resolved_at) - julianday(created_at)) * 86400 as avg_seconds FROM blockers WHERE workspace_id = ? AND status = 'resolved'",
+        )
+        .get(workspace) as { avg_seconds: number | null };
+
+      return reply.send({
+        by_status: Object.fromEntries(byStatus.map((r) => [r.status, r.count])),
+        by_severity: Object.fromEntries(bySeverity.map((r) => [r.severity, r.count])),
+        avg_resolution_seconds: avgResolutionTime.avg_seconds
+          ? Math.round(avgResolutionTime.avg_seconds)
+          : null,
+      });
+    },
+  );
 };
