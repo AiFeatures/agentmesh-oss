@@ -14146,3 +14146,34 @@ test("F-510 workspace-blocker-density", async () => {
   await app.close();
 });
 
+
+// T-511 agent-capability-overlap
+test("F-511 agent-capability-overlap", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "aco-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/agent-capability-overlap`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = res.json();
+  assert.ok("total_pairs" in body);
+  assert.ok(Array.isArray(body.overlaps));
+  await app.close();
+});
+
+// T-512 handoff-retry-rate
+test("F-512 handoff-retry-rate", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "hrr-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/handoff-retry-rate`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = res.json();
+  assert.ok("retry_rate" in body);
+  assert.ok("total_handoffs" in body);
+  await app.close();
+});
+

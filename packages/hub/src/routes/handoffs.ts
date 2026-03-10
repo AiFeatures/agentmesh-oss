@@ -3432,4 +3432,29 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-512 handoff-retry-rate
+  app.get<{ Params: { workspaceId: string } }>(
+    "/api/v1/workspaces/:workspaceId/analytics/handoff-retry-rate",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspaceId } = req.params;
+      const row = db
+        .prepare(
+          `SELECT
+             COUNT(*) AS total,
+             SUM(CASE WHEN retry_count > 0 THEN 1 ELSE 0 END) AS retried
+           FROM handoffs
+           WHERE workspace_id = ?`,
+        )
+        .get(workspaceId) as any;
+      const total = row?.total ?? 0;
+      const retried = row?.retried ?? 0;
+      return reply.send({
+        total_handoffs: total,
+        retried_handoffs: retried,
+        retry_rate: total > 0 ? +(retried / total).toFixed(4) : 0,
+      });
+    },
+  );
 };
