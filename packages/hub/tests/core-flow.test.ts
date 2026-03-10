@@ -11366,3 +11366,33 @@ test("GET /handoffs/acceptance-lag returns lag data", async () => {
   assert.ok(Array.isArray(body.agents));
   await app.close();
 });
+
+// F-313 deadline-proximity
+test("GET /blockers/deadline-proximity returns proximity data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "dlprox-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/deadline-proximity`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.blockers));
+  assert.ok(typeof body.overdue_count === "number");
+  await app.close();
+});
+
+// F-314 agent-diversity
+test("GET /claims/agent-diversity returns diversity data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "agdiv-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/agent-diversity`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.agents));
+  assert.ok(typeof body.diversity_ratio === "number");
+  await app.close();
+});

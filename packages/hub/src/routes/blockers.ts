@@ -2138,4 +2138,35 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, reporters: rows });
     },
   );
+
+  // F-313 deadline-proximity
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/deadline-proximity",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT blocker_id, agent_id, title, severity, deadline_at,
+                  (julianday(deadline_at) - julianday('now')) * 86400 as seconds_remaining
+           FROM blockers
+           WHERE workspace_id = ? AND deadline_at IS NOT NULL AND status = 'open'
+           ORDER BY seconds_remaining ASC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        blocker_id: string;
+        agent_id: string;
+        title: string;
+        severity: string;
+        deadline_at: string;
+        seconds_remaining: number;
+      }[];
+      const overdue = rows.filter((r) => r.seconds_remaining < 0).length;
+      reply.send({
+        workspace: req.params.workspace,
+        blockers: rows,
+        overdue_count: overdue,
+      });
+    },
+  );
 };

@@ -2531,4 +2531,33 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-314 agent-diversity
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/agent-diversity",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT agent_id, COUNT(*) as claim_count
+           FROM claims
+           WHERE workspace_id = ?
+           GROUP BY agent_id
+           ORDER BY claim_count DESC`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        claim_count: number;
+      }[];
+      const totalClaims = rows.reduce((s, r) => s + r.claim_count, 0);
+      const uniqueAgents = rows.length;
+      reply.send({
+        workspace: req.params.workspace,
+        agents: rows,
+        unique_agents: uniqueAgents,
+        total_claims: totalClaims,
+        diversity_ratio: totalClaims > 0 ? uniqueAgents / totalClaims : 0,
+      });
+    },
+  );
 };
