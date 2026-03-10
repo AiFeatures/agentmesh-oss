@@ -2677,4 +2677,20 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ...row });
     },
   );
+
+  // F-388 handoff-expired-count
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/expired-count",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS expired
+           FROM handoffs
+           WHERE workspace_id = ? AND status = 'expired'`,
+        )
+        .get(req.params.workspace) as { expired: number };
+      reply.send({ workspace: req.params.workspace, expired: row.expired });
+    },
+  );
 };
