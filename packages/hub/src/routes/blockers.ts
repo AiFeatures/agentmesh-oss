@@ -2753,4 +2753,28 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, blockers: rows });
     },
   );
+
+  // F-430 blocker-resolution-speed
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/blocker-resolution-speed",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT blocker_id, title, severity,
+                  ROUND((julianday(resolved_at) - julianday(created_at)) * 24, 2) AS hours_to_resolve
+           FROM blockers
+           WHERE workspace_id = ? AND status = 'resolved' AND resolved_at IS NOT NULL
+           ORDER BY hours_to_resolve ASC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        blocker_id: string;
+        title: string;
+        severity: string;
+        hours_to_resolve: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, blockers: rows });
+    },
+  );
 };

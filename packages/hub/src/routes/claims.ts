@@ -3069,4 +3069,28 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: rows });
     },
   );
+
+  // F-429 claim-expiry-horizon
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/claim-expiry-horizon",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT claim_id, scope, agent_id,
+                  ROUND((julianday(expires_at) - julianday('now')) * 24, 2) AS hours_until_expiry
+           FROM claims
+           WHERE workspace_id = ? AND status = 'active' AND expires_at IS NOT NULL
+           ORDER BY expires_at ASC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        claim_id: string;
+        scope: string;
+        agent_id: string;
+        hours_until_expiry: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, claims: rows });
+    },
+  );
 };
