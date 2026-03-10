@@ -1817,4 +1817,46 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-195: Agent distribution within a workspace
+  app.get(
+    "/api/v1/workspaces/:workspace/agent-distribution",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const agents = db
+        .prepare(`SELECT agent_id, status, model, capabilities FROM agents WHERE workspace_id = ?`)
+        .all(workspace) as {
+        agent_id: string;
+        status: string;
+        model: string | null;
+        capabilities: string;
+      }[];
+
+      const byStatus: Record<string, number> = {};
+      const byModel: Record<string, number> = {};
+      const byCapability: Record<string, number> = {};
+
+      for (const a of agents) {
+        byStatus[a.status] = (byStatus[a.status] || 0) + 1;
+        const model = a.model || "unknown";
+        byModel[model] = (byModel[model] || 0) + 1;
+        try {
+          const caps = JSON.parse(a.capabilities || "[]") as string[];
+          for (const c of caps) {
+            byCapability[c] = (byCapability[c] || 0) + 1;
+          }
+        } catch {}
+      }
+
+      return reply.send({
+        workspace,
+        total_agents: agents.length,
+        by_status: byStatus,
+        by_model: byModel,
+        by_capability: byCapability,
+      });
+    },
+  );
 };

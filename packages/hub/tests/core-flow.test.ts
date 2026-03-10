@@ -9279,3 +9279,43 @@ test("GET /claims/duration-stats returns duration statistics", async () => {
   assert.ok(typeof body.duration_hours.avg === "number");
   await app.close();
 });
+
+// ---------- F-195: Workspace agent distribution ----------
+test("GET /workspaces/:workspace/agent-distribution returns distribution", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ws-agdist-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"], model: "gpt-4" } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["code", "review"], model: "gpt-4" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agent-distribution`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.equal(body.total_agents, 2);
+  assert.ok(body.by_status);
+  assert.ok(body.by_model);
+  assert.ok(body.by_capability);
+  assert.equal(body.by_capability.code, 2);
+  await app.close();
+});
+
+// ---------- F-196: Agent heartbeat health ----------
+test("GET /agents/heartbeat-health returns health analysis", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ag-hbhealth-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/heartbeat-health`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_agents === "number");
+  assert.ok(typeof body.healthy === "number");
+  assert.ok(typeof body.stale === "number");
+  assert.ok(Array.isArray(body.agents));
+  await app.close();
+});

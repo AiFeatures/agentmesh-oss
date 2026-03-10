@@ -2062,4 +2062,53 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-196: Heartbeat health analysis
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/heartbeat-health",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { stale_minutes = "5" } = request.query as { stale_minutes?: string };
+      const staleMs = (Number.parseInt(stale_minutes, 10) || 5) * 60000;
+      const now = Date.now();
+
+      const agents = db
+        .prepare(
+          `SELECT agent_id, display_name, status, last_heartbeat_at FROM agents WHERE workspace_id = ?`,
+        )
+        .all(workspace) as {
+        agent_id: string;
+        display_name: string;
+        status: string;
+        last_heartbeat_at: string | null;
+      }[];
+
+      const results = agents.map((a) => {
+        const lastHb = a.last_heartbeat_at ? new Date(a.last_heartbeat_at).getTime() : 0;
+        const ageMs = lastHb > 0 ? now - lastHb : -1;
+        const isStale = lastHb === 0 || ageMs > staleMs;
+        return {
+          agent_id: a.agent_id,
+          display_name: a.display_name,
+          status: a.status,
+          last_heartbeat_at: a.last_heartbeat_at,
+          heartbeat_age_seconds: ageMs >= 0 ? Math.round(ageMs / 1000) : null,
+          is_stale: isStale,
+        };
+      });
+
+      const healthy = results.filter((r) => !r.is_stale).length;
+      const stale = results.filter((r) => r.is_stale).length;
+
+      return reply.send({
+        workspace,
+        stale_threshold_minutes: Number.parseInt(stale_minutes, 10) || 5,
+        total_agents: agents.length,
+        healthy,
+        stale,
+        agents: results,
+      });
+    },
+  );
 };
