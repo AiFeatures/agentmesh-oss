@@ -1099,4 +1099,45 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-174: Handoff velocity
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/velocity",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { days = "7" } = request.query as { days?: string };
+      const numDays = Math.max(Number.parseInt(days, 10) || 7, 1);
+
+      const daily = db
+        .prepare(
+          `SELECT date(created_at) as day,
+                  COUNT(*) as created,
+                  SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted,
+                  SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected
+           FROM handoffs
+           WHERE workspace_id = ? AND created_at >= datetime('now', ?)
+           GROUP BY date(created_at)
+           ORDER BY day`,
+        )
+        .all(workspace, `-${numDays} days`) as Array<{
+        day: string;
+        created: number;
+        accepted: number;
+        rejected: number;
+      }>;
+
+      const totalCreated = daily.reduce((s, d) => s + d.created, 0);
+      const totalAccepted = daily.reduce((s, d) => s + d.accepted, 0);
+      const avgPerDay = daily.length > 0 ? Math.round((totalCreated / daily.length) * 10) / 10 : 0;
+
+      return reply.send({
+        period_days: numDays,
+        total_created: totalCreated,
+        total_accepted: totalAccepted,
+        avg_per_day: avgPerDay,
+        daily,
+      });
+    },
+  );
 };

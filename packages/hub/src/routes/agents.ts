@@ -1813,4 +1813,51 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-173: Agent availability summary
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/availability-summary",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const agents = db
+        .prepare(
+          `SELECT agent_id, display_name, status, last_heartbeat_at, created_at
+           FROM agents WHERE workspace_id = ?`,
+        )
+        .all(workspace) as Array<{
+        agent_id: string;
+        display_name: string;
+        status: string;
+        last_heartbeat_at: string;
+        created_at: string;
+      }>;
+
+      const statusCounts: Record<string, number> = {};
+      for (const a of agents) {
+        statusCounts[a.status] = (statusCounts[a.status] ?? 0) + 1;
+      }
+
+      const summary = agents.map((a) => {
+        const uptimeHours =
+          Math.round(((Date.now() - new Date(a.created_at).getTime()) / 3600000) * 10) / 10;
+        const lastSeenMinutes =
+          Math.round(((Date.now() - new Date(a.last_heartbeat_at).getTime()) / 60000) * 10) / 10;
+        return {
+          agent_id: a.agent_id,
+          display_name: a.display_name,
+          status: a.status,
+          uptime_hours: uptimeHours,
+          last_seen_minutes_ago: lastSeenMinutes,
+        };
+      });
+
+      return reply.send({
+        agent_count: agents.length,
+        status_distribution: statusCounts,
+        agents: summary,
+      });
+    },
+  );
 };

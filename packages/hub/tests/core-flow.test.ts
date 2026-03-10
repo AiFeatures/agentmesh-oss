@@ -8425,3 +8425,91 @@ test("GET /claims/aging returns age distribution", async () => {
 
   await app.close();
 });
+
+// F-173: Agent availability summary
+test("GET /agents/availability-summary returns availability stats", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `avail-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "avail-a1", display_name: "AVAIL A1", capabilities: ["code"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/availability-summary`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.agent_count === "number");
+  assert.ok(body.status_distribution);
+  assert.ok(Array.isArray(body.agents));
+  assert.equal(body.agent_count, 1);
+  const a1 = body.agents[0];
+  assert.equal(a1.agent_id, "avail-a1");
+  assert.ok(typeof a1.uptime_hours === "number");
+  assert.ok(typeof a1.last_seen_minutes_ago === "number");
+
+  await app.close();
+});
+
+// F-174: Handoff velocity
+test("GET /handoffs/velocity returns throughput trends", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `vel-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "vel-a1", display_name: "VEL A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "vel-a2", display_name: "VEL A2", capabilities: ["review"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "vel-a1", to_agent_id: "vel-a2", summary: "Velocity test" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/velocity?days=7`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.period_days, 7);
+  assert.ok(typeof body.total_created === "number");
+  assert.ok(typeof body.total_accepted === "number");
+  assert.ok(typeof body.avg_per_day === "number");
+  assert.ok(Array.isArray(body.daily));
+  assert.ok(body.total_created >= 1);
+
+  await app.close();
+});
