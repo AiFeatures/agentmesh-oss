@@ -2154,4 +2154,64 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, agents: scores });
     },
   );
+
+  // F-206: Agent task completion rate
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/task-completion-rate",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const tasks = db
+        .prepare(`SELECT agent_id, status FROM agent_tasks WHERE workspace_id = ?`)
+        .all(workspace) as { agent_id: string; status: string }[];
+
+      const byAgent: Record<
+        string,
+        {
+          total: number;
+          completed: number;
+          cancelled: number;
+          pending: number;
+          in_progress: number;
+        }
+      > = {};
+      for (const t of tasks) {
+        if (!byAgent[t.agent_id])
+          byAgent[t.agent_id] = {
+            total: 0,
+            completed: 0,
+            cancelled: 0,
+            pending: 0,
+            in_progress: 0,
+          };
+        byAgent[t.agent_id].total++;
+        if (t.status === "completed") byAgent[t.agent_id].completed++;
+        else if (t.status === "cancelled") byAgent[t.agent_id].cancelled++;
+        else if (t.status === "pending") byAgent[t.agent_id].pending++;
+        else if (t.status === "in_progress") byAgent[t.agent_id].in_progress++;
+      }
+
+      const agents = Object.entries(byAgent)
+        .map(([agent_id, stats]) => ({
+          agent_id,
+          ...stats,
+          completion_rate:
+            stats.total > 0 ? Math.round((stats.completed / stats.total) * 10000) / 100 : 0,
+        }))
+        .sort((a, b) => b.completion_rate - a.completion_rate);
+
+      const totalTasks = tasks.length;
+      const totalCompleted = tasks.filter((t) => t.status === "completed").length;
+
+      return reply.send({
+        workspace,
+        total_tasks: totalTasks,
+        total_completed: totalCompleted,
+        overall_completion_rate:
+          totalTasks > 0 ? Math.round((totalCompleted / totalTasks) * 10000) / 100 : 0,
+        agents,
+      });
+    },
+  );
 };

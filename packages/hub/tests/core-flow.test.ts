@@ -9484,3 +9484,43 @@ test("GET /claims/agent-summary returns per-agent summary", async () => {
   assert.ok(body.agents[0].active >= 1);
   await app.close();
 });
+
+// ---------- F-205: Workspace blocker trend ----------
+test("GET /workspaces/:workspace/blocker-trend returns trend data", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ws-blktrend-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "bug", severity: "medium" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blocker-trend?days=7`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(Array.isArray(body.trend));
+  assert.equal(body.days, 7);
+  assert.ok(body.trend.length > 0);
+  assert.ok(body.trend.some((t: any) => typeof t.opened === "number"));
+  await app.close();
+});
+
+// ---------- F-206: Agent task completion rate ----------
+test("GET /agents/task-completion-rate returns completion rates", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ag-taskcomp-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  // Create a task
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/a1/tasks`, headers: auth, payload: { title: "fix bug" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/task-completion-rate`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_tasks === "number");
+  assert.ok(typeof body.overall_completion_rate === "number");
+  assert.ok(Array.isArray(body.agents));
+  await app.close();
+});

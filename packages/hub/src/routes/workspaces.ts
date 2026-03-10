@@ -1901,4 +1901,48 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-205: Blocker trend over time
+  app.get(
+    "/api/v1/workspaces/:workspace/blocker-trend",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { days = "7" } = request.query as { days?: string };
+      const totalDays = Math.min(Number.parseInt(days, 10) || 7, 90);
+      const now = new Date();
+
+      const blockers = db
+        .prepare(`SELECT created_at, resolved_at, status FROM blockers WHERE workspace_id = ?`)
+        .all(workspace) as { created_at: string; resolved_at: string | null; status: string }[];
+
+      const trend: { date: string; opened: number; resolved: number; cumulative_open: number }[] =
+        [];
+      let cumOpen = 0;
+      for (let i = totalDays - 1; i >= 0; i--) {
+        const dayStart = new Date(now);
+        dayStart.setDate(dayStart.getDate() - i);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(dayStart);
+        dayEnd.setDate(dayEnd.getDate() + 1);
+        const dateStr = dayStart.toISOString().split("T")[0];
+
+        const opened = blockers.filter((b) => {
+          const t = new Date(b.created_at).getTime();
+          return t >= dayStart.getTime() && t < dayEnd.getTime();
+        }).length;
+
+        const resolved = blockers.filter((b) => {
+          if (!b.resolved_at) return false;
+          const t = new Date(b.resolved_at).getTime();
+          return t >= dayStart.getTime() && t < dayEnd.getTime();
+        }).length;
+
+        cumOpen += opened - resolved;
+        trend.push({ date: dateStr, opened, resolved, cumulative_open: cumOpen });
+      }
+
+      return reply.send({ workspace, days: totalDays, trend });
+    },
+  );
 };
