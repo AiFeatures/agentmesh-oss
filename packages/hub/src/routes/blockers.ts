@@ -1968,4 +1968,27 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+
+  // F-287 blocker-comment-activity
+  app.get<{ Params: { workspace: string }; Querystring: { limit?: number } }>(
+    "/api/v1/workspaces/:workspace/blockers/comment-activity",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const limit = req.query.limit ?? 10;
+      const rows = db
+        .prepare(
+          `SELECT b.blocker_id, b.title, b.severity, b.status,
+                  COUNT(bc.id) as comment_count
+           FROM blockers b
+           LEFT JOIN blocker_comments bc ON bc.blocker_id = b.blocker_id
+           WHERE b.workspace_id = ?
+           GROUP BY b.blocker_id
+           ORDER BY comment_count DESC
+           LIMIT ?`,
+        )
+        .all(req.params.workspace, limit) as { blocker_id: string; title: string; severity: string; status: string; comment_count: number }[];
+      reply.send({ workspace: req.params.workspace, blockers: rows });
+    },
+  );
+
 };

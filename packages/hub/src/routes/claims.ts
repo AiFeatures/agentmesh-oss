@@ -2368,4 +2368,19 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+
+  // F-288 claim-abandonment-rate
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/abandonment-rate",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const total = (db.prepare("SELECT COUNT(*) as c FROM claims WHERE workspace_id = ?").get(req.params.workspace) as { c: number }).c;
+      const released = (db.prepare("SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND status = 'released'").get(req.params.workspace) as { c: number }).c;
+      const expired = (db.prepare("SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND status = 'expired'").get(req.params.workspace) as { c: number }).c;
+      const abandoned = released + expired;
+      const rate = total > 0 ? Math.round((abandoned / total) * 10000) / 100 : 0;
+      reply.send({ workspace: req.params.workspace, total, released, expired, abandoned, abandonment_rate: rate });
+    },
+  );
+
 };
