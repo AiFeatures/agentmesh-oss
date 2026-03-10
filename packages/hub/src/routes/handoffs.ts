@@ -2046,7 +2046,13 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
 
       const total = rows.reduce((s, r) => s + r.cnt, 0);
       const avg = rows.length > 0 ? Math.round((total / rows.length) * 100) / 100 : 0;
-      return reply.send({ workspace, total_handoffs: total, days_tracked: rows.length, avg_per_day: avg, daily: rows });
+      return reply.send({
+        workspace,
+        total_handoffs: total,
+        days_tracked: rows.length,
+        avg_per_day: avg,
+        daily: rows,
+      });
     },
   );
 
@@ -2073,7 +2079,6 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-
   // F-284 handoff-feedback-summary
   app.get<{ Params: { workspace: string } }>(
     "/api/v1/workspaces/:workspace/handoffs/feedback-summary",
@@ -2088,11 +2093,15 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
            ORDER BY note_count DESC`,
         )
         .all(req.params.workspace) as { handoff_id: string; status: string; note_count: number }[];
-      const with_feedback = rows.filter(r => r.note_count > 0).length;
-      reply.send({ workspace: req.params.workspace, total: rows.length, with_feedback, handoffs: rows });
+      const with_feedback = rows.filter((r) => r.note_count > 0).length;
+      reply.send({
+        workspace: req.params.workspace,
+        total: rows.length,
+        with_feedback,
+        handoffs: rows,
+      });
     },
   );
-
 
   // F-286 handoff-peak-hours
   app.get<{ Params: { workspace: string } }>(
@@ -2113,7 +2122,6 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-
   // F-291 handoff-recipient-stats
   app.get<{ Params: { workspace: string } }>(
     "/api/v1/workspaces/:workspace/handoffs/recipient-stats",
@@ -2129,9 +2137,13 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
            GROUP BY to_agent_id
            ORDER BY received_count DESC`,
         )
-        .all(req.params.workspace) as { to_agent_id: string; received_count: number; accepted: number; rejected: number }[];
+        .all(req.params.workspace) as {
+        to_agent_id: string;
+        received_count: number;
+        accepted: number;
+        rejected: number;
+      }[];
       reply.send({ workspace: req.params.workspace, recipients: rows });
     },
   );
-
 };

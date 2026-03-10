@@ -1940,12 +1940,24 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
            WHERE workspace_id = ? AND status != 'resolved'
            ORDER BY hours_open DESC`,
         )
-        .all(req.params.workspace) as { blocker_id: string; title: string; severity: string; hours_open: number }[];
-      const avg_hours = rows.length > 0 ? Math.round((rows.reduce((s, r) => s + r.hours_open, 0) / rows.length) * 10) / 10 : 0;
-      reply.send({ workspace: req.params.workspace, unresolved: rows.length, avg_hours_open: avg_hours, blockers: rows });
+        .all(req.params.workspace) as {
+        blocker_id: string;
+        title: string;
+        severity: string;
+        hours_open: number;
+      }[];
+      const avg_hours =
+        rows.length > 0
+          ? Math.round((rows.reduce((s, r) => s + r.hours_open, 0) / rows.length) * 10) / 10
+          : 0;
+      reply.send({
+        workspace: req.params.workspace,
+        unresolved: rows.length,
+        avg_hours_open: avg_hours,
+        blockers: rows,
+      });
     },
   );
-
 
   // F-282 blocker-cascade-risk
   app.get<{ Params: { workspace: string } }>(
@@ -1963,11 +1975,16 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
            HAVING dependent_count > 0
            ORDER BY dependent_count DESC`,
         )
-        .all(req.params.workspace) as { blocker_id: string; title: string; severity: string; status: string; dependent_count: number }[];
+        .all(req.params.workspace) as {
+        blocker_id: string;
+        title: string;
+        severity: string;
+        status: string;
+        dependent_count: number;
+      }[];
       reply.send({ workspace: req.params.workspace, cascade_risks: rows });
     },
   );
-
 
   // F-287 blocker-comment-activity
   app.get<{ Params: { workspace: string }; Querystring: { limit?: number } }>(
@@ -1986,9 +2003,44 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
            ORDER BY comment_count DESC
            LIMIT ?`,
         )
-        .all(req.params.workspace, limit) as { blocker_id: string; title: string; severity: string; status: string; comment_count: number }[];
+        .all(req.params.workspace, limit) as {
+        blocker_id: string;
+        title: string;
+        severity: string;
+        status: string;
+        comment_count: number;
+      }[];
       reply.send({ workspace: req.params.workspace, blockers: rows });
     },
   );
 
+  // F-294 blocker-watcher-engagement
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/watcher-engagement",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT b.blocker_id, b.title, b.severity, b.status,
+                  COUNT(bw.agent_id) as watcher_count
+           FROM blockers b
+           LEFT JOIN blocker_watchers bw ON bw.blocker_id = b.blocker_id
+           WHERE b.workspace_id = ?
+           GROUP BY b.blocker_id
+           ORDER BY watcher_count DESC`,
+        )
+        .all(req.params.workspace) as {
+        blocker_id: string;
+        title: string;
+        severity: string;
+        status: string;
+        watcher_count: number;
+      }[];
+      const avg =
+        rows.length > 0
+          ? Math.round((rows.reduce((s, r) => s + r.watcher_count, 0) / rows.length) * 10) / 10
+          : 0;
+      reply.send({ workspace: req.params.workspace, blockers: rows, avg_watchers: avg });
+    },
+  );
 };

@@ -2436,16 +2436,49 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: app.authGuard },
     async (req, reply) => {
       const ws = req.params.workspace;
-      const agents = (db.prepare("SELECT COUNT(*) as c FROM agents WHERE workspace_id = ?").get(ws) as { c: number }).c;
-      const claims = (db.prepare("SELECT COUNT(*) as c FROM claims WHERE workspace_id = ?").get(ws) as { c: number }).c;
-      const blockers = (db.prepare("SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ?").get(ws) as { c: number }).c;
-      const handoffs = (db.prepare("SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ?").get(ws) as { c: number }).c;
-      const active_claims = (db.prepare("SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND status = 'active'").get(ws) as { c: number }).c;
-      const open_blockers = (db.prepare("SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status != 'resolved'").get(ws) as { c: number }).c;
-      reply.send({ workspace: ws, agents, claims, active_claims, blockers, open_blockers, handoffs });
+      const agents = (
+        db.prepare("SELECT COUNT(*) as c FROM agents WHERE workspace_id = ?").get(ws) as {
+          c: number;
+        }
+      ).c;
+      const claims = (
+        db.prepare("SELECT COUNT(*) as c FROM claims WHERE workspace_id = ?").get(ws) as {
+          c: number;
+        }
+      ).c;
+      const blockers = (
+        db.prepare("SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ?").get(ws) as {
+          c: number;
+        }
+      ).c;
+      const handoffs = (
+        db.prepare("SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ?").get(ws) as {
+          c: number;
+        }
+      ).c;
+      const active_claims = (
+        db
+          .prepare("SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND status = 'active'")
+          .get(ws) as { c: number }
+      ).c;
+      const open_blockers = (
+        db
+          .prepare(
+            "SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status != 'resolved'",
+          )
+          .get(ws) as { c: number }
+      ).c;
+      reply.send({
+        workspace: ws,
+        agents,
+        claims,
+        active_claims,
+        blockers,
+        open_blockers,
+        handoffs,
+      });
     },
   );
-
 
   // F-289 workspace-growth-rate
   app.get<{ Params: { workspace: string }; Querystring: { days?: number } }>(
@@ -2457,17 +2490,24 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       const entities = ["agents", "claims", "blockers", "handoffs"];
       const growth: Record<string, { current: number; previous: number; rate: number }> = {};
       for (const entity of entities) {
-        const cur = (db.prepare(
-          `SELECT COUNT(*) as c FROM ${entity} WHERE workspace_id = ? AND created_at >= datetime('now', '-' || ? || ' days')`
-        ).get(ws, days) as { c: number }).c;
-        const prev = (db.prepare(
-          `SELECT COUNT(*) as c FROM ${entity} WHERE workspace_id = ? AND created_at >= datetime('now', '-' || ? || ' days') AND created_at < datetime('now', '-' || ? || ' days')`
-        ).get(ws, days * 2, days) as { c: number }).c;
+        const cur = (
+          db
+            .prepare(
+              `SELECT COUNT(*) as c FROM ${entity} WHERE workspace_id = ? AND created_at >= datetime('now', '-' || ? || ' days')`,
+            )
+            .get(ws, days) as { c: number }
+        ).c;
+        const prev = (
+          db
+            .prepare(
+              `SELECT COUNT(*) as c FROM ${entity} WHERE workspace_id = ? AND created_at >= datetime('now', '-' || ? || ' days') AND created_at < datetime('now', '-' || ? || ' days')`,
+            )
+            .get(ws, days * 2, days) as { c: number }
+        ).c;
         const rate = prev > 0 ? Math.round(((cur - prev) / prev) * 10000) / 100 : 0;
         growth[entity] = { current: cur, previous: prev, rate };
       }
       reply.send({ workspace: ws, days, growth });
     },
   );
-
 };

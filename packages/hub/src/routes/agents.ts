@@ -2726,7 +2726,6 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-
   // F-281 agent-skill-overlap
   app.get<{ Params: { workspace: string } }>(
     "/api/v1/workspaces/:workspace/agents/skill-overlap",
@@ -2739,17 +2738,24 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
            WHERE workspace_id = ?
            ORDER BY display_name`,
         )
-        .all(req.params.workspace) as { agent_id: string; display_name: string; capabilities: string }[];
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        capabilities: string;
+      }[];
       const capSet = new Set<string>();
       const matrix = rows.map((r) => {
         const caps: string[] = r.capabilities ? JSON.parse(r.capabilities) : [];
         for (const c of caps) capSet.add(c);
         return { agent_id: r.agent_id, display_name: r.display_name, capabilities: caps };
       });
-      reply.send({ workspace: req.params.workspace, agents: matrix, all_capabilities: [...capSet].sort() });
+      reply.send({
+        workspace: req.params.workspace,
+        agents: matrix,
+        all_capabilities: [...capSet].sort(),
+      });
     },
   );
-
 
   // F-283 agent-model-breakdown
   app.get<{ Params: { workspace: string } }>(
@@ -2770,7 +2776,6 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-
   // F-290 agent-session-duration
   app.get<{ Params: { workspace: string } }>(
     "/api/v1/workspaces/:workspace/agents/session-duration",
@@ -2784,10 +2789,45 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
            WHERE workspace_id = ?
            ORDER BY hours_active DESC`,
         )
-        .all(req.params.workspace) as { agent_id: string; display_name: string; hours_active: number }[];
-      const avg = rows.length > 0 ? Math.round((rows.reduce((s, r) => s + r.hours_active, 0) / rows.length) * 100) / 100 : 0;
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        hours_active: number;
+      }[];
+      const avg =
+        rows.length > 0
+          ? Math.round((rows.reduce((s, r) => s + r.hours_active, 0) / rows.length) * 100) / 100
+          : 0;
       reply.send({ workspace: req.params.workspace, agents: rows, avg_hours: avg });
     },
   );
 
+  // F-293 agent-tag-distribution
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/tag-distribution",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const agents = db
+        .prepare("SELECT tags FROM agents WHERE workspace_id = ?")
+        .all(req.params.workspace) as { tags: string | null }[];
+
+      const tagCounts: Record<string, number> = {};
+      for (const a of agents) {
+        try {
+          const parsed = JSON.parse(a.tags || "[]") as string[];
+          for (const t of parsed) {
+            tagCounts[t] = (tagCounts[t] || 0) + 1;
+          }
+        } catch {
+          /* skip malformed */
+        }
+      }
+
+      const tags = Object.entries(tagCounts)
+        .map(([tag, agent_count]) => ({ tag, agent_count }))
+        .sort((a, b) => b.agent_count - a.agent_count);
+
+      reply.send({ workspace: req.params.workspace, tags });
+    },
+  );
 };

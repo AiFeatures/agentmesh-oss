@@ -11076,3 +11076,32 @@ test("GET /claims/scope-density returns density data", async () => {
   await app.close();
 });
 
+// F-293 agent-tag-distribution
+test("GET /agents/tag-distribution returns tag data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "tagdist-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/tag-distribution`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.tags));
+  await app.close();
+});
+
+// F-294 blocker-watcher-engagement
+test("GET /blockers/watcher-engagement returns engagement data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "bwatch-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/watcher-engagement`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.blockers));
+  assert.ok(typeof body.avg_watchers === "number");
+  await app.close();
+});
+
