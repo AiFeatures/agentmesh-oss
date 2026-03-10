@@ -13056,3 +13056,32 @@ test("GET /handoffs/handoff-chain-depth returns depth stats", async () => {
   assert.ok(typeof body.total === "number");
   await app.close();
 });
+
+// F-433 agent-tag-diversity
+test("GET /agents/agent-tag-diversity returns tag diversity", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "atdiv-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/agent-tag-diversity`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(typeof body.unique_tags === "number");
+  assert.ok(Array.isArray(body.agents));
+  await app.close();
+});
+
+// F-434 claim-renewal-frequency
+test("GET /claims/claim-renewal-frequency returns renewal data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "crf-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-renewal-frequency`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.claims));
+  await app.close();
+});

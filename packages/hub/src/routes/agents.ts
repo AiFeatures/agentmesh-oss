@@ -3659,4 +3659,34 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ...row });
     },
   );
+
+  // F-433 agent-tag-diversity
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/agent-tag-diversity",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const agents = db
+        .prepare(`SELECT agent_id, display_name, tags FROM agents WHERE workspace_id = ?`)
+        .all(req.params.workspace) as { agent_id: string; display_name: string; tags: string }[];
+      const tagSet = new Set<string>();
+      const agentTagCounts: { agent_id: string; display_name: string; tag_count: number }[] = [];
+      for (const a of agents) {
+        let parsed: string[] = [];
+        try {
+          parsed = JSON.parse(a.tags || "[]");
+        } catch {}
+        for (const t of parsed) tagSet.add(t);
+        agentTagCounts.push({
+          agent_id: a.agent_id,
+          display_name: a.display_name,
+          tag_count: parsed.length,
+        });
+      }
+      reply.send({
+        workspace: req.params.workspace,
+        unique_tags: tagSet.size,
+        agents: agentTagCounts.sort((a, b) => b.tag_count - a.tag_count).slice(0, 20),
+      });
+    },
+  );
 };
