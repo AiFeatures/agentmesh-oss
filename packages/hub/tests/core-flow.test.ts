@@ -11767,3 +11767,31 @@ test("GET /handoffs/chain-analysis returns chain data", async () => {
   assert.ok(typeof body.max_depth === "number");
   await app.close();
 });
+
+// F-341 claim-expiry-forecast
+test("GET /workspaces/claim-expiry-forecast returns forecast", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "clexp-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claim-expiry-forecast`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(typeof body.next_1h === "number" || body.next_1h === null);
+  await app.close();
+});
+
+// F-342 metadata-size-stats
+test("GET /agents/metadata-size-stats returns size stats", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "metasz-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/metadata-size-stats`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(typeof body.total === "number");
+  await app.close();
+});

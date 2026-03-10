@@ -2732,4 +2732,28 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, aging: rows });
     },
   );
+
+  // F-341 claim-expiry-forecast
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claim-expiry-forecast",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT
+            SUM(CASE WHEN expires_at <= datetime('now', '+1 hour') THEN 1 ELSE 0 END) AS next_1h,
+            SUM(CASE WHEN expires_at <= datetime('now', '+6 hours') THEN 1 ELSE 0 END) AS next_6h,
+            SUM(CASE WHEN expires_at <= datetime('now', '+24 hours') THEN 1 ELSE 0 END) AS next_24h
+           FROM claims
+           WHERE workspace_id = ? AND status = 'active' AND expires_at IS NOT NULL
+             AND expires_at > datetime('now')`,
+        )
+        .get(req.params.workspace) as {
+        next_1h: number;
+        next_6h: number;
+        next_24h: number;
+      };
+      reply.send({ workspace: req.params.workspace, ...row });
+    },
+  );
 };

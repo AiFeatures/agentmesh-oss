@@ -3171,4 +3171,28 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, overlaps: pairs });
     },
   );
+
+  // F-342 metadata-size-stats
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/metadata-size-stats",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS total,
+                  AVG(LENGTH(metadata)) AS avg_size,
+                  MAX(LENGTH(metadata)) AS max_size,
+                  MIN(LENGTH(metadata)) AS min_size
+           FROM agents
+           WHERE workspace_id = ? AND metadata IS NOT NULL`,
+        )
+        .get(req.params.workspace) as {
+        total: number;
+        avg_size: number | null;
+        max_size: number | null;
+        min_size: number | null;
+      };
+      reply.send({ workspace: req.params.workspace, ...row });
+    },
+  );
 };
