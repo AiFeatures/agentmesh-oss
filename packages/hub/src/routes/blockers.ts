@@ -2531,4 +2531,21 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, days: rows });
     },
   );
+
+  // F-386 blocker-resolution-time-avg
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/resolution-time-avg",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS resolved_count,
+                  AVG(CAST((julianday(resolved_at) - julianday(created_at)) * 86400 AS INTEGER)) AS avg_seconds
+           FROM blockers
+           WHERE workspace_id = ? AND status = 'resolved' AND resolved_at IS NOT NULL`,
+        )
+        .get(req.params.workspace) as { resolved_count: number; avg_seconds: number | null };
+      reply.send({ workspace: req.params.workspace, ...row });
+    },
+  );
 };

@@ -2923,4 +2923,22 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, severities: rows });
     },
   );
+
+  // F-385 workspace-agent-status-breakdown
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agent-status-breakdown",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT status, COUNT(*) AS count
+           FROM agents
+           WHERE workspace_id = ?
+           GROUP BY status
+           ORDER BY count DESC`,
+        )
+        .all(req.params.workspace) as { status: string; count: number }[];
+      reply.send({ workspace: req.params.workspace, statuses: rows });
+    },
+  );
 };

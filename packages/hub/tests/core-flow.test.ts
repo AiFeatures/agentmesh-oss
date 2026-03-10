@@ -12384,3 +12384,31 @@ test("GET /claims/created-daily returns days", async () => {
   assert.ok(Array.isArray(body.days));
   await app.close();
 });
+
+// F-385 workspace-agent-status-breakdown
+test("GET /workspaces/agent-status-breakdown returns statuses", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "wasb-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agent-status-breakdown`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.statuses));
+  await app.close();
+});
+
+// F-386 blocker-resolution-time-avg
+test("GET /blockers/resolution-time-avg returns avg", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "brta-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/resolution-time-avg`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(typeof body.resolved_count === "number");
+  await app.close();
+});
