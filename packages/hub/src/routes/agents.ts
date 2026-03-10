@@ -3813,4 +3813,25 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: result });
     },
   );
+
+  // F-466 agent-group-distribution
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/agent-group-distribution",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT COALESCE("group", '(none)') AS agent_group, COUNT(*) AS count
+           FROM agents
+           WHERE workspace_id = ?
+           GROUP BY "group"
+           ORDER BY count DESC`,
+        )
+        .all(req.params.workspace) as {
+        agent_group: string;
+        count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, groups: rows });
+    },
+  );
 };

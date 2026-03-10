@@ -13499,3 +13499,31 @@ test("GET /claims/claim-created-hourly returns hourly data", async () => {
   assert.ok(Array.isArray(body.hours));
   await app.close();
 });
+
+// F-465 workspace-settings-key-count
+test("GET /workspace-settings-key-count returns key count", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "wskc-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/workspace-settings-key-count`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(typeof body.key_count === "number");
+  await app.close();
+});
+
+// F-466 agent-group-distribution
+test("GET /agents/agent-group-distribution returns group data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "agd-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/agent-group-distribution`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.groups));
+  await app.close();
+});

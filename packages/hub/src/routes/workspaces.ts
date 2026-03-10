@@ -3210,4 +3210,22 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, actions: rows });
     },
   );
+
+  // F-465 workspace-settings-key-count
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/workspace-settings-key-count",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(`SELECT settings FROM workspaces WHERE workspace_id = ?`)
+        .get(req.params.workspace) as { settings: string } | undefined;
+      let keyCount = 0;
+      if (row?.settings) {
+        try {
+          keyCount = Object.keys(JSON.parse(row.settings)).length;
+        } catch {}
+      }
+      reply.send({ workspace: req.params.workspace, key_count: keyCount });
+    },
+  );
 };
