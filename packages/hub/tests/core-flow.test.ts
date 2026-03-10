@@ -2557,3 +2557,76 @@ test("POST /claims/:claimId/transfer moves claim to another agent", async () => 
 
   await app.close();
 });
+
+/* ── F-49  agent tags ─────────────────────────────────────────── */
+test("agent register with tags and filter by tag", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `tags-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Tags" },
+  });
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: {
+      agent_id: "tag-a",
+      display_name: "A",
+      tags: ["backend", "python"],
+    },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: {
+      agent_id: "tag-b",
+      display_name: "B",
+      tags: ["frontend", "typescript"],
+    },
+  });
+
+  // Filter by tag
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents?tag=python`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().data.length, 1);
+  assert.equal(res.json().data[0].agent_id, "tag-a");
+  assert.deepEqual(res.json().data[0].tags, ["backend", "python"]);
+
+  await app.close();
+});
+
+/* ── F-48  handoff stats ──────────────────────────────────────── */
+test("GET /handoffs/stats returns statistics", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `hstats-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "HStats" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/stats`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.ok("by_status" in res.json());
+  assert.ok("by_route_mode" in res.json());
+
+  await app.close();
+});

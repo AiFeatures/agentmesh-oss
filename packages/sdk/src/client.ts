@@ -142,6 +142,12 @@ export class AgentMeshClient {
     });
   }
 
+  async getHandoffStats(workspace: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/handoffs/stats`, {
+      method: "GET",
+    });
+  }
+
   async deregisterAgent(workspace: string, agentId: string): Promise<unknown> {
     return await this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}`, {
       method: "DELETE",

@@ -207,4 +207,42 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ ...row, timeline });
     },
   );
+
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/stats",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+
+      const byStatus = db
+        .prepare(
+          "SELECT status, COUNT(*) as count FROM handoffs WHERE workspace_id = ? GROUP BY status",
+        )
+        .all(workspace) as Array<{ status: string; count: number }>;
+      const byRouteMode = db
+        .prepare(
+          "SELECT route_mode, COUNT(*) as count FROM handoffs WHERE workspace_id = ? GROUP BY route_mode",
+        )
+        .all(workspace) as Array<{ route_mode: string; count: number }>;
+      const avgAcceptTime = db
+        .prepare(
+          "SELECT AVG(julianday(updated_at) - julianday(created_at)) * 86400 as avg_seconds FROM handoffs WHERE workspace_id = ? AND status = 'accepted'",
+        )
+        .get(workspace) as { avg_seconds: number | null };
+
+      return reply.send({
+        by_status: Object.fromEntries(byStatus.map((r) => [r.status, r.count])),
+        by_route_mode: Object.fromEntries(byRouteMode.map((r) => [r.route_mode, r.count])),
+        avg_accept_seconds: avgAcceptTime.avg_seconds
+          ? Math.round(avgAcceptTime.avg_seconds)
+          : null,
+      });
+    },
+  );
 };

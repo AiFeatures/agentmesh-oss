@@ -26,6 +26,11 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
               maxItems: 128,
             },
             metadata: { type: "object", additionalProperties: true, maxProperties: 50 },
+            tags: {
+              type: "array",
+              items: { type: "string", minLength: 1, maxLength: 64 },
+              maxItems: 50,
+            },
           },
         },
       },
@@ -38,6 +43,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
         model?: string;
         capabilities?: string[];
         metadata?: Record<string, unknown>;
+        tags?: string[];
       };
 
       const ws = db
@@ -68,6 +74,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
         model: body.model ?? "custom",
         capabilities: body.capabilities ?? [],
         metadata: body.metadata,
+        tags: body.tags,
       });
 
       writeAuditLog({
@@ -214,6 +221,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
               enum: ["online", "idle", "stale", "evicted", "blocked"],
             },
             capability: { type: "string", maxLength: 64 },
+            tag: { type: "string", maxLength: 64 },
             limit: { type: "string" },
             offset: { type: "string" },
           },
@@ -222,11 +230,12 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     },
     async (request, reply) => {
       const { workspace } = request.params as { workspace: string };
-      const { limit, offset, status, capability } = request.query as {
+      const { limit, offset, status, capability, tag } = request.query as {
         limit?: string;
         offset?: string;
         status?: string;
         capability?: string;
+        tag?: string;
       };
       let all = listAgents(workspace);
       if (status) {
@@ -236,6 +245,9 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
         all = all.filter(
           (a) => Array.isArray(a.capabilities) && a.capabilities.includes(capability),
         );
+      }
+      if (tag) {
+        all = all.filter((a) => Array.isArray(a.tags) && a.tags.includes(tag));
       }
       const start = Math.max(0, Number(offset) || 0);
       const count = Math.min(200, Math.max(1, Number(limit) || 50));
@@ -264,6 +276,7 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
         String(row.metadata ?? ""),
         null as Record<string, unknown> | null,
       );
+      row.tags = parseJsonSafe(String(row.tags ?? "[]"), [] as string[]);
       return reply.send(row);
     },
   );
