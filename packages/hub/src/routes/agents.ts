@@ -2613,4 +2613,51 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, agents: result });
     },
   );
+
+  // F-265 agent-heartbeat-gap
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/heartbeat-gap",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params;
+      const agents = db
+        .prepare(
+          "SELECT agent_id, display_name, status, last_heartbeat_at, created_at FROM agents WHERE workspace_id = ?",
+        )
+        .all(workspace) as {
+        agent_id: string;
+        display_name: string;
+        status: string;
+        last_heartbeat_at: string | null;
+        created_at: string;
+      }[];
+
+      const now = Date.now();
+      const result = agents
+        .filter((a) => a.last_heartbeat_at)
+        .map((a) => {
+          const gapMs = now - new Date(a.last_heartbeat_at!).getTime();
+          return {
+            agent_id: a.agent_id,
+            display_name: a.display_name,
+            status: a.status,
+            gap_seconds: Math.round(gapMs / 1000),
+            last_heartbeat_at: a.last_heartbeat_at,
+          };
+        })
+        .sort((a, b) => b.gap_seconds - a.gap_seconds);
+
+      const avgGap =
+        result.length > 0
+          ? Math.round(result.reduce((s, r) => s + r.gap_seconds, 0) / result.length)
+          : 0;
+
+      return reply.send({
+        workspace,
+        total_agents: result.length,
+        avg_gap_seconds: avgGap,
+        agents: result,
+      });
+    },
+  );
 };

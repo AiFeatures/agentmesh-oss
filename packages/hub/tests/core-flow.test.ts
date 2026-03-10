@@ -10627,3 +10627,37 @@ test("GET /claims/agent-overlap returns agent overlap pairs", async () => {
   assert.ok(Array.isArray(body.pairs));
   await app.close();
 });
+
+// F-265 agent-heartbeat-gap
+test("GET /agents/heartbeat-gap returns gap analysis", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `ws-ahg-${Date.now().toString(36)}`;
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/heartbeat-gap`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.strictEqual(body.workspace, ws);
+  assert.ok(typeof body.total_agents === "number");
+  assert.ok(typeof body.avg_gap_seconds === "number");
+  assert.ok(Array.isArray(body.agents));
+  await app.close();
+});
+
+// F-266 workspace-bottleneck-report
+test("GET /workspaces/:ws/bottleneck-report returns bottleneck analysis", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `ws-wbr-${Date.now().toString(36)}`;
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/bottleneck-report`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.strictEqual(body.workspace, ws);
+  assert.ok(typeof body.total_bottlenecks === "number");
+  assert.ok(Array.isArray(body.bottlenecks));
+  await app.close();
+});

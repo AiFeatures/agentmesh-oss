@@ -2343,4 +2343,66 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, daily: rows });
     },
   );
+
+  // F-266 workspace-bottleneck-report
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/bottleneck-report",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params;
+
+      const pendingHandoffs = (
+        db
+          .prepare(
+            "SELECT COUNT(*) AS c FROM handoffs WHERE workspace_id = ? AND status = 'pending'",
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const openBlockers = (
+        db
+          .prepare("SELECT COUNT(*) AS c FROM blockers WHERE workspace_id = ? AND status = 'open'")
+          .get(workspace) as { c: number }
+      ).c;
+      const expiredClaims = (
+        db
+          .prepare(
+            "SELECT COUNT(*) AS c FROM claims WHERE workspace_id = ? AND status = 'active' AND expires_at < datetime('now')",
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const offlineAgents = (
+        db
+          .prepare("SELECT COUNT(*) AS c FROM agents WHERE workspace_id = ? AND status = 'offline'")
+          .get(workspace) as { c: number }
+      ).c;
+
+      const bottlenecks: { type: string; count: number; severity: string }[] = [];
+      if (pendingHandoffs > 5)
+        bottlenecks.push({
+          type: "pending_handoffs",
+          count: pendingHandoffs,
+          severity: pendingHandoffs > 20 ? "critical" : "warning",
+        });
+      if (openBlockers > 3)
+        bottlenecks.push({
+          type: "open_blockers",
+          count: openBlockers,
+          severity: openBlockers > 10 ? "critical" : "warning",
+        });
+      if (expiredClaims > 0)
+        bottlenecks.push({
+          type: "expired_claims",
+          count: expiredClaims,
+          severity: expiredClaims > 5 ? "critical" : "warning",
+        });
+      if (offlineAgents > 2)
+        bottlenecks.push({
+          type: "offline_agents",
+          count: offlineAgents,
+          severity: offlineAgents > 5 ? "critical" : "warning",
+        });
+
+      return reply.send({ workspace, total_bottlenecks: bottlenecks.length, bottlenecks });
+    },
+  );
 };
