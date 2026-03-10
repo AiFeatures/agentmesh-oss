@@ -1569,4 +1569,35 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total_handoffs: handoffs.length, agents });
     },
   );
+
+  // F-219: Stale handoff rate
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/stale-handoff-rate",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const rows = db
+        .prepare(`SELECT status, expires_at, updated_at FROM handoffs WHERE workspace_id = ?`)
+        .all(workspace) as { status: string; expires_at: string | null; updated_at: string }[];
+
+      const now = new Date().toISOString();
+      const total = rows.length;
+      const stale = rows.filter(
+        (h) => h.status === "pending" && h.expires_at && h.expires_at < now,
+      ).length;
+      const pending = rows.filter((h) => h.status === "pending").length;
+      const staleRate = total > 0 ? Math.round((stale / total) * 10000) / 100 : 0;
+      const stalePendingRate = pending > 0 ? Math.round((stale / pending) * 10000) / 100 : 0;
+
+      return reply.send({
+        workspace,
+        total_handoffs: total,
+        pending_handoffs: pending,
+        stale_handoffs: stale,
+        stale_rate_percent: staleRate,
+        stale_pending_rate_percent: stalePendingRate,
+      });
+    },
+  );
 };

@@ -1886,4 +1886,57 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-220: Claim churn
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/claim-churn",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const claims = db
+        .prepare(
+          `SELECT claim_id, agent_id, status, created_at, expires_at FROM claims WHERE workspace_id = ?`,
+        )
+        .all(workspace) as {
+        claim_id: string;
+        agent_id: string;
+        status: string;
+        created_at: string;
+        expires_at: string | null;
+      }[];
+
+      const active = claims.filter((c) => c.status === "active").length;
+      const released = claims.filter((c) => c.status === "released").length;
+      const expired = claims.filter((c) => c.status === "expired").length;
+      const total = claims.length;
+      const churnRate = total > 0 ? Math.round(((released + expired) / total) * 10000) / 100 : 0;
+
+      const agentChurn: Record<string, { created: number; ended: number }> = {};
+      for (const c of claims) {
+        if (!agentChurn[c.agent_id]) agentChurn[c.agent_id] = { created: 0, ended: 0 };
+        agentChurn[c.agent_id].created++;
+        if (c.status === "released" || c.status === "expired") agentChurn[c.agent_id].ended++;
+      }
+
+      const agents = Object.entries(agentChurn)
+        .map(([agent_id, v]) => ({
+          agent_id,
+          created: v.created,
+          ended: v.ended,
+          churn_percent: v.created > 0 ? Math.round((v.ended / v.created) * 10000) / 100 : 0,
+        }))
+        .sort((a, b) => b.churn_percent - a.churn_percent);
+
+      return reply.send({
+        workspace,
+        total_claims: total,
+        active,
+        released,
+        expired,
+        churn_rate_percent: churnRate,
+        agent_churn: agents.slice(0, 20),
+      });
+    },
+  );
 };
