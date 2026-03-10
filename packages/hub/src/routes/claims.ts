@@ -2346,4 +2346,26 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total_claims: total, by_status: byStatus });
     },
   );
+
+  // F-280 claim-contention-hotspots
+  app.get<{ Params: { workspace: string }; Querystring: { limit?: number } }>(
+    "/api/v1/workspaces/:workspace/claims/contention-hotspots",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const limit = req.query.limit ?? 10;
+      const rows = db
+        .prepare(
+          `SELECT scope, COUNT(*) as claim_count, COUNT(DISTINCT agent_id) as agent_count
+           FROM claims
+           WHERE workspace_id = ?
+           GROUP BY scope
+           HAVING claim_count > 1
+           ORDER BY claim_count DESC
+           LIMIT ?`,
+        )
+        .all(req.params.workspace, limit) as { scope: string; claim_count: number; agent_count: number }[];
+      reply.send({ workspace: req.params.workspace, hotspots: rows });
+    },
+  );
+
 };

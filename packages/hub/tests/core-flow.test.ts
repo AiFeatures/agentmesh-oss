@@ -10870,3 +10870,32 @@ test("GET /blockers/unresolved-aging returns aging stats", async () => {
   await app.close();
 });
 
+// F-279 handoff-chain-length-stats
+test("GET /handoffs/chain-length-stats returns depth distribution", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "chainlen-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/chain-length-stats`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.distribution));
+  assert.ok(typeof body.max_depth === "number");
+  await app.close();
+});
+
+// F-280 claim-contention-hotspots
+test("GET /claims/contention-hotspots returns hotspots", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "hotspot-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/contention-hotspots`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.hotspots));
+  await app.close();
+});
+
