@@ -1207,4 +1207,31 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-112  agent workload distribution ─────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/workload",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const rows = db
+        .prepare(
+          `SELECT a.agent_id, a.display_name, a.status,
+                  (SELECT COUNT(*) FROM claims c WHERE c.agent_id = a.agent_id AND c.status = 'active') as active_claims,
+                  (SELECT COUNT(*) FROM blockers b WHERE b.agent_id = a.agent_id AND b.status = 'open') as open_blockers,
+                  (SELECT COUNT(*) FROM handoffs h WHERE h.to_agent_id = a.agent_id AND h.status = 'pending') as pending_handoffs
+           FROM agents a
+           WHERE a.workspace_id = ?
+           ORDER BY active_claims DESC`,
+        )
+        .all(workspace);
+      return reply.send({ data: rows });
+    },
+  );
 };

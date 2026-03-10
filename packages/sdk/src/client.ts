@@ -961,6 +961,27 @@ export class AgentMeshClient {
     });
   }
 
+  /* ── F-111  handoff SLA compliance ──────────────── */
+  async getHandoffSlaCompliance(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/handoffs/sla-compliance`, {
+      method: "GET",
+    });
+  }
+
+  /* ── F-112  agent workload distribution ─────────── */
+  async getAgentWorkload(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/agents/workload`, {
+      method: "GET",
+    });
+  }
+
+  /* ── F-113  blocker resolution metrics ──────────── */
+  async getBlockerResolutionMetrics(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/blockers/resolution-metrics`, {
+      method: "GET",
+    });
+  }
+
   private async request<T = unknown>(path: string, init: RequestInit): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);

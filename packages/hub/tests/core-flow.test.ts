@@ -5602,3 +5602,127 @@ test("claim expiry forecast returns claims expiring soon", async () => {
 
   await app.close();
 });
+
+/* ── F-111  handoff SLA compliance ─────────────────── */
+test("handoff SLA compliance report", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "sc";
+  const ws = `ws-sc-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "SLA Compliance" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/sla-compliance`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { total: number; compliant: number; breached: number; compliance_rate: number };
+  assert.equal(body.total, 0);
+  assert.equal(body.compliance_rate, 100);
+
+  await app.close();
+});
+
+/* ── F-112  agent workload distribution ────────────── */
+test("agent workload distribution shows per-agent counts", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "wl";
+  const ws = `ws-wl-${suffix}`;
+  const aid = `wl-a1-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Workload test" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: aid, display_name: "WLAgent", capabilities: ["test"] },
+  });
+
+  // create a claim
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: aid, scope: "workload-area", paths: ["wl/**"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/workload`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const data = res.json().data as Array<{ agent_id: string; active_claims: number }>;
+  assert.equal(data.length, 1);
+  assert.equal(data[0].agent_id, aid);
+  assert.equal(data[0].active_claims, 1);
+
+  await app.close();
+});
+
+/* ── F-113  blocker resolution metrics ─────────────── */
+test("blocker resolution metrics by severity", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "rm";
+  const ws = `ws-rm-${suffix}`;
+  const aid = `rm-a1-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Resolution test" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: aid, display_name: "RMAgent", capabilities: ["test"] },
+  });
+
+  // create + resolve a blocker
+  const bRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: aid, title: "ResMetrics blocker", severity: "medium" },
+  });
+  const bid = bRes.json().blocker_id;
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers/${bid}/resolve`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { note: "done" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/resolution-metrics`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const data = res.json().data as Array<{ severity: string; total: number }>;
+  assert.ok(data.length >= 1);
+  const medium = data.find((r) => r.severity === "medium");
+  assert.ok(medium);
+  assert.equal(medium!.total, 1);
+
+  await app.close();
+});

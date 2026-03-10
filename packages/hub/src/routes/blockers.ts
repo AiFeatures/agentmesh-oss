@@ -645,4 +645,33 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ blocker_id: blockerId, timeline: events });
     },
   );
+
+  /* ── F-113  blocker resolution metrics ──────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/resolution-metrics",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const rows = db
+        .prepare(
+          `SELECT severity,
+                  COUNT(*) as total,
+                  ROUND(AVG(julianday(resolved_at) - julianday(created_at)) * 86400) as avg_seconds,
+                  ROUND(MIN(julianday(resolved_at) - julianday(created_at)) * 86400) as min_seconds,
+                  ROUND(MAX(julianday(resolved_at) - julianday(created_at)) * 86400) as max_seconds
+           FROM blockers
+           WHERE workspace_id = ? AND status = 'resolved'
+           GROUP BY severity
+           ORDER BY severity`,
+        )
+        .all(workspace) as Array<Record<string, unknown>>;
+      return reply.send({ data: rows });
+    },
+  );
 };

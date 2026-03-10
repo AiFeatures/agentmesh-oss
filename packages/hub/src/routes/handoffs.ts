@@ -554,4 +554,36 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows, total: (rows as unknown[]).length });
     },
   );
+
+  /* ── F-111  handoff SLA compliance report ────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/sla-compliance",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const total = (
+        db
+          .prepare(
+            "SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND sla_deadline IS NOT NULL",
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const breached = (
+        db
+          .prepare(
+            "SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND sla_deadline IS NOT NULL AND ((status = 'pending' AND sla_deadline < datetime('now')) OR (status = 'accepted' AND updated_at > sla_deadline))",
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const compliant = total - breached;
+      const rate = total > 0 ? Math.round((compliant / total) * 10000) / 100 : 100;
+      return reply.send({ total, compliant, breached, compliance_rate: rate });
+    },
+  );
 };
