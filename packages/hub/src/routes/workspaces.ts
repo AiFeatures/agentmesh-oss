@@ -2025,4 +2025,32 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, days: totalDays, trend });
     },
   );
+
+  // F-221: Workspace age
+  app.get(
+    "/api/v1/workspaces/:workspace/workspace-age",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const row = db
+        .prepare(`SELECT created_at FROM workspaces WHERE workspace_id = ?`)
+        .get(workspace) as { created_at: string } | undefined;
+
+      if (!row) return reply.code(404).send({ error: "Workspace not found" });
+
+      const createdAt = new Date(row.created_at);
+      const now = new Date();
+      const ageMs = now.getTime() - createdAt.getTime();
+      const ageDays = Math.floor(ageMs / 86400000);
+      const ageHours = Math.round((ageMs / 3600000) * 100) / 100;
+
+      return reply.send({
+        workspace,
+        created_at: row.created_at,
+        age_days: ageDays,
+        age_hours: ageHours,
+      });
+    },
+  );
 };

@@ -1503,4 +1503,44 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-222: Blocker response time
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/response-time",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const resolved = db
+        .prepare(
+          `SELECT created_at, resolved_at FROM blockers WHERE workspace_id = ? AND resolved_at IS NOT NULL`,
+        )
+        .all(workspace) as { created_at: string; resolved_at: string }[];
+
+      const responseTimes = resolved.map((b) => {
+        const created = new Date(b.created_at).getTime();
+        const resolvedAt = new Date(b.resolved_at).getTime();
+        return Math.round(((resolvedAt - created) / 3600000) * 100) / 100;
+      });
+
+      const total = responseTimes.length;
+      const avg =
+        total > 0 ? Math.round((responseTimes.reduce((s, v) => s + v, 0) / total) * 100) / 100 : 0;
+      const sorted = [...responseTimes].sort((a, b) => a - b);
+      const median = total > 0 ? sorted[Math.floor(total / 2)] : 0;
+      const p90 = total > 0 ? sorted[Math.floor(total * 0.9)] : 0;
+      const fastest = total > 0 ? sorted[0] : 0;
+      const slowest = total > 0 ? sorted[total - 1] : 0;
+
+      return reply.send({
+        workspace,
+        resolved_blockers: total,
+        avg_response_hours: avg,
+        median_response_hours: median,
+        p90_response_hours: p90,
+        fastest_hours: fastest,
+        slowest_hours: slowest,
+      });
+    },
+  );
 };

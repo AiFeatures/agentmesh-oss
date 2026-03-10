@@ -9802,3 +9802,39 @@ test("GET /claims/claim-churn returns churn analysis", async () => {
   assert.ok(Array.isArray(body.agent_churn));
   await app.close();
 });
+
+// ---------- F-221: Workspace age ----------
+test("GET /workspace-age returns workspace creation age", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ws-age-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/workspace-age`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.age_days === "number");
+  assert.ok(typeof body.age_hours === "number");
+  assert.ok(body.created_at);
+  await app.close();
+});
+
+// ---------- F-222: Blocker response time ----------
+test("GET /blockers/response-time returns resolution speed metrics", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `bl-resptime-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "bug", severity: "medium" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/response-time`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.resolved_blockers === "number");
+  assert.ok(typeof body.avg_response_hours === "number");
+  assert.ok(typeof body.median_response_hours === "number");
+  await app.close();
+});
