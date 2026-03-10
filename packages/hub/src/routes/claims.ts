@@ -3364,4 +3364,35 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, patterns: rows });
     },
   );
+
+  // F-492 claim-active-expired-ratio
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/claim-active-expired-ratio",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT
+             SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active_count,
+             SUM(CASE WHEN status = 'expired' THEN 1 ELSE 0 END) AS expired_count,
+             COUNT(*) AS total,
+             ROUND(
+               CASE WHEN SUM(CASE WHEN status = 'expired' THEN 1 ELSE 0 END) > 0
+                 THEN 1.0 * SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END)
+                       / SUM(CASE WHEN status = 'expired' THEN 1 ELSE 0 END)
+                 ELSE 0
+               END, 3
+             ) AS ratio
+           FROM claims
+           WHERE workspace_id = ?`,
+        )
+        .get(req.params.workspace) as {
+        active_count: number;
+        expired_count: number;
+        total: number;
+        ratio: number;
+      };
+      reply.send({ workspace: req.params.workspace, ...row });
+    },
+  );
 };

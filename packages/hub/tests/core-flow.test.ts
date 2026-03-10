@@ -13864,3 +13864,31 @@ test("GET /handoffs/handoff-sla-deadline-remaining returns remaining hours", asy
   assert.ok(Array.isArray(body.handoffs));
   await app.close();
 });
+
+// F-491 workspace-audit-action-frequency
+test("GET /workspace-audit-action-frequency returns action counts", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "waaf-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/workspace-audit-action-frequency`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.actions));
+  await app.close();
+});
+
+// F-492 claim-active-expired-ratio
+test("GET /claims/claim-active-expired-ratio returns ratio stats", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "caer-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-active-expired-ratio`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(typeof body.total === "number");
+  await app.close();
+});
