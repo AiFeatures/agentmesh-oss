@@ -3235,18 +3235,20 @@ test("agent status history tracks transitions", async () => {
   });
 
   // change status twice
-  await app.inject({
+  const s1 = await app.inject({
     method: "PATCH",
     url: `/api/v1/workspaces/${ws}/agents/a1/status`,
     headers: auth,
     payload: { status: "blocked" },
   });
-  await app.inject({
+  assert.equal(s1.statusCode, 200);
+  const s2 = await app.inject({
     method: "PATCH",
     url: `/api/v1/workspaces/${ws}/agents/a1/status`,
     headers: auth,
     payload: { status: "idle" },
   });
+  assert.equal(s2.statusCode, 200);
 
   // query history
   const res = await app.inject({
@@ -3395,6 +3397,207 @@ test("blocker list supports sort and date-range filters", async () => {
   });
   assert.equal(res3.statusCode, 200);
   assert.ok(res3.json().data.length >= 2);
+
+  await app.close();
+});
+
+// --------------- F-66: Claim dependencies ---------------
+test("claim dependencies are stored and returned", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-claimdep-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+
+  // create first claim
+  const c1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "backend", paths: ["src/a.ts"] },
+  });
+  assert.equal(c1.statusCode, 201);
+  const claimId1 = c1.json().claim_id;
+
+  // create second claim depending on first
+  const c2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: {
+      agent_id: "a1",
+      scope: "frontend",
+      paths: ["src/b.ts"],
+      depends_on: [claimId1],
+    },
+  });
+  assert.equal(c2.statusCode, 201);
+  const claimId2 = c2.json().claim_id;
+
+  // fetch detail — should include depends_on
+  const detail = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/${claimId2}`,
+    headers: auth,
+  });
+  assert.equal(detail.statusCode, 200);
+  const body = detail.json();
+  assert.ok(Array.isArray(body.depends_on));
+  assert.ok(body.depends_on.includes(claimId1));
+
+  // first claim should have empty depends_on
+  const detail1 = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/${claimId1}`,
+    headers: auth,
+  });
+  assert.deepEqual(detail1.json().depends_on, []);
+
+  await app.close();
+});
+
+// --------------- F-67: Agent capability search ---------------
+test("agent capability search finds matching agents", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-capsearch-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "ts-agent", display_name: "TS", capabilities: ["typescript", "testing"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "py-agent", display_name: "PY", capabilities: ["python", "testing"] },
+  });
+
+  // search for "testing" — both should match
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/search`,
+    headers: auth,
+    payload: { capabilities: ["testing"] },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().data.length, 2);
+
+  // search for "typescript" — only ts-agent
+  const res2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/search`,
+    headers: auth,
+    payload: { capabilities: ["typescript"] },
+  });
+  assert.equal(res2.json().data.length, 1);
+  assert.equal(res2.json().data[0].agent_id, "ts-agent");
+
+  // search for both "typescript" AND "testing" — only ts-agent
+  const res3 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/search`,
+    headers: auth,
+    payload: { capabilities: ["typescript", "testing"] },
+  });
+  assert.equal(res3.json().data.length, 1);
+
+  await app.close();
+});
+
+// --------------- F-68: Handoff notes ---------------
+test("handoff notes can be added and retrieved", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-hnotes-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] },
+  });
+
+  // create handoff
+  const h = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "please review" },
+  });
+  assert.equal(h.statusCode, 201);
+  const handoffId = h.json().handoff_id;
+
+  // add a note
+  const n1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs/${handoffId}/notes`,
+    headers: auth,
+    payload: { author_id: "a1", content: "Starting handoff" },
+  });
+  assert.equal(n1.statusCode, 201);
+  assert.ok(n1.json().note_id);
+
+  // add another note
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs/${handoffId}/notes`,
+    headers: auth,
+    payload: { author_id: "a2", content: "Acknowledged" },
+  });
+
+  // get notes
+  const notes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/${handoffId}/notes`,
+    headers: auth,
+  });
+  assert.equal(notes.statusCode, 200);
+  assert.equal(notes.json().data.length, 2);
+  assert.equal(notes.json().data[0].content, "Starting handoff");
+  assert.equal(notes.json().data[1].content, "Acknowledged");
+
+  // 404 for non-existent handoff
+  const bad = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/nonexistent/notes`,
+    headers: auth,
+  });
+  assert.equal(bad.statusCode, 404);
 
   await app.close();
 });

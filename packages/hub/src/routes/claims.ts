@@ -30,6 +30,11 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
               type: "string",
               enum: ["low", "normal", "high", "critical"],
             },
+            depends_on: {
+              type: "array",
+              maxItems: 20,
+              items: { type: "string", minLength: 1, maxLength: 128 },
+            },
           },
         },
       },
@@ -42,6 +47,7 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
         paths: string[];
         ttl_seconds?: number;
         priority?: string;
+        depends_on?: string[];
       };
 
       const workspaceExists = db
@@ -65,6 +71,14 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
         ttlSeconds: body.ttl_seconds,
         priority: body.priority,
       });
+      if (body.depends_on?.length) {
+        const insertDep = db.prepare(
+          "INSERT OR IGNORE INTO claim_dependencies (claim_id, depends_on_claim_id) VALUES (?, ?)",
+        );
+        for (const depId of body.depends_on) {
+          insertDep.run(claim.id, depId);
+        }
+      }
 
       if ("conflict" in claim) {
         broadcast("claims.conflict", { workspace, ...claim.conflict, requestedBy: body.agent_id });
@@ -264,6 +278,10 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(404).send({ error: "Claim not found" });
       }
       row.paths = parseJsonSafe(String(row.paths ?? "[]"), [] as string[]);
+      const deps = db
+        .prepare("SELECT depends_on_claim_id FROM claim_dependencies WHERE claim_id = ?")
+        .all(claimId) as Array<{ depends_on_claim_id: string }>;
+      row.depends_on = deps.map((d) => d.depends_on_claim_id);
       return reply.send(row);
     },
   );

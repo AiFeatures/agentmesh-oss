@@ -682,4 +682,54 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows, total: total.c });
     },
   );
+
+  /* ── F-67  agent capability search ──────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/agents/search",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["capabilities"],
+          additionalProperties: false,
+          properties: {
+            capabilities: {
+              type: "array",
+              minItems: 1,
+              maxItems: 50,
+              items: { type: "string", minLength: 1, maxLength: 64 },
+            },
+            status: { type: "string", enum: ["online", "idle", "stale", "evicted", "blocked"] },
+            tag: { type: "string", minLength: 1, maxLength: 64 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const body = request.body as {
+        capabilities: string[];
+        status?: string;
+        tag?: string;
+      };
+
+      let agents = listAgents(workspace);
+      // filter to agents that have ALL requested capabilities
+      agents = agents.filter((a) => {
+        const caps = a.capabilities as string[];
+        return body.capabilities.every((c) => caps.includes(c));
+      });
+      if (body.status) {
+        agents = agents.filter((a) => a.status === body.status);
+      }
+      if (body.tag) {
+        agents = agents.filter((a) => {
+          const tags = a.tags as string[];
+          return tags.includes(body.tag!);
+        });
+      }
+      return reply.send({ data: agents, total: agents.length });
+    },
+  );
 };

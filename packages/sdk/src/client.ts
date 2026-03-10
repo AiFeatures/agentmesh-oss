@@ -207,6 +207,33 @@ export class AgentMeshClient {
     );
   }
 
+  async searchAgents(
+    workspace: string,
+    body: { capabilities: string[]; status?: string; tag?: string },
+  ): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/agents/search`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async addHandoffNote(
+    workspace: string,
+    handoffId: string,
+    body: { author_id: string; content: string },
+  ): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/handoffs/${handoffId}/notes`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async getHandoffNotes(workspace: string, handoffId: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/handoffs/${handoffId}/notes`, {
+      method: "GET",
+    });
+  }
+
   startHeartbeat(workspace: string, agentId: string, intervalMs = 10000): () => void {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {

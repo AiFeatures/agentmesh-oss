@@ -312,4 +312,65 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-68  handoff notes ────────────────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/handoffs/:handoffId/notes",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["author_id", "content"],
+          additionalProperties: false,
+          properties: {
+            author_id: { type: "string", minLength: 1, maxLength: 128 },
+            content: { type: "string", minLength: 1, maxLength: 4096 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, handoffId } = request.params as {
+        workspace: string;
+        handoffId: string;
+      };
+      const handoff = db
+        .prepare("SELECT handoff_id FROM handoffs WHERE handoff_id = ? AND workspace_id = ?")
+        .get(handoffId, workspace);
+      if (!handoff) {
+        return reply.code(404).send({ error: "Handoff not found" });
+      }
+      const body = request.body as { author_id: string; content: string };
+      const info = db
+        .prepare(
+          "INSERT INTO handoff_notes (handoff_id, workspace_id, author_id, content) VALUES (?, ?, ?, ?)",
+        )
+        .run(handoffId, workspace, body.author_id, body.content);
+      return reply.code(201).send({ note_id: Number(info.lastInsertRowid) });
+    },
+  );
+
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/:handoffId/notes",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, handoffId } = request.params as {
+        workspace: string;
+        handoffId: string;
+      };
+      const handoff = db
+        .prepare("SELECT handoff_id FROM handoffs WHERE handoff_id = ? AND workspace_id = ?")
+        .get(handoffId, workspace);
+      if (!handoff) {
+        return reply.code(404).send({ error: "Handoff not found" });
+      }
+      const notes = db
+        .prepare(
+          "SELECT id, author_id, content, created_at FROM handoff_notes WHERE handoff_id = ? AND workspace_id = ? ORDER BY created_at ASC",
+        )
+        .all(handoffId, workspace);
+      return reply.send({ data: notes });
+    },
+  );
 };
