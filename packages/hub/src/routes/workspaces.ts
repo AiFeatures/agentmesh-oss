@@ -2816,4 +2816,27 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, actions: rows });
     },
   );
+
+  // F-362 blocker-resolution-rate
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blocker-resolution-rate",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS total,
+                  SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) AS resolved
+           FROM blockers
+           WHERE workspace_id = ?`,
+        )
+        .get(req.params.workspace) as { total: number; resolved: number };
+      const rate = row.total > 0 ? row.resolved / row.total : 0;
+      reply.send({
+        workspace: req.params.workspace,
+        total: row.total,
+        resolved: row.resolved,
+        rate: Math.round(rate * 10000) / 100,
+      });
+    },
+  );
 };

@@ -3284,4 +3284,29 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ranking });
     },
   );
+
+  // F-361 uptime-leaderboard
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/uptime-leaderboard",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT agent_id, display_name, created_at, last_heartbeat_at,
+                  CAST((julianday(COALESCE(last_heartbeat_at, 'now')) - julianday(created_at)) * 86400 AS INTEGER) AS uptime_seconds
+           FROM agents
+           WHERE workspace_id = ? AND status = 'online'
+           ORDER BY uptime_seconds DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        created_at: string;
+        last_heartbeat_at: string;
+        uptime_seconds: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, leaderboard: rows });
+    },
+  );
 };
