@@ -2683,4 +2683,29 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, claims: rows });
     },
   );
+
+  // F-343 renewal-frequency
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/renewal-frequency",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT crh.claim_id, c.scope, c.agent_id, COUNT(*) AS renewal_count
+           FROM claim_renewal_history crh
+           JOIN claims c ON c.claim_id = crh.claim_id
+           WHERE c.workspace_id = ?
+           GROUP BY crh.claim_id
+           ORDER BY renewal_count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        claim_id: string;
+        scope: string;
+        agent_id: string;
+        renewal_count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, claims: rows });
+    },
+  );
 };
