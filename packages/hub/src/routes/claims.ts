@@ -26,6 +26,10 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
               items: { type: "string", minLength: 1, maxLength: 512 },
             },
             ttl_seconds: { type: "integer", minimum: 30, maximum: 86400 },
+            priority: {
+              type: "string",
+              enum: ["low", "normal", "high", "critical"],
+            },
           },
         },
       },
@@ -37,6 +41,7 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
         scope: string;
         paths: string[];
         ttl_seconds?: number;
+        priority?: string;
       };
 
       const workspaceExists = db
@@ -58,6 +63,7 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
         scope: body.scope,
         paths: body.paths,
         ttlSeconds: body.ttl_seconds,
+        priority: body.priority,
       });
 
       if ("conflict" in claim) {
@@ -170,6 +176,17 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
             },
             scope: { type: "string", maxLength: 128 },
             agent_id: { type: "string", maxLength: 128 },
+            priority: {
+              type: "string",
+              enum: ["low", "normal", "high", "critical"],
+            },
+            created_after: { type: "string", maxLength: 30 },
+            created_before: { type: "string", maxLength: 30 },
+            sort_by: {
+              type: "string",
+              enum: ["created_at", "expires_at", "priority"],
+            },
+            sort_order: { type: "string", enum: ["asc", "desc"] },
             limit: { type: "string" },
             offset: { type: "string" },
           },
@@ -178,25 +195,54 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
     },
     async (request, reply) => {
       const { workspace } = request.params as { workspace: string };
-      const { limit, offset, status, scope, agent_id } = request.query as {
+      const q = request.query as {
         limit?: string;
         offset?: string;
         status?: string;
         scope?: string;
         agent_id?: string;
+        priority?: string;
+        created_after?: string;
+        created_before?: string;
+        sort_by?: string;
+        sort_order?: string;
       };
       let all = listClaims(workspace);
-      if (status) {
-        all = all.filter((c) => c.status === status);
+      if (q.status) {
+        all = all.filter((c) => c.status === q.status);
       }
-      if (scope) {
-        all = all.filter((c) => c.scope === scope);
+      if (q.scope) {
+        all = all.filter((c) => c.scope === q.scope);
       }
-      if (agent_id) {
-        all = all.filter((c) => c.agent_id === agent_id);
+      if (q.agent_id) {
+        all = all.filter((c) => c.agent_id === q.agent_id);
       }
-      const start = Math.max(0, Number(offset) || 0);
-      const count = Math.min(200, Math.max(1, Number(limit) || 50));
+      if (q.priority) {
+        all = all.filter((c) => c.priority === q.priority);
+      }
+      if (q.created_after) {
+        all = all.filter((c) => String(c.created_at) >= q.created_after!);
+      }
+      if (q.created_before) {
+        all = all.filter((c) => String(c.created_at) <= q.created_before!);
+      }
+      if (q.sort_by) {
+        const priorityOrder: Record<string, number> = { critical: 0, high: 1, normal: 2, low: 3 };
+        const dir = q.sort_order === "asc" ? 1 : -1;
+        all.sort((a, b) => {
+          if (q.sort_by === "priority") {
+            return (
+              dir *
+              ((priorityOrder[String(a.priority)] ?? 2) - (priorityOrder[String(b.priority)] ?? 2))
+            );
+          }
+          const av = String(a[q.sort_by!] ?? "");
+          const bv = String(b[q.sort_by!] ?? "");
+          return dir * av.localeCompare(bv);
+        });
+      }
+      const start = Math.max(0, Number(q.offset) || 0);
+      const count = Math.min(200, Math.max(1, Number(q.limit) || 50));
       return reply.send({ data: all.slice(start, start + count), total: all.length });
     },
   );
@@ -294,6 +340,66 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
 
       broadcast("claims.updated", { workspace, claim_id: claimId, status: "active" });
       return reply.send({ ok: true });
+    },
+  );
+
+  /* ── F-51  batch claim renewal ──────────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/claims/batch-renew",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["claims"],
+          additionalProperties: false,
+          properties: {
+            claims: {
+              type: "array",
+              minItems: 1,
+              maxItems: 20,
+              items: {
+                type: "object",
+                required: ["claim_id"],
+                additionalProperties: false,
+                properties: {
+                  claim_id: { type: "string", minLength: 1, maxLength: 128 },
+                  ttl_seconds: { type: "integer", minimum: 30, maximum: 86400 },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { claims } = request.body as {
+        claims: Array<{ claim_id: string; ttl_seconds?: number }>;
+      };
+
+      const renewed: string[] = [];
+      const notFound: string[] = [];
+      for (const c of claims) {
+        const claim = db
+          .prepare("SELECT workspace_id FROM claims WHERE claim_id = ? AND workspace_id = ?")
+          .get(c.claim_id, workspace) as { workspace_id: string } | undefined;
+        if (!claim) {
+          notFound.push(c.claim_id);
+          continue;
+        }
+        if (renewClaim(c.claim_id, c.ttl_seconds ?? 1800)) {
+          renewed.push(c.claim_id);
+        } else {
+          notFound.push(c.claim_id);
+        }
+      }
+
+      if (renewed.length > 0) {
+        broadcast("claims.updated", { workspace, renewed, status: "active" });
+      }
+
+      return reply.send({ renewed, not_found: notFound });
     },
   );
 

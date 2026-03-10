@@ -2630,3 +2630,149 @@ test("GET /handoffs/stats returns statistics", async () => {
 
   await app.close();
 });
+
+/* ── F-51  batch claim renewal ────────────────────────────────── */
+test("POST /claims/batch-renew renews multiple claims", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `brenew-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "BRenew" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "br-agent", display_name: "BR" },
+  });
+  const c1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "br-agent", scope: "file", paths: ["a.ts"], ttl_seconds: 60 },
+  });
+  const c2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "br-agent", scope: "file", paths: ["b.ts"], ttl_seconds: 60 },
+  });
+
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims/batch-renew`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: {
+      claims: [
+        { claim_id: c1.json().claim_id, ttl_seconds: 3600 },
+        { claim_id: c2.json().claim_id },
+        { claim_id: "nonexistent" },
+      ],
+    },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().renewed.length, 2);
+  assert.equal(res.json().not_found.length, 1);
+
+  await app.close();
+});
+
+/* ── F-52  claim priority ─────────────────────────────────────── */
+test("claim create with priority and filter by priority", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `prio-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "PrioWS" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "prio-a", display_name: "PA" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "prio-a", scope: "file", paths: ["high.ts"], priority: "high" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "prio-a", scope: "file", paths: ["low.ts"], priority: "low" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims?priority=high`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().data.length, 1);
+  assert.equal(res.json().data[0].priority, "high");
+
+  await app.close();
+});
+
+/* ── F-53  claims sort + date filter ──────────────────────────── */
+test("claims list supports sort_by and sort_order", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `sort-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "SortWS" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "sort-a", display_name: "SA" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "sort-a", scope: "file", paths: ["x.ts"], priority: "low" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "sort-a", scope: "file", paths: ["y.ts"], priority: "critical" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims?sort_by=priority&sort_order=asc`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const data = res.json().data;
+  assert.equal(data.length, 2);
+  assert.equal(data[0].priority, "critical");
+  assert.equal(data[1].priority, "low");
+
+  // sort_by=created_at ascending
+  const res2 = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims?sort_by=created_at&sort_order=asc`,
+    headers: auth,
+  });
+  assert.equal(res2.statusCode, 200);
+
+  await app.close();
+});

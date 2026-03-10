@@ -9,6 +9,7 @@ export type CreateClaimInput = {
   scope: string;
   paths: string[];
   ttlSeconds?: number;
+  priority?: string;
 };
 
 export function createClaim(
@@ -38,13 +39,14 @@ export function createClaim(
   }
 
   const id = claimId();
+  const priority = input.priority ?? "normal";
   const txn = db.transaction(() => {
     db.prepare(
       `
-        INSERT INTO claims (claim_id, workspace_id, agent_id, scope, ttl_seconds, expires_at, status)
-        VALUES (?, ?, ?, ?, ?, datetime('now', '+' || ? || ' seconds'), 'active')
+        INSERT INTO claims (claim_id, workspace_id, agent_id, scope, ttl_seconds, priority, expires_at, status)
+        VALUES (?, ?, ?, ?, ?, ?, datetime('now', '+' || ? || ' seconds'), 'active')
       `,
-    ).run(id, input.workspaceId, input.agentId, input.scope, ttl, ttl);
+    ).run(id, input.workspaceId, input.agentId, input.scope, ttl, priority, ttl);
 
     const insertPath = db.prepare("INSERT INTO claim_paths (claim_id, path_pattern) VALUES (?, ?)");
     for (const pattern of input.paths) {
@@ -60,7 +62,7 @@ export function listClaims(workspaceId: string): Record<string, unknown>[] {
   const rows = db
     .prepare(
       `
-        SELECT c.claim_id, c.workspace_id, c.agent_id, c.scope, c.status, c.ttl_seconds, c.created_at, c.expires_at, c.released_at,
+        SELECT c.claim_id, c.workspace_id, c.agent_id, c.scope, c.status, c.ttl_seconds, c.priority, c.renewal_count, c.created_at, c.expires_at, c.released_at,
                json_group_array(cp.path_pattern) AS paths
         FROM claims c
         JOIN claim_paths cp ON cp.claim_id = c.claim_id

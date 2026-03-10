@@ -247,6 +247,16 @@ export class AgentMeshClient {
     });
   }
 
+  async batchRenewClaims(
+    workspace: string,
+    claims: Array<{ claim_id: string; ttl_seconds?: number }>,
+  ): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/claims/batch-renew`, {
+      method: "POST",
+      body: JSON.stringify({ claims }),
+    });
+  }
+
   async handoff(payload: HandoffPayload): Promise<HandoffResponse> {
     return await this.request(`/api/v1/workspaces/${payload.workspace}/handoffs`, {
       method: "POST",
