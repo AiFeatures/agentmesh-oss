@@ -1907,4 +1907,48 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total_handoffs: total, by_priority: priorities });
     },
   );
+
+  // F-262 handoff-timeout-risk
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/timeout-risk",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params;
+      const now = new Date().toISOString();
+      const rows = db
+        .prepare(
+          `SELECT handoff_id, from_agent_id, to_agent_id, status, created_at, expires_at, timeout_seconds
+           FROM handoffs WHERE workspace_id = ? AND status = 'pending' AND expires_at IS NOT NULL
+           ORDER BY expires_at ASC`,
+        )
+        .all(workspace) as {
+        handoff_id: string;
+        from_agent_id: string;
+        to_agent_id: string;
+        status: string;
+        created_at: string;
+        expires_at: string;
+        timeout_seconds: number | null;
+      }[];
+
+      const atRisk = rows.map((r) => {
+        const remainingMs = new Date(r.expires_at).getTime() - Date.now();
+        return {
+          handoff_id: r.handoff_id,
+          from_agent_id: r.from_agent_id,
+          to_agent_id: r.to_agent_id,
+          expires_at: r.expires_at,
+          remaining_seconds: Math.max(0, Math.round(remainingMs / 1000)),
+          expired: remainingMs <= 0,
+        };
+      });
+
+      return reply.send({
+        workspace,
+        total_at_risk: atRisk.length,
+        already_expired: atRisk.filter((r) => r.expired).length,
+        handoffs: atRisk.slice(0, 50),
+      });
+    },
+  );
 };

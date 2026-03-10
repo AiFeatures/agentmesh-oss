@@ -2314,4 +2314,33 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-261 workspace-health-trend
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/health-trend",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params;
+
+      const rows = db
+        .prepare(
+          `SELECT DATE(created_at) AS day,
+                  SUM(CASE WHEN action LIKE 'blocker.create%' THEN 1 ELSE 0 END) AS blockers_created,
+                  SUM(CASE WHEN action LIKE 'blocker.resolve%' THEN 1 ELSE 0 END) AS blockers_resolved,
+                  SUM(CASE WHEN action LIKE 'handoff.create%' THEN 1 ELSE 0 END) AS handoffs_created,
+                  SUM(CASE WHEN action LIKE 'handoff.accept%' OR action LIKE 'handoff.complete%' THEN 1 ELSE 0 END) AS handoffs_completed
+           FROM audit_log WHERE workspace_id = ?
+           GROUP BY DATE(created_at) ORDER BY day DESC LIMIT 30`,
+        )
+        .all(workspace) as {
+        day: string;
+        blockers_created: number;
+        blockers_resolved: number;
+        handoffs_created: number;
+        handoffs_completed: number;
+      }[];
+
+      return reply.send({ workspace, daily: rows });
+    },
+  );
 };
