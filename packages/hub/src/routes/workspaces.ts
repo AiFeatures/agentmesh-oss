@@ -2629,4 +2629,59 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, timeline: rows });
     },
   );
+
+  // F-326 operational-status
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/operational-status",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const ws = req.params.workspace;
+      const onlineAgents = (
+        db
+          .prepare("SELECT COUNT(*) as c FROM agents WHERE workspace_id = ? AND status = 'online'")
+          .get(ws) as { c: number }
+      ).c;
+      const totalAgents = (
+        db.prepare("SELECT COUNT(*) as c FROM agents WHERE workspace_id = ?").get(ws) as {
+          c: number;
+        }
+      ).c;
+      const pendingHandoffs = (
+        db
+          .prepare(
+            "SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND status = 'pending'",
+          )
+          .get(ws) as { c: number }
+      ).c;
+      const openBlockers = (
+        db
+          .prepare("SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status = 'open'")
+          .get(ws) as { c: number }
+      ).c;
+      const criticalBlockers = (
+        db
+          .prepare(
+            "SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status = 'open' AND severity = 'critical'",
+          )
+          .get(ws) as { c: number }
+      ).c;
+
+      let status = "green";
+      if (criticalBlockers > 0 || (totalAgents > 0 && onlineAgents === 0)) {
+        status = "red";
+      } else if (openBlockers > 2 || pendingHandoffs > 5) {
+        status = "yellow";
+      }
+
+      reply.send({
+        workspace: ws,
+        status,
+        online_agents: onlineAgents,
+        total_agents: totalAgents,
+        pending_handoffs: pendingHandoffs,
+        open_blockers: openBlockers,
+        critical_blockers: criticalBlockers,
+      });
+    },
+  );
 };

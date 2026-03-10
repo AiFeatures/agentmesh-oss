@@ -11540,3 +11540,32 @@ test("GET /agents/heartbeat-consistency returns consistency data", async () => {
   assert.ok(typeof body.avg_seconds_since_heartbeat === "number");
   await app.close();
 });
+
+// F-325 template-usage
+test("GET /handoffs/template-usage returns template data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "tmpusg-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/template-usage`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.templates));
+  await app.close();
+});
+
+// F-326 operational-status
+test("GET /operational-status returns status data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "opstat-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/operational-status`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(["green", "yellow", "red"].includes(body.status));
+  assert.ok(typeof body.online_agents === "number");
+  await app.close();
+});

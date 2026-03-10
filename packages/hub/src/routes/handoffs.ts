@@ -2343,4 +2343,27 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, agents: rows });
     },
   );
+
+  // F-325 template-usage
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/template-usage",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT template_id, name, default_priority, default_timeout_seconds, created_at
+           FROM handoff_templates
+           WHERE workspace_id = ?
+           ORDER BY created_at DESC`,
+        )
+        .all(req.params.workspace) as {
+        template_id: string;
+        name: string;
+        default_priority: string;
+        default_timeout_seconds: number | null;
+        created_at: string;
+      }[];
+      reply.send({ workspace: req.params.workspace, templates: rows });
+    },
+  );
 };
