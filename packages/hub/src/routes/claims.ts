@@ -2806,4 +2806,27 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, transitions: rows });
     },
   );
+
+  // F-369 claim-active-per-agent
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/active-per-agent",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT c.agent_id, a.display_name, COUNT(*) AS active_claims
+           FROM claims c
+           LEFT JOIN agents a ON a.agent_id = c.agent_id
+           WHERE c.workspace_id = ? AND c.status = 'active'
+           GROUP BY c.agent_id
+           ORDER BY active_claims DESC`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string | null;
+        active_claims: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, agents: rows });
+    },
+  );
 };

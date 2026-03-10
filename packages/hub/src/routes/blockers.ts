@@ -2471,4 +2471,28 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ranking: rows });
     },
   );
+
+  // F-370 blocker-severity-agent-matrix
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/severity-agent-matrix",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT b.agent_id, a.display_name, b.severity, COUNT(*) AS count
+           FROM blockers b
+           LEFT JOIN agents a ON a.agent_id = b.agent_id
+           WHERE b.workspace_id = ?
+           GROUP BY b.agent_id, b.severity
+           ORDER BY count DESC`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string | null;
+        severity: string;
+        count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, matrix: rows });
+    },
+  );
 };
