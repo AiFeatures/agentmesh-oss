@@ -7749,3 +7749,103 @@ test("claim overlap detection finds overlapping path patterns", async () => {
 
   await app.close();
 });
+
+/* ── F-157  agent collaboration matrix (enhanced test) ─── */
+test("agent collaboration matrix shows handoff interactions between agents", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `collab_${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "col-a1", display_name: "Col A1", capabilities: ["ts"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "col-a2", display_name: "Col A2", capabilities: ["ts"] },
+  });
+
+  // create a handoff a1 → a2
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "col-a1", to_agent_id: "col-a2", summary: "collab test" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/collaboration-matrix`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(Array.isArray(body.data));
+  assert.ok(body.data.length >= 1);
+  assert.ok(body.data[0].interactions >= 1);
+
+  await app.close();
+});
+
+/* ── F-158  blocker resolution timeline ───────────── */
+test("blocker resolution timeline returns daily resolution stats", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `brt_${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "brt-a1", display_name: "BRT A1", capabilities: ["debug"] },
+  });
+
+  // create and resolve a blocker
+  const bc = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "brt-a1", title: "Timeline test", severity: "medium" },
+  });
+  assert.equal(bc.statusCode, 201);
+  const bid = bc.json().blocker_id;
+
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers/${bid}/resolve`,
+    headers: auth,
+    payload: { resolution: "Fixed it" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/resolution-timeline?days=7`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.period_days, 7);
+  assert.ok(typeof body.total_resolved === "number");
+  assert.ok(typeof body.avg_hours_to_resolve === "number");
+  assert.ok(Array.isArray(body.timeline));
+
+  await app.close();
+});

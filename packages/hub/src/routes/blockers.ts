@@ -885,4 +885,52 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-158  blocker resolution timeline ────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/resolution-timeline",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { days = "30" } = request.query as { days?: string };
+      const dayCount = Math.min(Math.max(Number.parseInt(days, 10) || 30, 1), 365);
+
+      const timeline = db
+        .prepare(
+          `SELECT date(resolved_at) as day,
+             COUNT(*) as resolved_count,
+             AVG(CAST((julianday(resolved_at) - julianday(created_at)) * 24 AS REAL)) as avg_hours_to_resolve,
+             MIN(CAST((julianday(resolved_at) - julianday(created_at)) * 24 AS REAL)) as min_hours,
+             MAX(CAST((julianday(resolved_at) - julianday(created_at)) * 24 AS REAL)) as max_hours
+           FROM blockers
+           WHERE workspace_id = ? AND status = 'resolved'
+             AND resolved_at >= datetime('now', ?)
+           GROUP BY date(resolved_at)
+           ORDER BY day ASC`,
+        )
+        .all(workspace, `-${dayCount} days`) as Array<{
+        day: string;
+        resolved_count: number;
+        avg_hours_to_resolve: number;
+        min_hours: number;
+        max_hours: number;
+      }>;
+
+      const totalResolved = timeline.reduce((s, t) => s + t.resolved_count, 0);
+      const avgTime =
+        totalResolved > 0
+          ? +(
+              timeline.reduce((s, t) => s + t.avg_hours_to_resolve * t.resolved_count, 0) /
+              totalResolved
+            ).toFixed(2)
+          : 0;
+
+      return reply.send({
+        period_days: dayCount,
+        total_resolved: totalResolved,
+        avg_hours_to_resolve: avgTime,
+        timeline,
+      });
+    },
+  );
 };
