@@ -2777,4 +2777,28 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, blockers: rows });
     },
   );
+
+  // F-435 blocker-watcher-count
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/blocker-watcher-count",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT bw.blocker_id, b.title, COUNT(bw.agent_id) AS watcher_count
+           FROM blocker_watchers bw
+           JOIN blockers b ON b.blocker_id = bw.blocker_id
+           WHERE b.workspace_id = ?
+           GROUP BY bw.blocker_id
+           ORDER BY watcher_count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        blocker_id: string;
+        title: string;
+        watcher_count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, blockers: rows });
+    },
+  );
 };

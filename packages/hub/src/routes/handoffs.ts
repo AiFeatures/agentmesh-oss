@@ -2942,4 +2942,29 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ...rows });
     },
   );
+
+  // F-436 handoff-notes-word-count
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-notes-word-count",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT hn.handoff_id,
+                  LENGTH(hn.content) - LENGTH(REPLACE(hn.content, ' ', '')) + 1 AS word_count,
+                  hn.content
+           FROM handoff_notes hn
+           JOIN handoffs h ON h.handoff_id = hn.handoff_id
+           WHERE h.workspace_id = ?
+           ORDER BY word_count DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        handoff_id: string;
+        word_count: number;
+        content: string;
+      }[];
+      reply.send({ workspace: req.params.workspace, notes: rows });
+    },
+  );
 };
