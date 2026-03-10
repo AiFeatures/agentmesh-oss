@@ -5326,3 +5326,139 @@ test("agent task queue create and list tasks", async () => {
 
   await app.close();
 });
+
+/* ── F-105  blocker timeline ──────────────────────── */
+test("blocker timeline returns creation and resolution events", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "btl";
+  const ws = `ws-btl-${suffix}`;
+  const aid = `btl-a1-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Timeline test" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: aid, display_name: "TLAgent", capabilities: ["test"] },
+  });
+  const bRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: aid, title: "Blocked on API", severity: "high" },
+  });
+  assert.equal(bRes.statusCode, 201);
+  const bid = bRes.json().blocker_id;
+
+  // resolve it
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers/${bid}/resolve`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { note: "Fixed", resolved_by: "operator" },
+  });
+
+  const tl = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/${bid}/timeline`,
+    headers: auth,
+  });
+  assert.equal(tl.statusCode, 200);
+  const timeline = tl.json().timeline as Array<{ type: string }>;
+  assert.ok(timeline.length >= 2);
+  assert.equal(timeline[0].type, "created");
+  assert.equal(timeline[timeline.length - 1].type, "resolved");
+
+  await app.close();
+});
+
+/* ── F-106  claim audit trail ──────────────────────── */
+test("claim audit trail returns audit entries for a claim", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "cat";
+  const ws = `ws-cat-${suffix}`;
+  const aid = `cat-a1-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "ClaimAudit test" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: aid, display_name: "CATAgent", capabilities: ["test"] },
+  });
+  const clm = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: aid, scope: "backend", paths: ["audit/**"] },
+  });
+  assert.equal(clm.statusCode, 201);
+  const cid = clm.json().claim_id;
+
+  const auditRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/${cid}/audit`,
+    headers: auth,
+  });
+  assert.equal(auditRes.statusCode, 200);
+  const auditData = auditRes.json().data as Array<{ action: string; entity_id: string }>;
+  assert.ok(auditData.length >= 1);
+  assert.equal(auditData[0].entity_id, cid);
+
+  await app.close();
+});
+
+/* ── F-107  workspace notification preferences ──────── */
+test("notification preferences get and update", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const suffix = Date.now().toString(36) + "np";
+  const ws = `ws-notif-${suffix}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Notif test" },
+  });
+
+  // get defaults
+  const getRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/notification-preferences`,
+    headers: auth,
+  });
+  assert.equal(getRes.statusCode, 200);
+  const defaults = getRes.json() as Record<string, boolean>;
+  assert.equal(defaults.sla_breach, true);
+
+  // update
+  const patchRes = await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/notification-preferences`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { sla_breach: false, claim_conflict: true },
+  });
+  assert.equal(patchRes.statusCode, 200);
+  const updated = patchRes.json() as Record<string, boolean>;
+  assert.equal(updated.sla_breach, false);
+  assert.equal(updated.claim_conflict, true);
+  assert.equal(updated.handoff_timeout, true); // unchanged default
+
+  await app.close();
+});

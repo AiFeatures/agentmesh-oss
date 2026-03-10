@@ -893,6 +893,45 @@ export class AgentMeshClient {
     });
   }
 
+  /* ── F-105  blocker timeline ──────────────────────── */
+  async getBlockerTimeline(workspace: string, blockerId: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/blockers/${blockerId}/timeline`, {
+      method: "GET",
+    });
+  }
+
+  /* ── F-106  claim audit trail ──────────────────────── */
+  async getClaimAudit(
+    workspace: string,
+    claimId: string,
+    opts?: { limit?: number; offset?: number },
+  ): Promise<unknown> {
+    const params = new URLSearchParams();
+    if (opts?.limit) params.set("limit", String(opts.limit));
+    if (opts?.offset) params.set("offset", String(opts.offset));
+    const qs = params.toString() ? `?${params}` : "";
+    return this.request(`/api/v1/workspaces/${workspace}/claims/${claimId}/audit${qs}`, {
+      method: "GET",
+    });
+  }
+
+  /* ── F-107  notification preferences ───────────────── */
+  async getNotificationPreferences(workspace: string): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/notification-preferences`, {
+      method: "GET",
+    });
+  }
+
+  async updateNotificationPreferences(
+    workspace: string,
+    prefs: Record<string, boolean>,
+  ): Promise<unknown> {
+    return this.request(`/api/v1/workspaces/${workspace}/notification-preferences`, {
+      method: "PATCH",
+      body: JSON.stringify(prefs),
+    });
+  }
+
   private async request<T = unknown>(path: string, init: RequestInit): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);

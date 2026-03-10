@@ -574,4 +574,75 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows });
     },
   );
+
+  /* ── F-105  blocker timeline view ───────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/:blockerId/timeline",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, blockerId } = request.params as {
+        workspace: string;
+        blockerId: string;
+      };
+      const blocker = db
+        .prepare(
+          "SELECT blocker_id, created_at, resolved_at, status FROM blockers WHERE blocker_id = ? AND workspace_id = ?",
+        )
+        .get(blockerId, workspace) as
+        | { blocker_id: string; created_at: string; resolved_at: string | null; status: string }
+        | undefined;
+      if (!blocker) {
+        return reply.code(404).send({ error: "Blocker not found" });
+      }
+
+      const events: Array<{ type: string; timestamp: string; detail: unknown }> = [];
+
+      events.push({
+        type: "created",
+        timestamp: blocker.created_at,
+        detail: { blocker_id: blockerId },
+      });
+
+      // escalation info is stored as a column on blockers table (no separate table)
+      const b = db
+        .prepare("SELECT escalation_level FROM blockers WHERE blocker_id = ?")
+        .get(blockerId) as { escalation_level: number } | undefined;
+      if (b && b.escalation_level > 0) {
+        events.push({
+          type: "escalated",
+          timestamp: blocker.created_at,
+          detail: { level: b.escalation_level },
+        });
+      }
+
+      const comments = db
+        .prepare(
+          "SELECT author_id, content, created_at FROM blocker_comments WHERE blocker_id = ? ORDER BY created_at ASC",
+        )
+        .all(blockerId) as Array<{
+        author_id: string;
+        content: string;
+        created_at: string;
+      }>;
+      for (const c of comments) {
+        events.push({
+          type: "comment",
+          timestamp: c.created_at,
+          detail: { author: c.author_id, content: c.content },
+        });
+      }
+
+      if (blocker.resolved_at) {
+        events.push({
+          type: "resolved",
+          timestamp: blocker.resolved_at,
+          detail: { status: blocker.status },
+        });
+      }
+
+      events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+      return reply.send({ blocker_id: blockerId, timeline: events });
+    },
+  );
 };

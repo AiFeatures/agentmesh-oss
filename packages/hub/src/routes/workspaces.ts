@@ -835,4 +835,65 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-107  workspace notification preferences ──────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/notification-preferences",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const row = db
+        .prepare("SELECT settings FROM workspaces WHERE workspace_id = ?")
+        .get(workspace) as { settings: string | null } | undefined;
+      if (!row) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const settings = JSON.parse(row.settings || "{}");
+      return reply.send(
+        settings.notifications ?? { sla_breach: true, handoff_timeout: true, agent_evicted: true },
+      );
+    },
+  );
+
+  app.patch(
+    "/api/v1/workspaces/:workspace/notification-preferences",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            sla_breach: { type: "boolean" },
+            handoff_timeout: { type: "boolean" },
+            agent_evicted: { type: "boolean" },
+            blocker_created: { type: "boolean" },
+            claim_conflict: { type: "boolean" },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const body = request.body as Record<string, boolean>;
+      const row = db
+        .prepare("SELECT settings FROM workspaces WHERE workspace_id = ?")
+        .get(workspace) as { settings: string | null } | undefined;
+      if (!row) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+      const settings = JSON.parse(row.settings || "{}");
+      const current = settings.notifications ?? {
+        sla_breach: true,
+        handoff_timeout: true,
+        agent_evicted: true,
+      };
+      settings.notifications = { ...current, ...body };
+      db.prepare("UPDATE workspaces SET settings = ? WHERE workspace_id = ?").run(
+        JSON.stringify(settings),
+        workspace,
+      );
+      return reply.send(settings.notifications);
+    },
+  );
 };

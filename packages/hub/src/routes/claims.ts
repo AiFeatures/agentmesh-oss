@@ -959,4 +959,42 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ results });
     },
   );
+
+  /* ── F-106  claim audit trail ────────────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/:claimId/audit",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            limit: { type: "integer", minimum: 1, maximum: 200, default: 50 },
+            offset: { type: "integer", minimum: 0, default: 0 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, claimId } = request.params as {
+        workspace: string;
+        claimId: string;
+      };
+      const { limit, offset } = request.query as { limit: number; offset: number };
+      const claim = db
+        .prepare("SELECT claim_id FROM claims WHERE claim_id = ? AND workspace_id = ?")
+        .get(claimId, workspace);
+      if (!claim) {
+        return reply.code(404).send({ error: "Claim not found" });
+      }
+
+      const rows = db
+        .prepare(
+          "SELECT * FROM audit_log WHERE entity_type = 'claim' AND entity_id = ? AND workspace_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        )
+        .all(claimId, workspace, limit, offset);
+      return reply.send({ data: rows });
+    },
+  );
 };
