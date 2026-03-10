@@ -2854,4 +2854,27 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-380 claim-renewal-success-rate
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/renewal-success-rate",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS total_renewals,
+                  SUM(CASE WHEN new_expires_at > old_expires_at THEN 1 ELSE 0 END) AS successful
+           FROM claim_renewal_history crh
+           JOIN claims c ON c.claim_id = crh.claim_id
+           WHERE c.workspace_id = ?`,
+        )
+        .get(req.params.workspace) as { total_renewals: number; successful: number };
+      const rate = row.total_renewals > 0 ? row.successful / row.total_renewals : 0;
+      reply.send({
+        workspace: req.params.workspace,
+        ...row,
+        success_rate: Math.round(rate * 10000) / 100,
+      });
+    },
+  );
 };
