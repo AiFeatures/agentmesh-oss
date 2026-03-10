@@ -2630,4 +2630,27 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, modes: rows });
     },
   );
+
+  // F-378 handoff-context-length-ranking
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoffs/context-length-ranking",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT handoff_id, summary, LENGTH(context) AS context_length, created_at
+           FROM handoffs
+           WHERE workspace_id = ? AND context IS NOT NULL
+           ORDER BY context_length DESC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        handoff_id: string;
+        summary: string;
+        context_length: number;
+        created_at: string;
+      }[];
+      reply.send({ workspace: req.params.workspace, ranking: rows });
+    },
+  );
 };

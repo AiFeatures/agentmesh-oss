@@ -2886,4 +2886,23 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-377 workspace-handoff-daily-count
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/handoff-daily-count",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT DATE(created_at) AS day, COUNT(*) AS count
+           FROM handoffs
+           WHERE workspace_id = ?
+           GROUP BY DATE(created_at)
+           ORDER BY day DESC
+           LIMIT 30`,
+        )
+        .all(req.params.workspace) as { day: string; count: number }[];
+      reply.send({ workspace: req.params.workspace, days: rows });
+    },
+  );
 };
