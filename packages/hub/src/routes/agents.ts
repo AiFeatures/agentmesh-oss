@@ -2338,4 +2338,41 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-228: Agent registration rate
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/registration-rate",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const agents = db
+        .prepare(`SELECT created_at FROM agents WHERE workspace_id = ?`)
+        .all(workspace) as { created_at: string }[];
+
+      const daily: Record<string, number> = {};
+      for (const a of agents) {
+        const day = a.created_at.slice(0, 10);
+        daily[day] = (daily[day] || 0) + 1;
+      }
+
+      const days = Object.entries(daily)
+        .map(([day, count]) => ({ day, count }))
+        .sort((a, b) => a.day.localeCompare(b.day));
+
+      const totalDays = days.length;
+      const avgPerDay = totalDays > 0 ? Math.round((agents.length / totalDays) * 100) / 100 : 0;
+      const peakDay =
+        days.length > 0 ? days.reduce((max, d) => (d.count > max.count ? d : max), days[0]) : null;
+
+      return reply.send({
+        workspace,
+        total_agents: agents.length,
+        total_days: totalDays,
+        avg_registrations_per_day: avgPerDay,
+        peak_day: peakDay,
+        daily: days,
+      });
+    },
+  );
 };

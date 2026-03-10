@@ -1543,4 +1543,49 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-227: Blocker ownership analysis
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/ownership",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const blockers = db
+        .prepare(
+          `SELECT blocker_id, agent_id, status, severity FROM blockers WHERE workspace_id = ?`,
+        )
+        .all(workspace) as {
+        blocker_id: string;
+        agent_id: string;
+        status: string;
+        severity: string;
+      }[];
+
+      const agentMap: Record<
+        string,
+        { total: number; open: number; resolved: number; severities: Record<string, number> }
+      > = {};
+      for (const b of blockers) {
+        if (!agentMap[b.agent_id])
+          agentMap[b.agent_id] = { total: 0, open: 0, resolved: 0, severities: {} };
+        agentMap[b.agent_id].total++;
+        if (b.status === "open") agentMap[b.agent_id].open++;
+        if (b.status === "resolved") agentMap[b.agent_id].resolved++;
+        agentMap[b.agent_id].severities[b.severity] =
+          (agentMap[b.agent_id].severities[b.severity] || 0) + 1;
+      }
+
+      const agents = Object.entries(agentMap)
+        .map(([agent_id, v]) => ({ agent_id, ...v }))
+        .sort((a, b) => b.total - a.total);
+
+      return reply.send({
+        workspace,
+        total_blockers: blockers.length,
+        unique_owners: agents.length,
+        agents,
+      });
+    },
+  );
 };

@@ -9916,3 +9916,41 @@ test("GET /workspace activity-summary returns entity counts", async () => {
   assert.ok(typeof body.total_entities === "number");
   await app.close();
 });
+
+// ---------- F-227: Blocker ownership ----------
+test("GET /blockers/ownership returns ownership analysis", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `bl-owner-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "bug", severity: "medium" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/ownership`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_blockers === "number");
+  assert.ok(typeof body.unique_owners === "number");
+  assert.ok(Array.isArray(body.agents));
+  await app.close();
+});
+
+// ---------- F-228: Agent registration rate ----------
+test("GET /agents/registration-rate returns registration trend", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ag-regrate-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/registration-rate`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_agents === "number");
+  assert.ok(typeof body.avg_registrations_per_day === "number");
+  assert.ok(Array.isArray(body.daily));
+  await app.close();
+});
