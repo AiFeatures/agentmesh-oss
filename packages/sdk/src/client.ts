@@ -1,24 +1,43 @@
 import WebSocket, { type RawData } from "ws";
 import type {
+  ActionResponse,
+  AgentActivityResponse,
+  AgentHealthResponse,
+  AgentResponse,
+  AnalyticsResponse,
+  AuditLogResponse,
+  BatchReleaseResponse,
+  BlockerDetailResponse,
   BlockerPayload,
   BlockerResponse,
+  BlockerStatsResponse,
   BulkRegisterPayload,
   BulkRegisterResponse,
+  CapabilitiesResponse,
+  ClaimDetailResponse,
   ClaimPayload,
   ClaimResponse,
+  ClaimStatsResponse,
+  DashboardResponse,
+  ExportResponse,
   GcResponse,
+  HandoffDetailResponse,
   HandoffPayload,
   HandoffResponse,
+  HandoffStatsResponse,
   MeshClientOptions,
   MeshEvent,
   OkResponse,
   OverlapCheckResponse,
+  PaginatedResponse,
   RegisterPayload,
   RegisterResponse,
   RoutePayload,
   RouteResponse,
+  SettingsResponse,
   WorkspaceListResponse,
   WorkspaceResponse,
+  WorkspaceStatsResponse,
 } from "./types.js";
 
 export class AgentMeshClient {
@@ -88,21 +107,21 @@ export class AgentMeshClient {
     });
   }
 
-  async getWorkspaceStats(workspace: string): Promise<unknown> {
+  async getWorkspaceStats(workspace: string): Promise<WorkspaceStatsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/stats`, { method: "GET" });
   }
 
   async updateWorkspace(
     workspace: string,
     updates: { display_name?: string; base_path?: string },
-  ): Promise<unknown> {
+  ): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}`, {
       method: "PATCH",
       body: JSON.stringify(updates),
     });
   }
 
-  async getAgent(workspace: string, agentId: string): Promise<unknown> {
+  async getAgent(workspace: string, agentId: string): Promise<AgentResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}`, {
       method: "GET",
     });
@@ -111,7 +130,7 @@ export class AgentMeshClient {
   async listAgents(
     workspace: string,
     opts?: { status?: string; limit?: number; offset?: number },
-  ): Promise<unknown> {
+  ): Promise<PaginatedResponse<AgentResponse>> {
     const params = new URLSearchParams();
     if (opts?.status) params.set("status", opts.status);
     if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
@@ -122,7 +141,7 @@ export class AgentMeshClient {
     });
   }
 
-  async getHandoff(workspace: string, handoffId: string): Promise<unknown> {
+  async getHandoff(workspace: string, handoffId: string): Promise<HandoffDetailResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/handoffs/${handoffId}`, {
       method: "GET",
     });
@@ -131,7 +150,7 @@ export class AgentMeshClient {
   async listHandoffs(
     workspace: string,
     opts?: { status?: string; limit?: number; offset?: number },
-  ): Promise<unknown> {
+  ): Promise<PaginatedResponse<HandoffDetailResponse>> {
     const params = new URLSearchParams();
     if (opts?.status) params.set("status", opts.status);
     if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
@@ -142,19 +161,19 @@ export class AgentMeshClient {
     });
   }
 
-  async getHandoffStats(workspace: string): Promise<unknown> {
+  async getHandoffStats(workspace: string): Promise<HandoffStatsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/handoffs/stats`, {
       method: "GET",
     });
   }
 
-  async deregisterAgent(workspace: string, agentId: string): Promise<unknown> {
+  async deregisterAgent(workspace: string, agentId: string): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}`, {
       method: "DELETE",
     });
   }
 
-  async getCapabilities(workspace: string): Promise<unknown> {
+  async getCapabilities(workspace: string): Promise<CapabilitiesResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/capabilities`, {
       method: "GET",
     });
@@ -164,7 +183,7 @@ export class AgentMeshClient {
     workspace: string,
     agentId: string,
     status: "online" | "idle" | "blocked",
-  ): Promise<unknown> {
+  ): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}/status`, {
       method: "PATCH",
       body: JSON.stringify({ status }),
@@ -175,7 +194,7 @@ export class AgentMeshClient {
     workspace: string,
     agentId: string,
     opts?: { limit?: number; offset?: number },
-  ): Promise<unknown> {
+  ): Promise<AnalyticsResponse> {
     const params = new URLSearchParams();
     if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
     if (opts?.offset !== undefined) params.set("offset", String(opts.offset));
@@ -186,7 +205,7 @@ export class AgentMeshClient {
     );
   }
 
-  async getAgentActivity(workspace: string, agentId: string): Promise<unknown> {
+  async getAgentActivity(workspace: string, agentId: string): Promise<AgentActivityResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}/activity`, {
       method: "GET",
     });
@@ -196,7 +215,7 @@ export class AgentMeshClient {
     workspace: string,
     agentId: string,
     opts?: { limit?: number; offset?: number },
-  ): Promise<unknown> {
+  ): Promise<AnalyticsResponse> {
     const params = new URLSearchParams();
     if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
     if (opts?.offset !== undefined) params.set("offset", String(opts.offset));
@@ -210,7 +229,7 @@ export class AgentMeshClient {
   async searchAgents(
     workspace: string,
     body: { capabilities: string[]; status?: string; tag?: string },
-  ): Promise<unknown> {
+  ): Promise<AnalyticsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/agents/search`, {
       method: "POST",
       body: JSON.stringify(body),
@@ -221,39 +240,43 @@ export class AgentMeshClient {
     workspace: string,
     handoffId: string,
     body: { author_id: string; content: string },
-  ): Promise<unknown> {
+  ): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/handoffs/${handoffId}/notes`, {
       method: "POST",
       body: JSON.stringify(body),
     });
   }
 
-  async getHandoffNotes(workspace: string, handoffId: string): Promise<unknown> {
+  async getHandoffNotes(workspace: string, handoffId: string): Promise<AnalyticsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/handoffs/${handoffId}/notes`, {
       method: "GET",
     });
   }
 
-  async getHandoffChain(workspace: string, handoffId: string): Promise<unknown> {
+  async getHandoffChain(workspace: string, handoffId: string): Promise<AnalyticsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/handoffs/${handoffId}/chain`, {
       method: "GET",
     });
   }
 
-  async watchBlocker(workspace: string, blockerId: string, agentId: string): Promise<unknown> {
+  async watchBlocker(
+    workspace: string,
+    blockerId: string,
+    agentId: string,
+  ): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/blockers/${blockerId}/watchers`, {
       method: "POST",
       body: JSON.stringify({ agent_id: agentId }),
     });
   }
 
-  async getBlockerWatchers(workspace: string, blockerId: string): Promise<unknown> {
+  async getBlockerWatchers(workspace: string, blockerId: string): Promise<AnalyticsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/blockers/${blockerId}/watchers`, {
       method: "GET",
     });
   }
 
-  async batchClaimStatus(workspace: string, claimIds: string[]): Promise<unknown> {
+  async batchClaimStatus(workspace: string, claimIds: string[]): Promise<AnalyticsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/claims/batch-status`, {
       method: "POST",
       body: JSON.stringify({ claim_ids: claimIds }),
@@ -264,7 +287,7 @@ export class AgentMeshClient {
     workspace: string,
     agentId: string,
     opts?: { limit?: number; offset?: number },
-  ): Promise<unknown> {
+  ): Promise<AnalyticsResponse> {
     const params = new URLSearchParams();
     if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
     if (opts?.offset !== undefined) params.set("offset", String(opts.offset));
@@ -275,39 +298,39 @@ export class AgentMeshClient {
     );
   }
 
-  async getAuditSummary(workspace: string, hours?: number): Promise<unknown> {
+  async getAuditSummary(workspace: string, hours?: number): Promise<AnalyticsResponse> {
     const qs = hours ? `?hours=${hours}` : "";
     return await this.request(`/api/v1/workspaces/${workspace}/audit/summary${qs}`, {
       method: "GET",
     });
   }
 
-  async bulkDeregisterAgents(workspace: string, agentIds: string[]): Promise<unknown> {
+  async bulkDeregisterAgents(workspace: string, agentIds: string[]): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/agents/bulk-deregister`, {
       method: "POST",
       body: JSON.stringify({ agent_ids: agentIds }),
     });
   }
 
-  async getAgentGroups(workspace: string): Promise<unknown> {
+  async getAgentGroups(workspace: string): Promise<AnalyticsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/agents/groups`, {
       method: "GET",
     });
   }
 
-  async detectClaimConflicts(workspace: string): Promise<unknown> {
+  async detectClaimConflicts(workspace: string): Promise<AnalyticsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/claims/detect-conflicts`, {
       method: "GET",
     });
   }
 
-  async snapshotMetrics(workspace: string): Promise<unknown> {
+  async snapshotMetrics(workspace: string): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/metrics/snapshot`, {
       method: "POST",
     });
   }
 
-  async getMetricsHistory(workspace: string, limit?: number): Promise<unknown> {
+  async getMetricsHistory(workspace: string, limit?: number): Promise<AnalyticsResponse> {
     const qs = limit ? `?limit=${limit}` : "";
     return await this.request(`/api/v1/workspaces/${workspace}/metrics/history${qs}`, {
       method: "GET",
@@ -319,32 +342,32 @@ export class AgentMeshClient {
     blockerId: string,
     authorId: string,
     content: string,
-  ): Promise<unknown> {
+  ): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/blockers/${blockerId}/comments`, {
       method: "POST",
       body: JSON.stringify({ author_id: authorId, content }),
     });
   }
 
-  async getBlockerComments(workspace: string, blockerId: string): Promise<unknown> {
+  async getBlockerComments(workspace: string, blockerId: string): Promise<AnalyticsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/blockers/${blockerId}/comments`, {
       method: "GET",
     });
   }
 
-  async getClaimRenewalHistory(workspace: string, claimId: string): Promise<unknown> {
+  async getClaimRenewalHistory(workspace: string, claimId: string): Promise<AnalyticsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/claims/${claimId}/renewal-history`, {
       method: "GET",
     });
   }
 
-  async evictIdleAgents(workspace: string): Promise<unknown> {
+  async evictIdleAgents(workspace: string): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/agents/evict-idle`, {
       method: "POST",
     });
   }
 
-  async getHeartbeatStats(workspace: string): Promise<unknown> {
+  async getHeartbeatStats(workspace: string): Promise<AnalyticsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/agents/heartbeat-stats`, {
       method: "GET",
     });
@@ -354,7 +377,7 @@ export class AgentMeshClient {
     workspace: string,
     newWorkspaceId: string,
     displayName?: string,
-  ): Promise<unknown> {
+  ): Promise<ActionResponse> {
     const payload: Record<string, string> = { new_workspace_id: newWorkspaceId };
     if (displayName) payload.display_name = displayName;
     return await this.request(`/api/v1/workspaces/${workspace}/clone`, {
@@ -363,7 +386,7 @@ export class AgentMeshClient {
     });
   }
 
-  async getBlockerDependencies(workspace: string, blockerId: string): Promise<unknown> {
+  async getBlockerDependencies(workspace: string, blockerId: string): Promise<AnalyticsResponse> {
     return await this.request(
       `/api/v1/workspaces/${workspace}/blockers/${blockerId}/dependencies`,
       { method: "GET" },
@@ -374,27 +397,31 @@ export class AgentMeshClient {
     workspace: string,
     agentId: string,
     labels: Record<string, string>,
-  ): Promise<unknown> {
+  ): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}/labels`, {
       method: "PUT",
       body: JSON.stringify(labels),
     });
   }
 
-  async getAgentLabels(workspace: string, agentId: string): Promise<unknown> {
+  async getAgentLabels(workspace: string, agentId: string): Promise<AnalyticsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}/labels`, {
       method: "GET",
     });
   }
 
-  async getClaimTransferHistory(workspace: string, claimId: string): Promise<unknown> {
+  async getClaimTransferHistory(workspace: string, claimId: string): Promise<AnalyticsResponse> {
     return await this.request(
       `/api/v1/workspaces/${workspace}/claims/${claimId}/transfer-history`,
       { method: "GET" },
     );
   }
 
-  async getWorkspaceActivity(workspace: string, limit?: number, offset?: number): Promise<unknown> {
+  async getWorkspaceActivity(
+    workspace: string,
+    limit?: number,
+    offset?: number,
+  ): Promise<AnalyticsResponse> {
     const params = new URLSearchParams();
     if (limit) params.set("limit", String(limit));
     if (offset) params.set("offset", String(offset));
@@ -412,20 +439,20 @@ export class AgentMeshClient {
       default_priority?: string;
       default_timeout_seconds?: number;
     },
-  ): Promise<unknown> {
+  ): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/handoff-templates`, {
       method: "POST",
       body: JSON.stringify(template),
     });
   }
 
-  async getHandoffTemplates(workspace: string): Promise<unknown> {
+  async getHandoffTemplates(workspace: string): Promise<AnalyticsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/handoff-templates`, {
       method: "GET",
     });
   }
 
-  async getAgentHealth(workspace: string, agentId: string): Promise<unknown> {
+  async getAgentHealth(workspace: string, agentId: string): Promise<AgentHealthResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}/health`, {
       method: "GET",
     });
@@ -434,7 +461,7 @@ export class AgentMeshClient {
   async bulkResolveBlockers(
     workspace: string,
     body: { blocker_ids: string[]; resolved_by?: string; note?: string },
-  ): Promise<unknown> {
+  ): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/blockers/bulk-resolve`, {
       method: "POST",
       body: JSON.stringify(body),
@@ -445,32 +472,32 @@ export class AgentMeshClient {
     workspace: string,
     claimId: string,
     body: { new_scope: string; changed_by: string },
-  ): Promise<unknown> {
+  ): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/claims/${claimId}/scope`, {
       method: "PATCH",
       body: JSON.stringify(body),
     });
   }
 
-  async getClaimScopeHistory(workspace: string, claimId: string): Promise<unknown> {
+  async getClaimScopeHistory(workspace: string, claimId: string): Promise<AnalyticsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/claims/${claimId}/scope-history`, {
       method: "GET",
     });
   }
 
-  async getAgentOnlineStreak(workspace: string, agentId: string): Promise<unknown> {
+  async getAgentOnlineStreak(workspace: string, agentId: string): Promise<AnalyticsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}/online-streak`, {
       method: "GET",
     });
   }
 
-  async getHandoffChainAnalytics(workspace: string): Promise<unknown> {
+  async getHandoffChainAnalytics(workspace: string): Promise<AnalyticsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/handoffs/chain-analytics`, {
       method: "GET",
     });
   }
 
-  async getWorkspaceRateLimit(workspace: string): Promise<unknown> {
+  async getWorkspaceRateLimit(workspace: string): Promise<SettingsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/rate-limit`, {
       method: "GET",
     });
@@ -479,20 +506,20 @@ export class AgentMeshClient {
   async updateWorkspaceRateLimit(
     workspace: string,
     body: { max_requests_per_minute?: number; burst?: number },
-  ): Promise<unknown> {
+  ): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/rate-limit`, {
       method: "PATCH",
       body: JSON.stringify(body),
     });
   }
 
-  async getCapabilityMatrix(workspace: string): Promise<unknown> {
+  async getCapabilityMatrix(workspace: string): Promise<AnalyticsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/agents/capability-matrix`, {
       method: "GET",
     });
   }
 
-  async getSeverityDistribution(workspace: string): Promise<unknown> {
+  async getSeverityDistribution(workspace: string): Promise<AnalyticsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/blockers/severity-distribution`, {
       method: "GET",
     });
@@ -501,26 +528,26 @@ export class AgentMeshClient {
   async batchTransferClaims(
     workspace: string,
     body: { claim_ids: string[]; from_agent_id: string; to_agent_id: string },
-  ): Promise<unknown> {
+  ): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/claims/batch-transfer`, {
       method: "POST",
       body: JSON.stringify(body),
     });
   }
 
-  async getUptimeReport(workspace: string): Promise<unknown> {
+  async getUptimeReport(workspace: string): Promise<AnalyticsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/agents/uptime-report`, {
       method: "GET",
     });
   }
 
-  async getWorkspaceDashboard(workspace: string): Promise<unknown> {
+  async getWorkspaceDashboard(workspace: string): Promise<DashboardResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/dashboard`, {
       method: "GET",
     });
   }
 
-  async getHandoffSlaBreaches(workspace: string): Promise<unknown> {
+  async getHandoffSlaBreaches(workspace: string): Promise<AnalyticsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/handoffs/sla-breaches`, {
       method: "GET",
     });
@@ -530,14 +557,18 @@ export class AgentMeshClient {
     workspace: string,
     agentId: string,
     body: { title: string; description?: string; priority?: string },
-  ): Promise<unknown> {
+  ): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}/tasks`, {
       method: "POST",
       body: JSON.stringify(body),
     });
   }
 
-  async getAgentTasks(workspace: string, agentId: string, status?: string): Promise<unknown> {
+  async getAgentTasks(
+    workspace: string,
+    agentId: string,
+    status?: string,
+  ): Promise<AnalyticsResponse> {
     const qs = status ? `?status=${status}` : "";
     return await this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}/tasks${qs}`, {
       method: "GET",
@@ -579,20 +610,24 @@ export class AgentMeshClient {
     });
   }
 
-  async transferClaim(workspace: string, claimId: string, toAgentId: string): Promise<unknown> {
+  async transferClaim(
+    workspace: string,
+    claimId: string,
+    toAgentId: string,
+  ): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/claims/${claimId}/transfer`, {
       method: "POST",
       body: JSON.stringify({ to_agent_id: toAgentId }),
     });
   }
 
-  async getClaimStats(workspace: string): Promise<unknown> {
+  async getClaimStats(workspace: string): Promise<ClaimStatsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/claims/stats`, {
       method: "GET",
     });
   }
 
-  async batchReleaseClaims(workspace: string, claimIds: string[]): Promise<unknown> {
+  async batchReleaseClaims(workspace: string, claimIds: string[]): Promise<BatchReleaseResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/claims/batch-release`, {
       method: "POST",
       body: JSON.stringify({ claim_ids: claimIds }),
@@ -602,7 +637,7 @@ export class AgentMeshClient {
   async batchRenewClaims(
     workspace: string,
     claims: Array<{ claim_id: string; ttl_seconds?: number }>,
-  ): Promise<unknown> {
+  ): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/claims/batch-renew`, {
       method: "POST",
       body: JSON.stringify({ claims }),
@@ -628,31 +663,31 @@ export class AgentMeshClient {
     });
   }
 
-  async retryHandoff(workspace: string, handoffId: string): Promise<unknown> {
+  async retryHandoff(workspace: string, handoffId: string): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/handoffs/${handoffId}/retry`, {
       method: "POST",
     });
   }
 
-  async deleteWorkspace(workspace: string): Promise<unknown> {
+  async deleteWorkspace(workspace: string): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}`, {
       method: "DELETE",
     });
   }
 
-  async archiveWorkspace(workspace: string): Promise<unknown> {
+  async archiveWorkspace(workspace: string): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/archive`, {
       method: "POST",
     });
   }
 
-  async unarchiveWorkspace(workspace: string): Promise<unknown> {
+  async unarchiveWorkspace(workspace: string): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/unarchive`, {
       method: "POST",
     });
   }
 
-  async escalateBlocker(workspace: string, blockerId: string): Promise<unknown> {
+  async escalateBlocker(workspace: string, blockerId: string): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/blockers/${blockerId}/escalate`, {
       method: "POST",
     });
@@ -661,7 +696,7 @@ export class AgentMeshClient {
   async getAuditLog(
     workspace: string,
     opts?: { action?: string; limit?: number; offset?: number },
-  ): Promise<unknown> {
+  ): Promise<AuditLogResponse> {
     const params = new URLSearchParams();
     if (opts?.action) params.set("action", opts.action);
     if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
@@ -683,7 +718,7 @@ export class AgentMeshClient {
     workspace: string,
     agentId: string,
     capabilities: string[],
-  ): Promise<unknown> {
+  ): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}/capabilities`, {
       method: "PATCH",
       body: JSON.stringify({ capabilities }),
@@ -701,13 +736,13 @@ export class AgentMeshClient {
     });
   }
 
-  async getWorkspaceMetrics(workspace: string): Promise<unknown> {
+  async getWorkspaceMetrics(workspace: string): Promise<AnalyticsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/metrics`, {
       method: "GET",
     });
   }
 
-  async getBlocker(workspace: string, blockerId: string): Promise<unknown> {
+  async getBlocker(workspace: string, blockerId: string): Promise<BlockerDetailResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/blockers/${blockerId}`, {
       method: "GET",
     });
@@ -716,7 +751,7 @@ export class AgentMeshClient {
   async listBlockers(
     workspace: string,
     opts?: { status?: string; limit?: number; offset?: number },
-  ): Promise<unknown> {
+  ): Promise<PaginatedResponse<BlockerDetailResponse>> {
     const params = new URLSearchParams();
     if (opts?.status) params.set("status", opts.status);
     if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
@@ -732,20 +767,20 @@ export class AgentMeshClient {
     blockerId: string,
     resolution: string,
     resolvedBy?: string,
-  ): Promise<unknown> {
+  ): Promise<ActionResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/blockers/${blockerId}/resolve`, {
       method: "POST",
       body: JSON.stringify({ note: resolution, resolved_by: resolvedBy }),
     });
   }
 
-  async getBlockerStats(workspace: string): Promise<unknown> {
+  async getBlockerStats(workspace: string): Promise<BlockerStatsResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/blockers/stats`, {
       method: "GET",
     });
   }
 
-  async getClaim(workspace: string, claimId: string): Promise<unknown> {
+  async getClaim(workspace: string, claimId: string): Promise<ClaimDetailResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/claims/${claimId}`, {
       method: "GET",
     });
@@ -754,7 +789,7 @@ export class AgentMeshClient {
   async listClaims(
     workspace: string,
     opts?: { status?: string; limit?: number; offset?: number },
-  ): Promise<unknown> {
+  ): Promise<PaginatedResponse<ClaimDetailResponse>> {
     const params = new URLSearchParams();
     if (opts?.status) params.set("status", opts.status);
     if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
@@ -871,7 +906,7 @@ export class AgentMeshClient {
     });
   }
 
-  async exportWorkspace(workspace: string): Promise<unknown> {
+  async exportWorkspace(workspace: string): Promise<ExportResponse> {
     return await this.request(`/api/v1/workspaces/${workspace}/export`, {
       method: "GET",
     });
@@ -894,7 +929,7 @@ export class AgentMeshClient {
   }
 
   /* ── F-105  blocker timeline ──────────────────────── */
-  async getBlockerTimeline(workspace: string, blockerId: string): Promise<unknown> {
+  async getBlockerTimeline(workspace: string, blockerId: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/blockers/${blockerId}/timeline`, {
       method: "GET",
     });
@@ -905,7 +940,7 @@ export class AgentMeshClient {
     workspace: string,
     claimId: string,
     opts?: { limit?: number; offset?: number },
-  ): Promise<unknown> {
+  ): Promise<AnalyticsResponse> {
     const params = new URLSearchParams();
     if (opts?.limit) params.set("limit", String(opts.limit));
     if (opts?.offset) params.set("offset", String(opts.offset));
@@ -916,7 +951,7 @@ export class AgentMeshClient {
   }
 
   /* ── F-107  notification preferences ───────────────── */
-  async getNotificationPreferences(workspace: string): Promise<unknown> {
+  async getNotificationPreferences(workspace: string): Promise<SettingsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/notification-preferences`, {
       method: "GET",
     });
@@ -925,7 +960,7 @@ export class AgentMeshClient {
   async updateNotificationPreferences(
     workspace: string,
     prefs: Record<string, boolean>,
-  ): Promise<unknown> {
+  ): Promise<ActionResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/notification-preferences`, {
       method: "PATCH",
       body: JSON.stringify(prefs),
@@ -933,7 +968,7 @@ export class AgentMeshClient {
   }
 
   /* ── F-108  agent dependency graph ──────────────── */
-  async getAgentDependencyGraph(workspace: string): Promise<unknown> {
+  async getAgentDependencyGraph(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/agents/dependency-graph`, {
       method: "GET",
     });
@@ -943,7 +978,7 @@ export class AgentMeshClient {
   async getActivityFeed(
     workspace: string,
     opts?: { limit?: number; since?: string },
-  ): Promise<unknown> {
+  ): Promise<AnalyticsResponse> {
     const params = new URLSearchParams();
     if (opts?.limit) params.set("limit", String(opts.limit));
     if (opts?.since) params.set("since", opts.since);
@@ -954,7 +989,7 @@ export class AgentMeshClient {
   }
 
   /* ── F-110  claim expiry forecast ───────────────── */
-  async getClaimExpiryForecast(workspace: string, minutes?: number): Promise<unknown> {
+  async getClaimExpiryForecast(workspace: string, minutes?: number): Promise<AnalyticsResponse> {
     const qs = minutes ? `?minutes=${minutes}` : "";
     return this.request(`/api/v1/workspaces/${workspace}/claims/expiry-forecast${qs}`, {
       method: "GET",
@@ -962,86 +997,86 @@ export class AgentMeshClient {
   }
 
   /* ── F-111  handoff SLA compliance ──────────────── */
-  async getHandoffSlaCompliance(workspace: string): Promise<unknown> {
+  async getHandoffSlaCompliance(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/handoffs/sla-compliance`, {
       method: "GET",
     });
   }
 
   /* ── F-112  agent workload distribution ─────────── */
-  async getAgentWorkload(workspace: string): Promise<unknown> {
+  async getAgentWorkload(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/agents/workload`, {
       method: "GET",
     });
   }
 
   /* ── F-113  blocker resolution metrics ──────────── */
-  async getBlockerResolutionMetrics(workspace: string): Promise<unknown> {
+  async getBlockerResolutionMetrics(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/blockers/resolution-metrics`, {
       method: "GET",
     });
   }
 
   /* ── F-114  workspace comparison ────────────────── */
-  async compareWorkspaces(ids: string[]): Promise<unknown> {
+  async compareWorkspaces(ids: string[]): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/compare?ids=${ids.join(",")}`, { method: "GET" });
   }
 
   /* ── F-115  agent idle report ───────────────────── */
-  async getAgentIdleReport(workspace: string): Promise<unknown> {
+  async getAgentIdleReport(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/agents/idle-report`, { method: "GET" });
   }
 
   /* ── F-116  claim overlap matrix ────────────────── */
-  async getClaimOverlapMatrix(workspace: string): Promise<unknown> {
+  async getClaimOverlapMatrix(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/claims/overlap-matrix`, { method: "GET" });
   }
 
   /* ── F-117  handoff retry stats ─────────────────── */
-  async getHandoffRetryStats(workspace: string): Promise<unknown> {
+  async getHandoffRetryStats(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/handoffs/retry-stats`, { method: "GET" });
   }
 
   /* ── F-118  agent capability gaps ───────────────── */
-  async getCapabilityGaps(workspace: string): Promise<unknown> {
+  async getCapabilityGaps(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/agents/capability-gaps`, {
       method: "GET",
     });
   }
 
   /* ── F-119  blocker correlation ─────────────────── */
-  async getBlockerCorrelation(workspace: string): Promise<unknown> {
+  async getBlockerCorrelation(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/blockers/correlation`, { method: "GET" });
   }
 
   /* ── F-120  workspace health score ──────────────── */
-  async getWorkspaceHealthScore(workspace: string): Promise<unknown> {
+  async getWorkspaceHealthScore(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/health-score`, { method: "GET" });
   }
 
   /* ── F-121  agent collaboration matrix ──────────── */
-  async getCollaborationMatrix(workspace: string): Promise<unknown> {
+  async getCollaborationMatrix(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/agents/collaboration-matrix`, {
       method: "GET",
     });
   }
 
   /* ── F-122  claim renewal trends ────────────────── */
-  async getClaimRenewalTrends(workspace: string): Promise<unknown> {
+  async getClaimRenewalTrends(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/claims/renewal-trends`, {
       method: "GET",
     });
   }
 
   /* ── F-123  handoff latency percentiles ─────────── */
-  async getHandoffLatencyPercentiles(workspace: string): Promise<unknown> {
+  async getHandoffLatencyPercentiles(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/handoffs/latency-percentiles`, {
       method: "GET",
     });
   }
 
   /* ── F-124  agent registration history ──────────── */
-  async getAgentRegistrationHistory(workspace: string, limit?: number): Promise<unknown> {
+  async getAgentRegistrationHistory(workspace: string, limit?: number): Promise<AnalyticsResponse> {
     const qs = limit ? `?limit=${limit}` : "";
     return this.request(`/api/v1/workspaces/${workspace}/agents/registration-history${qs}`, {
       method: "GET",
@@ -1049,24 +1084,24 @@ export class AgentMeshClient {
   }
 
   /* ── F-125  blocker age distribution ────────────── */
-  async getBlockerAgeDistribution(workspace: string): Promise<unknown> {
+  async getBlockerAgeDistribution(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/blockers/age-distribution`, {
       method: "GET",
     });
   }
 
   /* ── F-126  workspace daily digest ──────────────── */
-  async getDailyDigest(workspace: string): Promise<unknown> {
+  async getDailyDigest(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/daily-digest`, { method: "GET" });
   }
 
   /* ── F-127  agent peer ranking ──────────────────── */
-  async getAgentPeerRanking(workspace: string): Promise<unknown> {
+  async getAgentPeerRanking(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/agents/peer-ranking`, { method: "GET" });
   }
 
   /* ── F-128  claim conflict history ──────────────── */
-  async getClaimConflictHistory(workspace: string, limit?: number): Promise<unknown> {
+  async getClaimConflictHistory(workspace: string, limit?: number): Promise<AnalyticsResponse> {
     const qs = limit ? `?limit=${limit}` : "";
     return this.request(`/api/v1/workspaces/${workspace}/claims/conflict-history${qs}`, {
       method: "GET",
@@ -1074,24 +1109,24 @@ export class AgentMeshClient {
   }
 
   /* ── F-129  handoff throughput ──────────────────── */
-  async getHandoffThroughput(workspace: string): Promise<unknown> {
+  async getHandoffThroughput(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/handoffs/throughput`, { method: "GET" });
   }
 
   /* ── F-130  agent status transitions ────────────── */
-  async getAgentStatusTransitions(workspace: string, agentId: string): Promise<unknown> {
+  async getAgentStatusTransitions(workspace: string, agentId: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}/status-transitions`, {
       method: "GET",
     });
   }
 
   /* ── F-131  workspace resource utilization ──────── */
-  async getResourceUtilization(workspace: string): Promise<unknown> {
+  async getResourceUtilization(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/resource-utilization`, { method: "GET" });
   }
 
   /* ── F-132  workspace export diff ──────────────── */
-  async getExportDiff(workspace: string, since: string): Promise<unknown> {
+  async getExportDiff(workspace: string, since: string): Promise<AnalyticsResponse> {
     return this.request(
       `/api/v1/workspaces/${workspace}/export-diff?since=${encodeURIComponent(since)}`,
       { method: "GET" },
@@ -1099,52 +1134,52 @@ export class AgentMeshClient {
   }
 
   /* ── F-133  agent capability utilization ────────── */
-  async getCapabilityUtilization(workspace: string): Promise<unknown> {
+  async getCapabilityUtilization(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/agents/capability-utilization`, {
       method: "GET",
     });
   }
 
   /* ── F-134  blocker escalation rate ────────────── */
-  async getBlockerEscalationRate(workspace: string): Promise<unknown> {
+  async getBlockerEscalationRate(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/blockers/escalation-rate`, {
       method: "GET",
     });
   }
 
   /* ── F-135  handoff chain depth ────────────────── */
-  async getHandoffChainDepth(workspace: string): Promise<unknown> {
+  async getHandoffChainDepth(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/handoffs/chain-depth`, { method: "GET" });
   }
 
   /* ── F-136  agent tag summary ──────────────────── */
-  async getAgentTagSummary(workspace: string): Promise<unknown> {
+  async getAgentTagSummary(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/agents/tag-summary`, { method: "GET" });
   }
 
   /* ── F-137  claim scope frequency ──────────────── */
-  async getClaimScopeFrequency(workspace: string): Promise<unknown> {
+  async getClaimScopeFrequency(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/claims/scope-frequency`, {
       method: "GET",
     });
   }
 
   /* ── F-138  agent capability overlap ───────────── */
-  async getCapabilityOverlap(workspace: string): Promise<unknown> {
+  async getCapabilityOverlap(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/agents/capability-overlap`, {
       method: "GET",
     });
   }
 
   /* ── F-139  handoff rejection rate ─────────────── */
-  async getHandoffRejectionRate(workspace: string): Promise<unknown> {
+  async getHandoffRejectionRate(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/handoffs/rejection-rate`, {
       method: "GET",
     });
   }
 
   /* ── F-140  blocker severity trend ─────────────── */
-  async getBlockerSeverityTrend(workspace: string): Promise<unknown> {
+  async getBlockerSeverityTrend(workspace: string): Promise<AnalyticsResponse> {
     return this.request(`/api/v1/workspaces/${workspace}/blockers/severity-trend`, {
       method: "GET",
     });
