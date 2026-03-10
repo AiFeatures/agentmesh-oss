@@ -1383,4 +1383,35 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-203: Handoff priority distribution
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/priority-distribution",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const rows = db
+        .prepare(
+          `SELECT COALESCE(priority, 0) as priority, status, COUNT(*) as count
+           FROM handoffs WHERE workspace_id = ?
+           GROUP BY priority, status`,
+        )
+        .all(workspace) as { priority: number; status: string; count: number }[];
+
+      const byPriority: Record<number, { total: number; by_status: Record<string, number> }> = {};
+      for (const r of rows) {
+        if (!byPriority[r.priority]) byPriority[r.priority] = { total: 0, by_status: {} };
+        byPriority[r.priority].total += r.count;
+        byPriority[r.priority].by_status[r.status] = r.count;
+      }
+
+      const distribution = Object.entries(byPriority)
+        .map(([p, data]) => ({ priority: Number(p), ...data }))
+        .sort((a, b) => b.priority - a.priority);
+
+      const total = distribution.reduce((s, d) => s + d.total, 0);
+      return reply.send({ workspace, total, distribution });
+    },
+  );
 };

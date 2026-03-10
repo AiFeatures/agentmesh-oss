@@ -1719,4 +1719,36 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-204: Per-agent claim summary
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/agent-summary",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const claims = db
+        .prepare(`SELECT agent_id, status FROM claims WHERE workspace_id = ?`)
+        .all(workspace) as { agent_id: string; status: string }[];
+
+      const summary: Record<
+        string,
+        { active: number; released: number; expired: number; total: number }
+      > = {};
+      for (const c of claims) {
+        if (!summary[c.agent_id])
+          summary[c.agent_id] = { active: 0, released: 0, expired: 0, total: 0 };
+        summary[c.agent_id].total++;
+        if (c.status === "active") summary[c.agent_id].active++;
+        else if (c.status === "released") summary[c.agent_id].released++;
+        else if (c.status === "expired") summary[c.agent_id].expired++;
+      }
+
+      const agents = Object.entries(summary)
+        .map(([agent_id, stats]) => ({ agent_id, ...stats }))
+        .sort((a, b) => b.total - a.total);
+
+      return reply.send({ workspace, total_claims: claims.length, agents });
+    },
+  );
 };
