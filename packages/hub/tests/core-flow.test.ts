@@ -13279,3 +13279,29 @@ test("GET /handoffs/handoff-context-size returns size stats", async () => {
   assert.ok(typeof body.total === "number");
   await app.close();
 });
+
+// F-449 blocker-comment-frequency
+test("GET /blockers/blocker-comment-frequency returns frequency data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = "bcf-" + Date.now().toString(36);
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-comment-frequency`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.trend));
+  await app.close();
+});
+
+// F-450 workspace-base-path-stats
+test("GET /workspaces/workspace-base-path-stats returns path data", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const res = await app.inject({ method: "GET", url: "/api/v1/workspaces/workspace-base-path-stats", headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.body);
+  assert.ok(Array.isArray(body.paths));
+  await app.close();
+});

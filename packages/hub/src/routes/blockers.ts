@@ -2846,4 +2846,27 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, blockers: rows });
     },
   );
+
+  // F-449 blocker-comment-frequency
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/blocker-comment-frequency",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT DATE(bc.created_at) AS day, COUNT(*) AS comment_count
+           FROM blocker_comments bc
+           JOIN blockers b ON b.blocker_id = bc.blocker_id
+           WHERE b.workspace_id = ?
+           GROUP BY DATE(bc.created_at)
+           ORDER BY day DESC
+           LIMIT 30`,
+        )
+        .all(req.params.workspace) as {
+        day: string;
+        comment_count: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, trend: rows });
+    },
+  );
 };

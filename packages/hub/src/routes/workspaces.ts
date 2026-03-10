@@ -3149,4 +3149,25 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, trend: rows });
     },
   );
+
+  // F-450 workspace-base-path-stats
+  app.get(
+    "/api/v1/workspaces/workspace-base-path-stats",
+    { preHandler: app.authGuard },
+    async (_req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT COALESCE(base_path, '(none)') AS base_path, COUNT(*) AS workspace_count
+           FROM workspaces
+           GROUP BY base_path
+           ORDER BY workspace_count DESC
+           LIMIT 20`,
+        )
+        .all() as {
+        base_path: string;
+        workspace_count: number;
+      }[];
+      reply.send({ paths: rows });
+    },
+  );
 };
