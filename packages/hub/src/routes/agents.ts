@@ -3611,4 +3611,28 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, matrix: rows });
     },
   );
+
+  // F-424 agent-uptime-ranking
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/agent-uptime-ranking",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT agent_id, display_name, created_at,
+                  CAST((julianday('now') - julianday(created_at)) * 86400 AS INTEGER) AS uptime_seconds
+           FROM agents
+           WHERE workspace_id = ? AND status = 'online'
+           ORDER BY created_at ASC
+           LIMIT 20`,
+        )
+        .all(req.params.workspace) as {
+        agent_id: string;
+        display_name: string;
+        created_at: string;
+        uptime_seconds: number;
+      }[];
+      reply.send({ workspace: req.params.workspace, agents: rows });
+    },
+  );
 };

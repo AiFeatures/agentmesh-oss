@@ -2705,4 +2705,28 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-423 blocker-title-length
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/blocker-title-length",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const row = db
+        .prepare(
+          `SELECT COUNT(*) AS total,
+                  AVG(LENGTH(title)) AS avg_length,
+                  MAX(LENGTH(title)) AS max_length,
+                  MIN(LENGTH(title)) AS min_length
+           FROM blockers
+           WHERE workspace_id = ?`,
+        )
+        .get(req.params.workspace) as {
+        total: number;
+        avg_length: number | null;
+        max_length: number | null;
+        min_length: number | null;
+      };
+      reply.send({ workspace: req.params.workspace, ...row });
+    },
+  );
 };
