@@ -1838,4 +1838,32 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-263 blocker-creation-rate
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/creation-rate",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params;
+      const rows = db
+        .prepare(
+          `SELECT DATE(created_at) AS day, COUNT(*) AS cnt
+           FROM blockers WHERE workspace_id = ?
+           GROUP BY DATE(created_at)
+           ORDER BY day DESC LIMIT 30`,
+        )
+        .all(workspace) as { day: string; cnt: number }[];
+
+      const total = rows.reduce((s, r) => s + r.cnt, 0);
+      const avgPerDay = rows.length > 0 ? Math.round((total / rows.length) * 100) / 100 : 0;
+
+      return reply.send({
+        workspace,
+        total_blockers: total,
+        days_tracked: rows.length,
+        avg_per_day: avgPerDay,
+        daily: rows,
+      });
+    },
+  );
 };

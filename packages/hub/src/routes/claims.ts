@@ -2237,4 +2237,30 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-264 claim-agent-overlap
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/agent-overlap",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params;
+      const rows = db
+        .prepare(
+          `SELECT c1.agent_id AS agent_a, c2.agent_id AS agent_b, COUNT(*) AS shared_scopes
+           FROM claims c1
+           JOIN claims c2 ON c1.scope = c2.scope AND c1.workspace_id = c2.workspace_id AND c1.agent_id < c2.agent_id
+           WHERE c1.workspace_id = ? AND c1.status = 'active' AND c2.status = 'active'
+           GROUP BY c1.agent_id, c2.agent_id
+           ORDER BY shared_scopes DESC
+           LIMIT 50`,
+        )
+        .all(workspace) as { agent_a: string; agent_b: string; shared_scopes: number }[];
+
+      return reply.send({
+        workspace,
+        total_overlapping_pairs: rows.length,
+        pairs: rows,
+      });
+    },
+  );
 };
