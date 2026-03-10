@@ -2053,4 +2053,55 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-226: Workspace activity summary
+  app.get(
+    "/api/v1/workspaces/:workspace/activity-summary",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const agentCount = (
+        db.prepare(`SELECT COUNT(*) as c FROM agents WHERE workspace_id = ?`).get(workspace) as {
+          c: number;
+        }
+      ).c;
+
+      const handoffCount = (
+        db.prepare(`SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ?`).get(workspace) as {
+          c: number;
+        }
+      ).c;
+
+      const claimCount = (
+        db.prepare(`SELECT COUNT(*) as c FROM claims WHERE workspace_id = ?`).get(workspace) as {
+          c: number;
+        }
+      ).c;
+
+      const blockerCount = (
+        db.prepare(`SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ?`).get(workspace) as {
+          c: number;
+        }
+      ).c;
+
+      const recentAudit = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM audit_log WHERE workspace_id = ? AND created_at > datetime('now', '-24 hours')`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+
+      return reply.send({
+        workspace,
+        agents: agentCount,
+        handoffs: handoffCount,
+        claims: claimCount,
+        blockers: blockerCount,
+        audit_events_24h: recentAudit,
+        total_entities: agentCount + handoffCount + claimCount + blockerCount,
+      });
+    },
+  );
 };

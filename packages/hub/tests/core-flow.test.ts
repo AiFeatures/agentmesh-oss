@@ -9876,3 +9876,43 @@ test("GET /handoffs/success-rate returns success metrics", async () => {
   assert.ok(typeof body.rejection_rate_percent === "number");
   await app.close();
 });
+
+// ---------- F-225: Claim ownership duration ----------
+test("GET /claims/ownership-duration returns duration metrics", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `cl-owndur-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/ownership-duration`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_claims === "number");
+  assert.ok(typeof body.avg_duration_hours === "number");
+  assert.ok(Array.isArray(body.longest));
+  assert.ok(Array.isArray(body.shortest));
+  await app.close();
+});
+
+// ---------- F-226: Workspace activity summary ----------
+test("GET /workspace activity-summary returns entity counts", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ws-actsumm-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/activity-summary`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.agents === "number");
+  assert.ok(typeof body.handoffs === "number");
+  assert.ok(typeof body.claims === "number");
+  assert.ok(typeof body.blockers === "number");
+  assert.ok(typeof body.total_entities === "number");
+  await app.close();
+});

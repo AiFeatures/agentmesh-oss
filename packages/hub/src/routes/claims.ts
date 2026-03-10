@@ -1939,4 +1939,58 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-225: Claim ownership duration
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/ownership-duration",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const claims = db
+        .prepare(
+          `SELECT claim_id, agent_id, status, created_at, expires_at FROM claims WHERE workspace_id = ?`,
+        )
+        .all(workspace) as {
+        claim_id: string;
+        agent_id: string;
+        status: string;
+        created_at: string;
+        expires_at: string | null;
+      }[];
+
+      const now = new Date();
+      const durations = claims.map((c) => {
+        const created = new Date(c.created_at).getTime();
+        const end =
+          c.status === "active"
+            ? now.getTime()
+            : c.expires_at
+              ? new Date(c.expires_at).getTime()
+              : now.getTime();
+        const hours = Math.round(((end - created) / 3600000) * 100) / 100;
+        return {
+          claim_id: c.claim_id,
+          agent_id: c.agent_id,
+          status: c.status,
+          duration_hours: hours,
+        };
+      });
+
+      const total = durations.length;
+      const avg =
+        total > 0
+          ? Math.round((durations.reduce((s, d) => s + d.duration_hours, 0) / total) * 100) / 100
+          : 0;
+      const sorted = [...durations].sort((a, b) => b.duration_hours - a.duration_hours);
+
+      return reply.send({
+        workspace,
+        total_claims: total,
+        avg_duration_hours: avg,
+        longest: sorted.slice(0, 10),
+        shortest: sorted.slice(-10).reverse(),
+      });
+    },
+  );
 };
