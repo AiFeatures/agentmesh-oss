@@ -2460,3 +2460,100 @@ test("POST /claims/batch creates multiple claims", async () => {
 
   await app.close();
 });
+
+/* ── F-42  workspace agent limit via settings ─────────────────── */
+test("agent registration enforces max_agents setting", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `limit-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Limit Test" },
+  });
+
+  // Set max_agents = 1
+  await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/settings`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { max_agents: 1 },
+  });
+
+  // First agent OK
+  const r1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "lim-a", display_name: "A" },
+  });
+  assert.equal(r1.statusCode, 201);
+
+  // Second agent rejected
+  const r2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "lim-b", display_name: "B" },
+  });
+  assert.equal(r2.statusCode, 422);
+  assert.equal(r2.json().error, "Agent limit reached");
+
+  await app.close();
+});
+
+/* ── F-44  claim transfer ─────────────────────────────────────── */
+test("POST /claims/:claimId/transfer moves claim to another agent", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `xfer-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Transfer" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "xfer-a", display_name: "A" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "xfer-b", display_name: "B" },
+  });
+
+  const claimRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "xfer-a", scope: "src", paths: ["src/**"] },
+  });
+  const claimId = claimRes.json().claim_id;
+
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims/${claimId}/transfer`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { to_agent_id: "xfer-b" },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().to_agent_id, "xfer-b");
+  assert.equal(res.json().from_agent_id, "xfer-a");
+
+  // Verify agent changed
+  const detail = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/${claimId}`,
+    headers: auth,
+  });
+  assert.equal(detail.json().agent_id, "xfer-b");
+
+  await app.close();
+});

@@ -298,6 +298,64 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
   );
 
   app.post(
+    "/api/v1/workspaces/:workspace/claims/:claimId/transfer",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["to_agent_id"],
+          additionalProperties: false,
+          properties: {
+            to_agent_id: { type: "string", minLength: 2, maxLength: 128 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { claimId, workspace } = request.params as { claimId: string; workspace: string };
+      const { to_agent_id } = request.body as { to_agent_id: string };
+
+      const claim = db
+        .prepare(
+          "SELECT * FROM claims WHERE claim_id = ? AND workspace_id = ? AND status = 'active'",
+        )
+        .get(claimId, workspace) as Record<string, unknown> | undefined;
+      if (!claim) {
+        return reply.code(404).send({ error: "Active claim not found" });
+      }
+
+      const toAgent = db
+        .prepare("SELECT agent_id FROM agents WHERE agent_id = ? AND workspace_id = ?")
+        .get(to_agent_id, workspace);
+      if (!toAgent) {
+        return reply.code(404).send({ error: "Target agent not found" });
+      }
+
+      db.prepare("UPDATE claims SET agent_id = ? WHERE claim_id = ?").run(to_agent_id, claimId);
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        actorId: String(claim.agent_id),
+        action: "claim.transfer",
+        entityType: "claim",
+        entityId: claimId,
+        requestId: request.id,
+        payload: { from_agent_id: claim.agent_id, to_agent_id },
+      });
+
+      broadcast("claims.updated", {
+        workspace,
+        claim_id: claimId,
+        from_agent_id: claim.agent_id,
+        to_agent_id,
+      });
+      return reply.send({ ok: true, from_agent_id: claim.agent_id, to_agent_id });
+    },
+  );
+
+  app.post(
     "/api/v1/workspaces/:workspace/claims/batch-release",
     {
       preHandler: app.authGuard,
@@ -483,6 +541,46 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       }
 
       return reply.send({ released_count: released.length, released_ids: released });
+    },
+  );
+
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/stats",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(workspace);
+      if (!ws) {
+        return reply.code(404).send({ error: "Workspace not found" });
+      }
+
+      const byStatus = db
+        .prepare(
+          "SELECT status, COUNT(*) as count FROM claims WHERE workspace_id = ? GROUP BY status",
+        )
+        .all(workspace) as Array<{ status: string; count: number }>;
+      const byAgent = db
+        .prepare(
+          "SELECT agent_id, COUNT(*) as count FROM claims WHERE workspace_id = ? AND status = 'active' GROUP BY agent_id",
+        )
+        .all(workspace) as Array<{ agent_id: string; count: number }>;
+      const avgTtl = db
+        .prepare(
+          "SELECT AVG(ttl_seconds) as avg_ttl FROM claims WHERE workspace_id = ? AND status = 'active'",
+        )
+        .get(workspace) as { avg_ttl: number | null };
+      const totalRenewals = db
+        .prepare("SELECT SUM(renewal_count) as total FROM claims WHERE workspace_id = ?")
+        .get(workspace) as { total: number | null };
+
+      return reply.send({
+        by_status: Object.fromEntries(byStatus.map((r) => [r.status, r.count])),
+        active_by_agent: Object.fromEntries(byAgent.map((r) => [r.agent_id, r.count])),
+        avg_ttl_seconds: avgTtl.avg_ttl ?? 0,
+        total_renewals: totalRenewals.total ?? 0,
+      });
     },
   );
 };

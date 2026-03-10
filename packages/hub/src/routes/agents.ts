@@ -40,11 +40,25 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
         metadata?: Record<string, unknown>;
       };
 
-      const exists = db
-        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
-        .get(workspace);
-      if (!exists) {
+      const ws = db
+        .prepare("SELECT workspace_id, settings FROM workspaces WHERE workspace_id = ?")
+        .get(workspace) as { workspace_id: string; settings: string } | undefined;
+      if (!ws) {
         return reply.code(404).send({ error: "Workspace not found" });
+      }
+
+      const settings = JSON.parse(ws.settings || "{}");
+      if (settings.max_agents) {
+        const agentCount = db
+          .prepare("SELECT COUNT(*) as count FROM agents WHERE workspace_id = ?")
+          .get(workspace) as { count: number };
+        if (agentCount.count >= settings.max_agents) {
+          return reply.code(422).send({
+            error: "Agent limit reached",
+            max_agents: settings.max_agents,
+            current: agentCount.count,
+          });
+        }
       }
 
       registerAgent({

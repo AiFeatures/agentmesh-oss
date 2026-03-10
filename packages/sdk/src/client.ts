@@ -221,6 +221,19 @@ export class AgentMeshClient {
     });
   }
 
+  async transferClaim(workspace: string, claimId: string, toAgentId: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/claims/${claimId}/transfer`, {
+      method: "POST",
+      body: JSON.stringify({ to_agent_id: toAgentId }),
+    });
+  }
+
+  async getClaimStats(workspace: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/claims/stats`, {
+      method: "GET",
+    });
+  }
+
   async batchReleaseClaims(workspace: string, claimIds: string[]): Promise<unknown> {
     return await this.request(`/api/v1/workspaces/${workspace}/claims/batch-release`, {
       method: "POST",
