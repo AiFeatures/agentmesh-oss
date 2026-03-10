@@ -5209,3 +5209,120 @@ test("agent uptime report returns data for agents", async () => {
 
   await app.close();
 });
+
+// --------------- F-102: Workspace dashboard summary ---------------
+test("workspace dashboard returns aggregated counts", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-dash-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `ds-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/dashboard`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.agents_total, 1);
+  assert.equal(body.agents_online, 1);
+  assert.ok("claims_active" in body);
+  assert.ok("blockers_open" in body);
+  assert.ok("handoffs_pending" in body);
+
+  await app.close();
+});
+
+// --------------- F-103: Handoff SLA breaches ---------------
+test("handoff SLA breaches returns overdue handoffs", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-sla-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `sl-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `sl-a2-${ws}`, display_name: "A2", capabilities: ["review"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/sla-breaches`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().data));
+
+  await app.close();
+});
+
+// --------------- F-104: Agent task queue ---------------
+test("agent task queue create and list tasks", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-task-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `tk-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+
+  // create task
+  const create = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/tk-a1-${ws}/tasks`,
+    headers: auth,
+    payload: { title: "Fix bug", description: "Fix the login bug", priority: "high" },
+  });
+  assert.equal(create.statusCode, 201);
+  assert.ok(create.json().task_id);
+
+  // list tasks
+  const list = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/tk-a1-${ws}/tasks`,
+    headers: auth,
+  });
+  assert.equal(list.statusCode, 200);
+  assert.equal(list.json().data.length, 1);
+  assert.equal(list.json().data[0].title, "Fix bug");
+  assert.equal(list.json().data[0].priority, "high");
+
+  await app.close();
+});

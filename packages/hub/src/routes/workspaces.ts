@@ -812,4 +812,27 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send(merged);
     },
   );
+
+  /* ── F-102  workspace dashboard summary ─────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/dashboard",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const cnt = (table: string, extra = "") =>
+        (
+          db
+            .prepare(`SELECT COUNT(*) as c FROM ${table} WHERE workspace_id = ?${extra}`)
+            .get(workspace) as { c: number }
+        ).c;
+      return reply.send({
+        agents_total: cnt("agents"),
+        agents_online: cnt("agents", " AND status = 'online'"),
+        claims_active: cnt("claims", " AND status = 'active'"),
+        blockers_open: cnt("blockers", " AND status = 'open'"),
+        handoffs_pending: cnt("handoffs", " AND status = 'pending'"),
+        handoffs_total: cnt("handoffs"),
+      });
+    },
+  );
 };

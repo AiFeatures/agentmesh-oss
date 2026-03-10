@@ -539,4 +539,19 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-103  handoff SLA breaches ────────────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/sla-breaches",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          "SELECT handoff_id, from_agent_id, to_agent_id, status, sla_deadline, created_at FROM handoffs WHERE workspace_id = ? AND sla_deadline IS NOT NULL AND sla_deadline < datetime('now') AND status = 'pending' ORDER BY sla_deadline ASC",
+        )
+        .all(workspace);
+      return reply.send({ data: rows, total: (rows as unknown[]).length });
+    },
+  );
 };

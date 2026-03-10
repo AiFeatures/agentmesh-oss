@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { db } from "../db/index.js";
 import { writeAuditLog } from "../services/audit.js";
+import { taskId } from "../services/ids.js";
 import { heartbeatAgent, listAgents, registerAgent } from "../services/registry.js";
 import { parseJsonSafe } from "../utils/json.js";
 import { broadcast } from "../ws/gateway.js";
@@ -1104,6 +1105,65 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       }));
 
       return reply.send({ capabilities: allCaps, matrix });
+    },
+  );
+
+  /* ── F-104  agent task queue ────────────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/agents/:agentId/tasks",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["title"],
+          additionalProperties: false,
+          properties: {
+            title: { type: "string", minLength: 1, maxLength: 256 },
+            description: { type: "string", maxLength: 2000 },
+            priority: { type: "string", enum: ["low", "normal", "high", "critical"] },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as { workspace: string; agentId: string };
+      const body = request.body as { title: string; description?: string; priority?: string };
+      const agent = db
+        .prepare("SELECT agent_id FROM agents WHERE agent_id = ? AND workspace_id = ?")
+        .get(agentId, workspace);
+      if (!agent) return reply.code(404).send({ error: "Agent not found" });
+
+      const id = taskId();
+      db.prepare(
+        "INSERT INTO agent_tasks (task_id, workspace_id, agent_id, title, description, priority) VALUES (?, ?, ?, ?, ?, ?)",
+      ).run(
+        id,
+        workspace,
+        agentId,
+        body.title,
+        body.description ?? null,
+        body.priority ?? "normal",
+      );
+      return reply.code(201).send({ task_id: id });
+    },
+  );
+
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/:agentId/tasks",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as { workspace: string; agentId: string };
+      const { status } = request.query as { status?: string };
+      let sql = "SELECT * FROM agent_tasks WHERE workspace_id = ? AND agent_id = ?";
+      const params: unknown[] = [workspace, agentId];
+      if (status) {
+        sql += " AND status = ?";
+        params.push(status);
+      }
+      sql += " ORDER BY created_at DESC";
+      const rows = db.prepare(sql).all(...params);
+      return reply.send({ data: rows });
     },
   );
 };

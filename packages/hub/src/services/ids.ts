@@ -18,6 +18,10 @@ export function templateId(): string {
   return `tpl_${rand()}`;
 }
 
+export function taskId(): string {
+  return `tsk_${rand()}`;
+}
+
 export function workspaceId(prefix?: string): string {
   return prefix ? `wks_${prefix}_${rand()}` : `wks_${rand()}`;
 }
