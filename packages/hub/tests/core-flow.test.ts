@@ -2040,3 +2040,136 @@ test("PATCH agent metadata merges with existing metadata", async () => {
 
   await app.close();
 });
+
+// ------- Claim conflict returns 409 -------
+test("creating overlapping claim from different agent returns 409", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `conflict-${Date.now()}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Conflict" },
+  });
+  for (const aid of ["conf-a1", "conf-a2"]) {
+    await app.inject({
+      method: "POST",
+      url: `/api/v1/workspaces/${ws}/agents/register`,
+      headers: { ...auth, "content-type": "application/json" },
+      payload: { agent_id: aid, display_name: aid, capabilities: ["code"] },
+    });
+  }
+
+  // Agent 1 claims src/**
+  const c1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "conf-a1", scope: "src", paths: ["src/**"] },
+  });
+  assert.equal(c1.statusCode, 201);
+
+  // Agent 2 tries to claim overlapping path
+  const c2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "conf-a2", scope: "src", paths: ["src/index.ts"] },
+  });
+  assert.equal(c2.statusCode, 409);
+  const body = c2.json() as { error: string };
+  assert.ok(body.error.includes("conflict") || body.error.includes("Conflict"));
+
+  await app.close();
+});
+
+// ------- Handoff reject flow -------
+test("handoff reject returns ok and handoff status changes", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `hrej-${Date.now()}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "HandoffReject" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "hrej-a1", display_name: "A1", capabilities: ["review"] },
+  });
+
+  const hRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { from_agent_id: "hrej-a1", capability_tag: "review", summary: "Needs review" },
+  });
+  assert.equal(hRes.statusCode, 201);
+  const hId = (hRes.json() as { handoff_id: string }).handoff_id;
+
+  const rejRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs/${hId}/reject`,
+    headers: auth,
+  });
+  assert.equal(rejRes.statusCode, 200);
+
+  // Verify status changed
+  const getRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/${hId}`,
+    headers: auth,
+  });
+  const detail = getRes.json() as { status: string };
+  assert.equal(detail.status, "rejected");
+
+  await app.close();
+});
+
+// ------- Capability routing routes to least-busy agent -------
+test("capability routing selects least-busy agent", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `route-${Date.now()}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "Routing" },
+  });
+
+  // Register two agents with same capability
+  for (const aid of ["rt-agent-a", "rt-agent-b"]) {
+    await app.inject({
+      method: "POST",
+      url: `/api/v1/workspaces/${ws}/agents/register`,
+      headers: { ...auth, "content-type": "application/json" },
+      payload: { agent_id: aid, display_name: aid, capabilities: ["deploy"] },
+    });
+  }
+
+  // Give agent-a a claim so it's busier
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "rt-agent-a", scope: "infra", paths: ["infra/**"] },
+  });
+
+  // Route should select agent-b (less busy)
+  const routeRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/route`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { capability: "deploy" },
+  });
+  assert.equal(routeRes.statusCode, 200);
+  const routed = routeRes.json() as { agent_id: string };
+  assert.equal(routed.agent_id, "rt-agent-b");
+
+  await app.close();
+});
