@@ -10070,3 +10070,43 @@ test("GET /handoffs/pending-age returns pending handoff ages", async () => {
   assert.ok(Array.isArray(body.handoffs));
   await app.close();
 });
+
+// ---------- F-235: Claim conflict rate ----------
+test("GET /claims/conflict-rate returns conflict ratio", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `cl-confrate-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/conflict-rate`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_claims === "number");
+  assert.ok(typeof body.total_conflicts === "number");
+  assert.ok(typeof body.conflict_rate_percent === "number");
+  await app.close();
+});
+
+// ---------- F-236: Workspace blocker summary ----------
+test("GET /workspace blocker-summary returns severity breakdown", async () => {
+  runMigrations();
+  const app = buildApp();
+  await app.ready();
+  const ws = `ws-blksumm-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "bug", severity: "high" } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blocker-summary`, headers: auth });
+  assert.equal(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.ok(typeof body.total_blockers === "number");
+  assert.ok(typeof body.open === "number");
+  assert.ok(typeof body.resolved === "number");
+  assert.ok(typeof body.resolution_rate_percent === "number");
+  assert.ok(body.by_severity);
+  await app.close();
+});

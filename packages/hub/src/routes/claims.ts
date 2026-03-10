@@ -2030,4 +2030,35 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-235: Claim conflict rate
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/conflict-rate",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const totalClaims = (
+        db.prepare(`SELECT COUNT(*) as c FROM claims WHERE workspace_id = ?`).get(workspace) as {
+          c: number;
+        }
+      ).c;
+
+      const conflicts = db
+        .prepare(
+          `SELECT COUNT(*) as c FROM audit_log WHERE workspace_id = ? AND action LIKE 'claim.conflict%'`,
+        )
+        .get(workspace) as { c: number };
+
+      const conflictRate =
+        totalClaims > 0 ? Math.round((conflicts.c / totalClaims) * 10000) / 100 : 0;
+
+      return reply.send({
+        workspace,
+        total_claims: totalClaims,
+        total_conflicts: conflicts.c,
+        conflict_rate_percent: conflictRate,
+      });
+    },
+  );
 };

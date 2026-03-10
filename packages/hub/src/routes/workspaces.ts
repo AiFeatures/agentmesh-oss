@@ -2152,4 +2152,37 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, trend });
     },
   );
+
+  // F-236: Workspace blocker summary
+  app.get(
+    "/api/v1/workspaces/:workspace/blocker-summary",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const blockers = db
+        .prepare(`SELECT status, severity FROM blockers WHERE workspace_id = ?`)
+        .all(workspace) as { status: string; severity: string }[];
+
+      const total = blockers.length;
+      const open = blockers.filter((b) => b.status === "open").length;
+      const resolved = blockers.filter((b) => b.status === "resolved").length;
+
+      const bySeverity: Record<string, number> = {};
+      for (const b of blockers) {
+        bySeverity[b.severity] = (bySeverity[b.severity] || 0) + 1;
+      }
+
+      const resolutionRate = total > 0 ? Math.round((resolved / total) * 10000) / 100 : 0;
+
+      return reply.send({
+        workspace,
+        total_blockers: total,
+        open,
+        resolved,
+        resolution_rate_percent: resolutionRate,
+        by_severity: bySeverity,
+      });
+    },
+  );
 };
