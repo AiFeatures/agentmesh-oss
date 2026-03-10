@@ -559,4 +559,19 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ results });
     },
   );
+
+  /* ── F-99  blocker severity distribution ─────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/severity-distribution",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          "SELECT severity, COUNT(*) as count FROM blockers WHERE workspace_id = ? GROUP BY severity ORDER BY count DESC",
+        )
+        .all(workspace) as Array<{ severity: string; count: number }>;
+      return reply.send({ data: rows });
+    },
+  );
 };

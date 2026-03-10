@@ -909,4 +909,54 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows });
     },
   );
+
+  /* ── F-100  claim batch transfer ──────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/claims/batch-transfer",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["claim_ids", "from_agent_id", "to_agent_id"],
+          additionalProperties: false,
+          properties: {
+            claim_ids: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 50 },
+            from_agent_id: { type: "string", minLength: 1, maxLength: 128 },
+            to_agent_id: { type: "string", minLength: 1, maxLength: 128 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { claim_ids, from_agent_id, to_agent_id } = request.body as {
+        claim_ids: string[];
+        from_agent_id: string;
+        to_agent_id: string;
+      };
+      const results: Array<{ claim_id: string; transferred: boolean; reason?: string }> = [];
+      for (const cid of claim_ids) {
+        const row = db
+          .prepare(
+            "SELECT agent_id FROM claims WHERE claim_id = ? AND workspace_id = ? AND status = 'active'",
+          )
+          .get(cid, workspace) as { agent_id: string } | undefined;
+        if (!row) {
+          results.push({ claim_id: cid, transferred: false, reason: "not found or inactive" });
+          continue;
+        }
+        if (row.agent_id !== from_agent_id) {
+          results.push({ claim_id: cid, transferred: false, reason: "not owned by from_agent_id" });
+          continue;
+        }
+        db.prepare("UPDATE claims SET agent_id = ? WHERE claim_id = ?").run(to_agent_id, cid);
+        db.prepare(
+          "INSERT INTO claim_transfer_history (claim_id, workspace_id, from_agent_id, to_agent_id) VALUES (?, ?, ?, ?)",
+        ).run(cid, workspace, from_agent_id, to_agent_id);
+        results.push({ claim_id: cid, transferred: true });
+      }
+      return reply.send({ results });
+    },
+  );
 };

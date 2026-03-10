@@ -5066,3 +5066,146 @@ test("agent capability matrix returns structured matrix", async () => {
 
   await app.close();
 });
+
+// --------------- F-99: Blocker severity distribution ---------------
+test("blocker severity distribution returns counts per severity", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-sevdist-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `sd-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: `sd-a1-${ws}`, title: "B1", severity: "high" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: `sd-a1-${ws}`, title: "B2", severity: "high" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: `sd-a1-${ws}`, title: "B3", severity: "low" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/severity-distribution`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const data = res.json().data;
+  assert.ok(data.length >= 2);
+  const highEntry = data.find((d: { severity: string }) => d.severity === "high");
+  assert.equal(highEntry.count, 2);
+
+  await app.close();
+});
+
+// --------------- F-100: Claim batch transfer ---------------
+test("claim batch transfer moves multiple claims", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-btxfer-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `bt-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `bt-a2-${ws}`, display_name: "A2", capabilities: ["code"] },
+  });
+
+  const c1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: `bt-a1-${ws}`, scope: "scope.x1", paths: ["src/x1.ts"] },
+  });
+  const c2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: `bt-a1-${ws}`, scope: "scope.x2", paths: ["src/x2.ts"] },
+  });
+
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims/batch-transfer`,
+    headers: auth,
+    payload: {
+      claim_ids: [c1.json().claim_id, c2.json().claim_id],
+      from_agent_id: `bt-a1-${ws}`,
+      to_agent_id: `bt-a2-${ws}`,
+    },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().results.length, 2);
+  assert.ok(res.json().results.every((r: { transferred: boolean }) => r.transferred));
+
+  await app.close();
+});
+
+// --------------- F-101: Agent uptime report ---------------
+test("agent uptime report returns data for agents", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-uptime-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `up-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/uptime-report`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.data.length, 1);
+  assert.equal(body.data[0].agent_id, `up-a1-${ws}`);
+  assert.ok(body.data[0].total_seconds >= 0);
+  assert.ok("uptime_pct" in body.data[0]);
+
+  await app.close();
+});

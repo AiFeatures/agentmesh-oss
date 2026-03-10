@@ -492,6 +492,28 @@ export class AgentMeshClient {
     });
   }
 
+  async getSeverityDistribution(workspace: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/blockers/severity-distribution`, {
+      method: "GET",
+    });
+  }
+
+  async batchTransferClaims(
+    workspace: string,
+    body: { claim_ids: string[]; from_agent_id: string; to_agent_id: string },
+  ): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/claims/batch-transfer`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async getUptimeReport(workspace: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/agents/uptime-report`, {
+      method: "GET",
+    });
+  }
+
   startHeartbeat(workspace: string, agentId: string, intervalMs = 10000): () => void {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {
