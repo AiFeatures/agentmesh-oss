@@ -1750,4 +1750,71 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-190: Workspace risk score
+  app.get(
+    "/api/v1/workspaces/:workspace/risk-score",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const agentCount = (
+        db.prepare(`SELECT COUNT(*) as c FROM agents WHERE workspace_id = ?`).get(workspace) as {
+          c: number;
+        }
+      ).c;
+      const staleAgents = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM agents
+             WHERE workspace_id = ? AND status = 'online'
+                   AND datetime(last_heartbeat_at) < datetime('now', '-15 minutes')`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const openBlockers = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status != 'resolved'`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const criticalBlockers = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status != 'resolved' AND severity = 'critical'`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const pendingHandoffs = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND status = 'pending'`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+
+      // Calculate risk score (0-100, higher = more risky)
+      let risk = 0;
+      if (agentCount > 0) risk += Math.min(30, (staleAgents / agentCount) * 30);
+      risk += Math.min(25, criticalBlockers * 10);
+      risk += Math.min(20, openBlockers * 2);
+      risk += Math.min(25, pendingHandoffs * 3);
+      risk = Math.min(100, Math.round(risk));
+
+      const level = risk < 25 ? "low" : risk < 50 ? "medium" : risk < 75 ? "high" : "critical";
+
+      return reply.send({
+        workspace_id: workspace,
+        risk_score: risk,
+        risk_level: level,
+        factors: {
+          stale_agents: staleAgents,
+          open_blockers: openBlockers,
+          critical_blockers: criticalBlockers,
+          pending_handoffs: pendingHandoffs,
+        },
+      });
+    },
+  );
 };

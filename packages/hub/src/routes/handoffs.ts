@@ -1238,4 +1238,50 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-189: Handoff SLA forecast
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/sla-forecast",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const pending = db
+        .prepare(
+          `SELECT handoff_id, from_agent_id, to_agent_id, summary, created_at,
+                  sla_deadline, expires_at,
+                  ROUND((julianday(COALESCE(sla_deadline, expires_at)) - julianday('now')) * 24, 2) as hours_remaining
+           FROM handoffs
+           WHERE workspace_id = ? AND status = 'pending'
+                 AND (sla_deadline IS NOT NULL OR expires_at IS NOT NULL)
+           ORDER BY hours_remaining ASC`,
+        )
+        .all(workspace) as Array<{
+        handoff_id: string;
+        from_agent_id: string;
+        to_agent_id: string | null;
+        summary: string;
+        created_at: string;
+        sla_deadline: string | null;
+        expires_at: string | null;
+        hours_remaining: number;
+      }>;
+
+      const atRisk = pending.filter((p) => p.hours_remaining < 1 && p.hours_remaining > 0);
+      const breached = pending.filter((p) => p.hours_remaining <= 0);
+
+      return reply.send({
+        total_pending_with_deadline: pending.length,
+        at_risk: atRisk.length,
+        already_breached: breached.length,
+        handoffs: pending.map((p) => ({
+          handoff_id: p.handoff_id,
+          from_agent_id: p.from_agent_id,
+          to_agent_id: p.to_agent_id,
+          hours_remaining: p.hours_remaining,
+          status: p.hours_remaining <= 0 ? "breached" : p.hours_remaining < 1 ? "at_risk" : "ok",
+        })),
+      });
+    },
+  );
 };

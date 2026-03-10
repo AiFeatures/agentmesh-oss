@@ -9118,3 +9118,79 @@ test("GET /claims/transfer-summary returns transfer analytics", async () => {
 
   await app.close();
 });
+
+// F-189: Handoff SLA forecast
+test("GET /handoffs/sla-forecast returns SLA prediction", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `sf-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "sf-a1", display_name: "SF A1", capabilities: ["code"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/sla-forecast`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.total_pending_with_deadline === "number");
+  assert.ok(typeof body.at_risk === "number");
+  assert.ok(typeof body.already_breached === "number");
+  assert.ok(Array.isArray(body.handoffs));
+
+  await app.close();
+});
+
+// F-190: Workspace risk score
+test("GET /workspaces/:workspace/risk-score returns risk assessment", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `risk-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "risk-a1", display_name: "RISK A1", capabilities: ["code"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/risk-score`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.workspace_id, ws);
+  assert.ok(typeof body.risk_score === "number");
+  assert.ok(typeof body.risk_level === "string");
+  assert.ok(body.factors);
+  assert.ok(typeof body.factors.stale_agents === "number");
+  assert.ok(typeof body.factors.open_blockers === "number");
+  assert.ok(typeof body.factors.critical_blockers === "number");
+  assert.ok(typeof body.factors.pending_handoffs === "number");
+  // Fresh workspace should have low risk
+  assert.equal(body.risk_level, "low");
+
+  await app.close();
+});
