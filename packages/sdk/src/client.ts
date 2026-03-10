@@ -431,6 +431,39 @@ export class AgentMeshClient {
     });
   }
 
+  async bulkResolveBlockers(
+    workspace: string,
+    body: { blocker_ids: string[]; resolved_by?: string; note?: string },
+  ): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/blockers/bulk-resolve`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async updateClaimScope(
+    workspace: string,
+    claimId: string,
+    body: { new_scope: string; changed_by: string },
+  ): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/claims/${claimId}/scope`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async getClaimScopeHistory(workspace: string, claimId: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/claims/${claimId}/scope-history`, {
+      method: "GET",
+    });
+  }
+
+  async getAgentOnlineStreak(workspace: string, agentId: string): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/agents/${agentId}/online-streak`, {
+      method: "GET",
+    });
+  }
+
   startHeartbeat(workspace: string, agentId: string, intervalMs = 10000): () => void {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {

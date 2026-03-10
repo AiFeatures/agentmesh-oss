@@ -998,4 +998,40 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-95  agent online streak ──────────────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/:agentId/online-streak",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as { workspace: string; agentId: string };
+      const agent = db
+        .prepare("SELECT status, created_at FROM agents WHERE agent_id = ? AND workspace_id = ?")
+        .get(agentId, workspace) as { status: string; created_at: string } | undefined;
+      if (!agent) {
+        return reply.code(404).send({ error: "Agent not found" });
+      }
+
+      // Find the most recent status change away from 'online'
+      const lastNonOnline = db
+        .prepare(
+          "SELECT created_at FROM agent_status_history WHERE agent_id = ? AND new_status != 'online' ORDER BY id DESC LIMIT 1",
+        )
+        .get(agentId) as { created_at: string } | undefined;
+
+      const sinceDate = lastNonOnline ? lastNonOnline.created_at : agent.created_at;
+      const streakSecs = (
+        db
+          .prepare("SELECT CAST((julianday('now') - julianday(?)) * 86400 AS INTEGER) as secs")
+          .get(sinceDate) as { secs: number }
+      ).secs;
+
+      return reply.send({
+        agent_id: agentId,
+        current_status: agent.status,
+        online_since: sinceDate,
+        streak_seconds: Math.max(0, streakSecs),
+      });
+    },
+  );
 };

@@ -4797,3 +4797,140 @@ test("agent health score returns computed score", async () => {
 
   await app.close();
 });
+
+// --------------- F-93: Blocker bulk resolve ---------------
+test("blocker bulk resolve resolves multiple blockers", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-bulkres-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `br-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+
+  // create two blockers
+  const b1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: `br-a1-${ws}`, title: "B1", severity: "medium" },
+  });
+  const b2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: `br-a1-${ws}`, title: "B2", severity: "low" },
+  });
+
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers/bulk-resolve`,
+    headers: auth,
+    payload: {
+      blocker_ids: [b1.json().blocker_id, b2.json().blocker_id],
+      resolved_by: "tester",
+    },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().results.length, 2);
+  assert.ok(res.json().results.every((r: { resolved: boolean }) => r.resolved));
+
+  await app.close();
+});
+
+// --------------- F-94: Claim scope update + history ---------------
+test("claim scope update records history", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-scphist-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `sc-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+
+  const clm = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: `sc-a1-${ws}`, scope: "scope.a", paths: ["src/a.ts"] },
+  });
+  const claimId = clm.json().claim_id;
+
+  // update scope
+  const upd = await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/claims/${claimId}/scope`,
+    headers: auth,
+    payload: { new_scope: "scope.b", changed_by: "tester" },
+  });
+  assert.equal(upd.statusCode, 200);
+  assert.equal(upd.json().old_scope, "scope.a");
+  assert.equal(upd.json().new_scope, "scope.b");
+
+  // check history
+  const hist = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/${claimId}/scope-history`,
+    headers: auth,
+  });
+  assert.equal(hist.statusCode, 200);
+  assert.equal(hist.json().data.length, 1);
+  assert.equal(hist.json().data[0].old_scope, "scope.a");
+  assert.equal(hist.json().data[0].new_scope, "scope.b");
+
+  await app.close();
+});
+
+// --------------- F-95: Agent online streak ---------------
+test("agent online streak returns streak data", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-streak-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: `sk-a1-${ws}`, display_name: "A1", capabilities: ["code"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/sk-a1-${ws}/online-streak`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.agent_id, `sk-a1-${ws}`);
+  assert.ok(body.streak_seconds >= 0);
+  assert.ok("online_since" in body);
+
+  await app.close();
+});

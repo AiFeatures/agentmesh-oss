@@ -855,4 +855,58 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: rows });
     },
   );
+
+  /* ── F-94  claim scope update + scope history ───────────────── */
+  app.patch(
+    "/api/v1/workspaces/:workspace/claims/:claimId/scope",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["new_scope", "changed_by"],
+          additionalProperties: false,
+          properties: {
+            new_scope: { type: "string", minLength: 1, maxLength: 512 },
+            changed_by: { type: "string", minLength: 1, maxLength: 128 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, claimId } = request.params as { workspace: string; claimId: string };
+      const { new_scope, changed_by } = request.body as { new_scope: string; changed_by: string };
+      const row = db
+        .prepare("SELECT scope FROM claims WHERE claim_id = ? AND workspace_id = ?")
+        .get(claimId, workspace) as { scope: string } | undefined;
+      if (!row) {
+        return reply.code(404).send({ error: "Claim not found" });
+      }
+      db.prepare(
+        "INSERT INTO claim_scope_history (claim_id, workspace_id, old_scope, new_scope, changed_by) VALUES (?, ?, ?, ?, ?)",
+      ).run(claimId, workspace, row.scope, new_scope, changed_by);
+      db.prepare("UPDATE claims SET scope = ? WHERE claim_id = ?").run(new_scope, claimId);
+      return reply.send({ ok: true, old_scope: row.scope, new_scope });
+    },
+  );
+
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/:claimId/scope-history",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, claimId } = request.params as { workspace: string; claimId: string };
+      const exists = db
+        .prepare("SELECT claim_id FROM claims WHERE claim_id = ? AND workspace_id = ?")
+        .get(claimId, workspace);
+      if (!exists) {
+        return reply.code(404).send({ error: "Claim not found" });
+      }
+      const rows = db
+        .prepare(
+          "SELECT old_scope, new_scope, changed_by, changed_at FROM claim_scope_history WHERE claim_id = ? AND workspace_id = ? ORDER BY id ASC",
+        )
+        .all(claimId, workspace);
+      return reply.send({ data: rows });
+    },
+  );
 };

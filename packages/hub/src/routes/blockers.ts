@@ -506,4 +506,57 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ data: deps.map((d) => d.depends_on_blocker_id) });
     },
   );
+
+  /* ── F-93  blocker bulk resolve ─────────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/blockers/bulk-resolve",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["blocker_ids"],
+          additionalProperties: false,
+          properties: {
+            blocker_ids: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 50 },
+            resolved_by: { type: "string", maxLength: 128 },
+            note: { type: "string", maxLength: 2000 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { blocker_ids, resolved_by, note } = request.body as {
+        blocker_ids: string[];
+        resolved_by?: string;
+        note?: string;
+      };
+      const results: Array<{ blocker_id: string; resolved: boolean }> = [];
+      for (const bid of blocker_ids) {
+        const exists = db
+          .prepare("SELECT blocker_id FROM blockers WHERE blocker_id = ? AND workspace_id = ?")
+          .get(bid, workspace);
+        if (!exists) {
+          results.push({ blocker_id: bid, resolved: false });
+          continue;
+        }
+        const ok = resolveBlocker(bid, resolved_by ?? "operator", note);
+        results.push({ blocker_id: bid, resolved: ok });
+        if (ok) {
+          writeAuditLog({
+            workspaceId: workspace,
+            actorType: "system",
+            action: "blocker.resolve",
+            entityType: "blocker",
+            entityId: bid,
+            requestId: request.id,
+            payload: { resolved_by, note },
+          });
+          broadcast("blocker.resolved", { workspace, blocker_id: bid });
+        }
+      }
+      return reply.send({ results });
+    },
+  );
 };
