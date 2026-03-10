@@ -2202,4 +2202,39 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-260 claim-path-coverage
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/claims/path-coverage",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params;
+      const rows = db
+        .prepare(
+          `SELECT cp.path_pattern, c.status, COUNT(*) AS cnt
+           FROM claim_paths cp
+           JOIN claims c ON c.claim_id = cp.claim_id
+           WHERE c.workspace_id = ?
+           GROUP BY cp.path_pattern, c.status`,
+        )
+        .all(workspace) as { path_pattern: string; status: string; cnt: number }[];
+
+      const paths: Record<string, { total: number; by_status: Record<string, number> }> = {};
+      for (const r of rows) {
+        if (!paths[r.path_pattern]) paths[r.path_pattern] = { total: 0, by_status: {} };
+        paths[r.path_pattern].total += r.cnt;
+        paths[r.path_pattern].by_status[r.status] = r.cnt;
+      }
+
+      const sorted = Object.entries(paths)
+        .map(([pattern, data]) => ({ pattern, ...data }))
+        .sort((a, b) => b.total - a.total);
+
+      return reply.send({
+        workspace,
+        total_paths: sorted.length,
+        paths: sorted.slice(0, 50),
+      });
+    },
+  );
 };

@@ -10521,3 +10521,40 @@ test("GET /blockers/dependency-stats returns dependency statistics", async () =>
   assert.ok(typeof body.blockers_with_dependencies === "number");
   await app.close();
 });
+
+// F-259 agent-idle-time
+test("GET /agents/idle-time returns agent idle durations", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `ws-ait-${Date.now().toString(36)}`;
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/idle-time`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.strictEqual(body.workspace, ws);
+  assert.ok(Array.isArray(body.agents));
+  if (body.agents.length > 0) {
+    assert.ok(typeof body.agents[0].idle_seconds === "number");
+  }
+  await app.close();
+});
+
+// F-260 claim-path-coverage
+test("GET /claims/path-coverage returns path coverage stats", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `ws-cpc-${Date.now().toString(36)}`;
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "pathcov", paths: ["src/main.ts"] } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/path-coverage`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = JSON.parse(res.payload);
+  assert.strictEqual(body.workspace, ws);
+  assert.ok(typeof body.total_paths === "number");
+  assert.ok(Array.isArray(body.paths));
+  await app.close();
+});

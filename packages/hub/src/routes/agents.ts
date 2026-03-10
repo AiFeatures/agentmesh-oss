@@ -2576,4 +2576,41 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total_tasks: tasks.length, agents });
     },
   );
+
+  // F-259 agent-idle-time
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/idle-time",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params;
+      const now = Date.now();
+      const agents = db
+        .prepare(
+          "SELECT agent_id, display_name, status, last_heartbeat_at, created_at FROM agents WHERE workspace_id = ?",
+        )
+        .all(workspace) as {
+        agent_id: string;
+        display_name: string;
+        status: string;
+        last_heartbeat_at: string | null;
+        created_at: string;
+      }[];
+
+      const result = agents
+        .map((a) => {
+          const lastActive = a.last_heartbeat_at || a.created_at;
+          const idleMs = now - new Date(lastActive).getTime();
+          return {
+            agent_id: a.agent_id,
+            display_name: a.display_name,
+            status: a.status,
+            idle_seconds: Math.max(0, Math.round(idleMs / 1000)),
+            last_active_at: lastActive,
+          };
+        })
+        .sort((a, b) => b.idle_seconds - a.idle_seconds);
+
+      return reply.send({ workspace, agents: result });
+    },
+  );
 };
