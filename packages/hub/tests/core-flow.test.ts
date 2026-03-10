@@ -9032,3 +9032,89 @@ test("GET /agents/capability-coverage returns coverage stats", async () => {
 
   await app.close();
 });
+
+// F-187: Blocker resolution velocity
+test("GET /blockers/resolution-velocity returns velocity stats", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `rv-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "rv-a1", display_name: "RV A1", capabilities: ["debug"] },
+  });
+
+  // Create and resolve a blocker
+  const b = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "rv-a1", title: "Velocity blocker", severity: "medium" },
+  });
+  const blockerId = b.json().blocker_id;
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers/${blockerId}/resolve`,
+    headers: auth,
+    payload: { resolution: "Fixed" },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/resolution-velocity`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.total_resolved === "number");
+  assert.ok(typeof body.avg_resolution_hours === "number");
+  assert.ok(Array.isArray(body.by_severity));
+  assert.ok(Array.isArray(body.fastest));
+  assert.equal(body.total_resolved, 1);
+
+  await app.close();
+});
+
+// F-188: Claim transfer summary
+test("GET /claims/transfer-summary returns transfer analytics", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ws = `ts-ws-${Date.now().toString(36)}`;
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "ts-a1", display_name: "TS A1", capabilities: ["code"] },
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/transfer-summary`,
+    headers: auth,
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(typeof body.total_transfers === "number");
+  assert.ok(Array.isArray(body.transfer_pairs));
+  assert.ok(Array.isArray(body.top_senders));
+  assert.ok(Array.isArray(body.top_receivers));
+
+  await app.close();
+});

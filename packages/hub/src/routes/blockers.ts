@@ -1190,4 +1190,66 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-187: Blocker resolution velocity
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/resolution-velocity",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const resolved = db
+        .prepare(
+          `SELECT blocker_id, severity, created_at, resolved_at,
+                  ROUND((julianday(resolved_at) - julianday(created_at)) * 24, 2) as resolution_hours
+           FROM blockers
+           WHERE workspace_id = ? AND status = 'resolved' AND resolved_at IS NOT NULL`,
+        )
+        .all(workspace) as Array<{
+        blocker_id: string;
+        severity: string;
+        created_at: string;
+        resolved_at: string;
+        resolution_hours: number;
+      }>;
+
+      const avgHours =
+        resolved.length > 0
+          ? Math.round(
+              (resolved.reduce((s, r) => s + r.resolution_hours, 0) / resolved.length) * 100,
+            ) / 100
+          : 0;
+
+      // By severity
+      const bySeverity: Record<string, { count: number; avg_hours: number }> = {};
+      for (const r of resolved) {
+        if (!bySeverity[r.severity]) bySeverity[r.severity] = { count: 0, avg_hours: 0 };
+        bySeverity[r.severity].count++;
+        bySeverity[r.severity].avg_hours += r.resolution_hours;
+      }
+      for (const key of Object.keys(bySeverity)) {
+        bySeverity[key].avg_hours =
+          Math.round((bySeverity[key].avg_hours / bySeverity[key].count) * 100) / 100;
+      }
+
+      return reply.send({
+        total_resolved: resolved.length,
+        avg_resolution_hours: avgHours,
+        by_severity: Object.entries(bySeverity).map(([severity, stats]) => ({
+          severity,
+          ...stats,
+        })),
+        fastest:
+          resolved.length > 0
+            ? resolved
+                .sort((a, b) => a.resolution_hours - b.resolution_hours)
+                .slice(0, 5)
+                .map((r) => ({
+                  blocker_id: r.blocker_id,
+                  resolution_hours: r.resolution_hours,
+                }))
+            : [],
+      });
+    },
+  );
 };

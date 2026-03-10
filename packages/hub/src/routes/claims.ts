@@ -1546,4 +1546,48 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-188: Claim transfer summary
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/transfer-summary",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      const transfers = db
+        .prepare(
+          `SELECT from_agent_id, to_agent_id, COUNT(*) as count
+           FROM claim_transfer_history
+           WHERE workspace_id = ?
+           GROUP BY from_agent_id, to_agent_id
+           ORDER BY count DESC`,
+        )
+        .all(workspace) as Array<{ from_agent_id: string; to_agent_id: string; count: number }>;
+
+      const totalTransfers = transfers.reduce((s, t) => s + t.count, 0);
+
+      const topSenders = db
+        .prepare(
+          `SELECT from_agent_id, COUNT(*) as count
+           FROM claim_transfer_history WHERE workspace_id = ?
+           GROUP BY from_agent_id ORDER BY count DESC LIMIT 10`,
+        )
+        .all(workspace) as Array<{ from_agent_id: string; count: number }>;
+
+      const topReceivers = db
+        .prepare(
+          `SELECT to_agent_id, COUNT(*) as count
+           FROM claim_transfer_history WHERE workspace_id = ?
+           GROUP BY to_agent_id ORDER BY count DESC LIMIT 10`,
+        )
+        .all(workspace) as Array<{ to_agent_id: string; count: number }>;
+
+      return reply.send({
+        total_transfers: totalTransfers,
+        transfer_pairs: transfers,
+        top_senders: topSenders,
+        top_receivers: topReceivers,
+      });
+    },
+  );
 };
