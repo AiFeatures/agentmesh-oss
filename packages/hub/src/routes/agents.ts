@@ -2660,4 +2660,50 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-270 agent-collaboration-history
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/collaboration-history",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params;
+      const rows = db
+        .prepare(
+          `SELECT from_agent_id, to_agent_id, status, DATE(created_at) AS day
+           FROM handoffs WHERE workspace_id = ?
+           ORDER BY created_at DESC LIMIT 200`,
+        )
+        .all(workspace) as {
+        from_agent_id: string;
+        to_agent_id: string;
+        status: string;
+        day: string;
+      }[];
+
+      const pairs: Record<
+        string,
+        { total: number; accepted: number; rejected: number; days: Set<string> }
+      > = {};
+      for (const r of rows) {
+        const key = `${r.from_agent_id}->${r.to_agent_id}`;
+        if (!pairs[key]) pairs[key] = { total: 0, accepted: 0, rejected: 0, days: new Set() };
+        pairs[key].total++;
+        if (r.status === "accepted" || r.status === "completed") pairs[key].accepted++;
+        if (r.status === "rejected") pairs[key].rejected++;
+        pairs[key].days.add(r.day);
+      }
+
+      const result = Object.entries(pairs)
+        .map(([pair, data]) => ({
+          pair,
+          total: data.total,
+          accepted: data.accepted,
+          rejected: data.rejected,
+          active_days: data.days.size,
+        }))
+        .sort((a, b) => b.total - a.total);
+
+      return reply.send({ workspace, total_interactions: rows.length, collaborations: result });
+    },
+  );
 };

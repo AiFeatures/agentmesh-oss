@@ -1866,4 +1866,37 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-269 blocker-escalation-chain
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/escalation-chain",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params;
+      const rows = db
+        .prepare(
+          `SELECT al.entity_id AS blocker_id, al.action, al.created_at, al.payload
+           FROM audit_log al
+           WHERE al.workspace_id = ? AND al.action LIKE 'blocker.escalat%'
+           ORDER BY al.created_at DESC LIMIT 100`,
+        )
+        .all(workspace) as {
+        blocker_id: string;
+        action: string;
+        created_at: string;
+        payload: string | null;
+      }[];
+
+      const byBlocker: Record<string, { escalation_count: number; last_escalated_at: string }> = {};
+      for (const r of rows) {
+        byBlocker[r.blocker_id].escalation_count++;
+      }
+
+      const chains = Object.entries(byBlocker)
+        .map(([blocker_id, data]) => ({ blocker_id, ...data }))
+        .sort((a, b) => b.escalation_count - a.escalation_count);
+
+      return reply.send({ workspace, total_escalations: rows.length, blockers: chains });
+    },
+  );
 };
