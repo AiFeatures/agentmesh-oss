@@ -2726,4 +2726,28 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+
+  // F-281 agent-skill-overlap
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/agents/skill-overlap",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT agent_id, display_name, capabilities
+           FROM agents
+           WHERE workspace_id = ?
+           ORDER BY display_name`,
+        )
+        .all(req.params.workspace) as { agent_id: string; display_name: string; capabilities: string }[];
+      const capSet = new Set<string>();
+      const matrix = rows.map((r) => {
+        const caps: string[] = r.capabilities ? JSON.parse(r.capabilities) : [];
+        for (const c of caps) capSet.add(c);
+        return { agent_id: r.agent_id, display_name: r.display_name, capabilities: caps };
+      });
+      reply.send({ workspace: req.params.workspace, agents: matrix, all_capabilities: [...capSet].sort() });
+    },
+  );
+
 };

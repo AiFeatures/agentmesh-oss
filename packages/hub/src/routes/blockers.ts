@@ -1946,4 +1946,26 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+
+  // F-282 blocker-cascade-risk
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/blockers/cascade-risk",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT b.blocker_id, b.title, b.severity, b.status,
+                  COUNT(bd.blocker_id) as dependent_count
+           FROM blockers b
+           LEFT JOIN blocker_dependencies bd ON bd.depends_on_blocker_id = b.blocker_id
+           WHERE b.workspace_id = ?
+           GROUP BY b.blocker_id
+           HAVING dependent_count > 0
+           ORDER BY dependent_count DESC`,
+        )
+        .all(req.params.workspace) as { blocker_id: string; title: string; severity: string; status: string; dependent_count: number }[];
+      reply.send({ workspace: req.params.workspace, cascade_risks: rows });
+    },
+  );
+
 };
