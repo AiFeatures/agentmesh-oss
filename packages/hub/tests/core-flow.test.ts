@@ -14117,3 +14117,32 @@ test("F-508 blocker-agent-resolution-rate", async () => {
   assert.ok(Array.isArray(data));
   await app.close();
 });
+
+
+// T-509 claim-scope-character-distribution
+test("F-509 claim-scope-character-distribution", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "cscd-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/claim-scope-character-distribution`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = res.json();
+  assert.ok("total_scopes" in body);
+  assert.ok(Array.isArray(body.character_distribution));
+  await app.close();
+});
+
+// T-510 workspace-blocker-density
+test("F-510 workspace-blocker-density", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const res = await app.inject({ method: "GET", url: "/api/v1/analytics/workspace-blocker-density", headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const data = res.json();
+  assert.ok(Array.isArray(data));
+  await app.close();
+});
+

@@ -3422,4 +3422,28 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ...row });
     },
   );
+
+  // F-509 claim-scope-character-distribution
+  app.get<{ Params: { workspaceId: string } }>(
+    "/api/v1/workspaces/:workspaceId/analytics/claim-scope-character-distribution",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspaceId } = req.params;
+      const rows = db
+        .prepare("SELECT scope FROM claims WHERE workspace_id = ?")
+        .all(workspaceId) as any[];
+      const freq: Record<string, number> = {};
+      for (const r of rows) {
+        if (r.scope) {
+          for (const ch of r.scope) {
+            freq[ch] = (freq[ch] || 0) + 1;
+          }
+        }
+      }
+      const sorted = Object.entries(freq)
+        .map(([char, count]) => ({ char, count }))
+        .sort((a, b) => b.count - a.count);
+      return reply.send({ total_scopes: rows.length, character_distribution: sorted });
+    },
+  );
 };

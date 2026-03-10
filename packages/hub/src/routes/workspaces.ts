@@ -3360,4 +3360,23 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       reply.send({ workspace: req.params.workspace, ...row });
     },
   );
+
+  // F-510 workspace-blocker-density
+  app.get(
+    "/api/v1/analytics/workspace-blocker-density",
+    { preHandler: app.authGuard },
+    async (_req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT w.workspace_id, w.display_name,
+                  COUNT(b.blocker_id) AS blocker_count
+           FROM workspaces w
+           LEFT JOIN blockers b ON b.workspace_id = w.workspace_id
+           GROUP BY w.workspace_id
+           ORDER BY blocker_count DESC`,
+        )
+        .all() as any[];
+      return reply.send(rows);
+    },
+  );
 };
