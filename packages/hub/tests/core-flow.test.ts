@@ -6886,3 +6886,113 @@ test("concurrent handoff creation and resolution", async () => {
 
   await app.close();
 });
+
+// --------------- F-143: Claim dependency lifecycle ---------------
+test("releasing a claim with dependents is blocked without cascade", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-cdl-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+
+  // Create parent claim
+  const parent = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "file", paths: ["src/base.ts"], ttl_seconds: 600 },
+  });
+  assert.equal(parent.statusCode, 201);
+  const parentId = parent.json().claim_id;
+
+  // Create child claim depending on parent
+  const child = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: {
+      agent_id: "a1",
+      scope: "file",
+      paths: ["src/child.ts"],
+      ttl_seconds: 600,
+      depends_on: [parentId],
+    },
+  });
+  assert.equal(child.statusCode, 201);
+  const childId = child.json().claim_id;
+
+  // Try to release parent without cascade — should be blocked
+  const r1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims/${parentId}/release`,
+    headers: auth,
+    payload: {},
+  });
+  assert.equal(r1.statusCode, 409);
+  assert.ok(r1.json().dependent_claim_ids.includes(childId));
+
+  // Release with cascade
+  const r2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims/${parentId}/release`,
+    headers: auth,
+    payload: { cascade: true },
+  });
+  assert.equal(r2.statusCode, 200);
+  assert.ok(r2.json().ok);
+  assert.ok(r2.json().cascaded.includes(childId));
+
+  await app.close();
+});
+
+test("releasing a claim without dependents works normally", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = `ws-cdn-${Date.now().toString(36)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+
+  const c = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "file", paths: ["src/solo.ts"], ttl_seconds: 600 },
+  });
+  assert.equal(c.statusCode, 201);
+
+  const r = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims/${c.json().claim_id}/release`,
+    headers: auth,
+    payload: {},
+  });
+  assert.equal(r.statusCode, 200);
+  assert.ok(r.json().ok);
+  assert.deepEqual(r.json().cascaded, []);
+
+  await app.close();
+});

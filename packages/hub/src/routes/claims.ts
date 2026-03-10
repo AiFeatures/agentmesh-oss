@@ -293,7 +293,9 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
 
   app.post(
     "/api/v1/workspaces/:workspace/claims/:claimId/release",
-    { preHandler: app.authGuard },
+    {
+      preHandler: app.authGuard,
+    },
     async (request, reply) => {
       const { claimId, workspace } = request.params as { claimId: string; workspace: string };
       const claim = db.prepare("SELECT workspace_id FROM claims WHERE claim_id = ?").get(claimId) as
@@ -303,9 +305,35 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(404).send({ error: "Active claim not found" });
       }
 
+      const body = (request.body as { cascade?: boolean }) ?? {};
+
+      // Check for dependents
+      const dependents = db
+        .prepare(
+          "SELECT cd.claim_id FROM claim_dependencies cd JOIN claims c ON cd.claim_id = c.claim_id WHERE cd.depends_on_claim_id = ? AND c.status = 'active'",
+        )
+        .all(claimId) as Array<{ claim_id: string }>;
+
+      if (dependents.length > 0 && !body.cascade) {
+        return reply.code(409).send({
+          error: "Claim has active dependents",
+          dependent_claim_ids: dependents.map((d) => d.claim_id),
+          hint: "Set cascade: true to release dependents too",
+        });
+      }
+
       const ok = releaseClaim(claimId);
       if (!ok) {
         return reply.code(404).send({ error: "Active claim not found" });
+      }
+
+      const cascaded: string[] = [];
+      if (body.cascade && dependents.length > 0) {
+        for (const dep of dependents) {
+          if (releaseClaim(dep.claim_id)) {
+            cascaded.push(dep.claim_id);
+          }
+        }
       }
 
       writeAuditLog({
@@ -315,10 +343,14 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
         entityType: "claim",
         entityId: claimId,
         requestId: request.id,
+        payload: cascaded.length > 0 ? { cascaded } : undefined,
       });
 
       broadcast("claims.updated", { workspace, claim_id: claimId, status: "released" });
-      return reply.send({ ok: true });
+      if (cascaded.length > 0) {
+        broadcast("claims.updated", { workspace, released: cascaded, status: "cascade_released" });
+      }
+      return reply.send({ ok: true, cascaded });
     },
   );
 
