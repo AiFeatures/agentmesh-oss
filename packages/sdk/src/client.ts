@@ -414,6 +414,16 @@ export class AgentMeshClient {
     });
   }
 
+  async forceReleaseAllClaims(
+    workspace: string,
+    opts?: { agent_id?: string; scope?: string },
+  ): Promise<unknown> {
+    return await this.request(`/api/v1/workspaces/${workspace}/claims/force-release-all`, {
+      method: "POST",
+      body: JSON.stringify(opts ?? {}),
+    });
+  }
+
   async exportWorkspace(workspace: string): Promise<unknown> {
     return await this.request(`/api/v1/workspaces/${workspace}/export`, {
       method: "GET",

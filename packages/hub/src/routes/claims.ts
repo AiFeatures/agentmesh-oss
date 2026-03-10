@@ -343,4 +343,62 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ released_count: released.length, released_ids: released });
     },
   );
+
+  app.post(
+    "/api/v1/workspaces/:workspace/claims/force-release-all",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            agent_id: { type: "string", minLength: 1, maxLength: 128 },
+            scope: { type: "string", minLength: 1, maxLength: 128 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const body = (request.body ?? {}) as { agent_id?: string; scope?: string };
+
+      const conditions = ["c.workspace_id = ?", "c.status = 'active'"];
+      const params: unknown[] = [workspace];
+
+      if (body.agent_id) {
+        conditions.push("c.agent_id = ?");
+        params.push(body.agent_id);
+      }
+      if (body.scope) {
+        conditions.push("c.scope = ?");
+        params.push(body.scope);
+      }
+
+      const rows = db
+        .prepare(`SELECT c.claim_id FROM claims c WHERE ${conditions.join(" AND ")}`)
+        .all(...params) as Array<{ claim_id: string }>;
+
+      const released: string[] = [];
+      for (const row of rows) {
+        if (releaseClaim(row.claim_id, true)) {
+          released.push(row.claim_id);
+        }
+      }
+
+      if (released.length > 0) {
+        writeAuditLog({
+          workspaceId: workspace,
+          actorType: "system",
+          action: "claim.force_release_all",
+          entityType: "claim",
+          requestId: request.id,
+          payload: { ...body, released_count: released.length },
+        });
+        broadcast("claims.updated", { workspace, released, status: "force_released" });
+      }
+
+      return reply.send({ released_count: released.length, released_ids: released });
+    },
+  );
 };

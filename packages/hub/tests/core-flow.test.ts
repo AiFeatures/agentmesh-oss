@@ -1742,3 +1742,77 @@ test("handoff detail includes timeline", async () => {
 
   await app.close();
 });
+
+// ------- Force-release-all claims -------
+test("force-release-all releases active claims and respects filters", async () => {
+  const app = await buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const workspaceId = `frac-${Date.now()}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: workspaceId, display_name: "ForceRelease" },
+  });
+
+  // Register two agents
+  for (const aid of ["fra-agent1", "fra-agent2"]) {
+    await app.inject({
+      method: "POST",
+      url: `/api/v1/workspaces/${workspaceId}/agents/register`,
+      headers: { ...auth, "content-type": "application/json" },
+      payload: { agent_id: aid, display_name: aid, capabilities: ["code"] },
+    });
+  }
+
+  // Create claims for each agent
+  const c1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "fra-agent1", scope: "src", paths: ["src/a.ts"] },
+  });
+  assert.equal(c1.statusCode, 201);
+
+  const c2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "fra-agent2", scope: "lib", paths: ["lib/b.ts"] },
+  });
+  assert.equal(c2.statusCode, 201);
+
+  // Force-release only agent1's claims
+  const r1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/claims/force-release-all`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: "fra-agent1" },
+  });
+  assert.equal(r1.statusCode, 200);
+  const body1 = r1.json() as { released_count: number; released_ids: string[] };
+  assert.equal(body1.released_count, 1);
+
+  // Agent2's claim should still be active
+  const listRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${workspaceId}/claims?status=active`,
+    headers: auth,
+  });
+  const claims = (listRes.json() as { data: Array<{ agent_id: string }> }).data;
+  assert.equal(claims.length, 1);
+  assert.equal(claims[0].agent_id, "fra-agent2");
+
+  // Force-release all remaining
+  const r2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${workspaceId}/claims/force-release-all`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: {},
+  });
+  assert.equal(r2.statusCode, 200);
+  const body2 = r2.json() as { released_count: number };
+  assert.equal(body2.released_count, 1);
+
+  await app.close();
+});
