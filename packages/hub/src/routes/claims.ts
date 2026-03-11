@@ -3990,4 +3990,27 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-585  claim histogram
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/claim-histogram",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT status,
+           CASE
+             WHEN julianday('now') - julianday(created_at) < 1 THEN '0-24h'
+             WHEN julianday('now') - julianday(created_at) < 7 THEN '1-7d'
+             ELSE '7d+'
+           END as age_bucket,
+           COUNT(*) as cnt
+           FROM claims WHERE workspace_id = ?
+           GROUP BY status, age_bucket`,
+        )
+        .all(workspace) as Array<{ status: string; age_bucket: string; cnt: number }>;
+      return reply.send({ workspace, buckets: rows });
+    },
+  );
 };

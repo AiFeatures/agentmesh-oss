@@ -20756,3 +20756,76 @@ test("F-583 workspace snapshot returns full state", async () => {
   assert.ok(Array.isArray(res.json().handoffs));
   await app.close();
 });
+
+// F-584  agent metrics
+test("GET /agents/:agentId/agent-metrics returns aggregated metrics", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `am${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: { ...auth, "content-type": "application/json" }, payload: { workspace_id: ws, display_name: ws } });
+  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: { ...auth, "content-type": "application/json" }, payload: { agent_id: `a-${s}`, display_name: `a-${s}`, capabilities: ["code"] } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/a-${s}/agent-metrics`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().tasks !== undefined);
+  assert.ok(res.json().claims !== undefined);
+  await app.close();
+});
+
+// F-585  claim histogram
+test("GET /claims/claim-histogram returns distribution", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `ch${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: { ...auth, "content-type": "application/json" }, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-histogram`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().buckets));
+  await app.close();
+});
+
+// F-586  blocker heatmap
+test("GET /blockers/blocker-heatmap returns severity×time data", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `bh${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: { ...auth, "content-type": "application/json" }, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-heatmap`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().heatmap));
+  await app.close();
+});
+
+// F-587  handoff routing stats
+test("GET /handoffs/handoff-routing-stats returns mode distribution", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `rs${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: { ...auth, "content-type": "application/json" }, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-routing-stats`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().routing_stats !== undefined);
+  await app.close();
+});
+
+// F-588  workspace daily digest
+test("GET /workspaces/:workspace/workspace-digest returns summary", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `wd${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: { ...auth, "content-type": "application/json" }, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/workspace-digest`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().agents_online !== undefined);
+  assert.ok(res.json().date !== undefined);
+  await app.close();
+});

@@ -4153,4 +4153,28 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-587  handoff routing stats
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-routing-stats",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT route_mode,
+           status,
+           COUNT(*) as cnt
+           FROM handoffs WHERE workspace_id = ?
+           GROUP BY route_mode, status`,
+        )
+        .all(workspace) as Array<{ route_mode: string; status: string; cnt: number }>;
+      const modes: Record<string, Record<string, number>> = {};
+      for (const r of rows) {
+        if (!modes[r.route_mode]) modes[r.route_mode] = {};
+        modes[r.route_mode][r.status] = r.cnt;
+      }
+      return reply.send({ workspace, routing_stats: modes });
+    },
+  );
 };

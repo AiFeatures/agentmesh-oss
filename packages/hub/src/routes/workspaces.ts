@@ -3921,4 +3921,42 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-588  workspace daily digest
+  app.get(
+    "/api/v1/workspaces/:workspace/workspace-digest",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const today = new Date().toISOString().slice(0, 10);
+      const agents_online = (db
+        .prepare(`SELECT COUNT(*) as c FROM agents WHERE workspace_id = ? AND status = 'online'`)
+        .get(workspace) as { c: number }).c;
+      const claims_active = (db
+        .prepare(`SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND status = 'active'`)
+        .get(workspace) as { c: number }).c;
+      const blockers_open = (db
+        .prepare(`SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status = 'open'`)
+        .get(workspace) as { c: number }).c;
+      const handoffs_pending = (db
+        .prepare(`SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND status = 'pending'`)
+        .get(workspace) as { c: number }).c;
+      const recent_audit = db
+        .prepare(
+          `SELECT action, COUNT(*) as cnt FROM audit_log
+           WHERE workspace_id = ? AND created_at >= datetime('now', '-24 hours')
+           GROUP BY action ORDER BY cnt DESC LIMIT 10`,
+        )
+        .all(workspace) as Array<{ action: string; cnt: number }>;
+      return reply.send({
+        workspace,
+        date: today,
+        agents_online,
+        claims_active,
+        blockers_open,
+        handoffs_pending,
+        recent_activity: recent_audit,
+      });
+    },
+  );
 };

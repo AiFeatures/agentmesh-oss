@@ -3795,4 +3795,23 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-586  blocker heatmap (severity × time)
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/blocker-heatmap",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT severity,
+           strftime('%Y-%m-%d', created_at) as day,
+           COUNT(*) as cnt
+           FROM blockers WHERE workspace_id = ?
+           GROUP BY severity, day ORDER BY day DESC LIMIT 100`,
+        )
+        .all(workspace) as Array<{ severity: string; day: string; cnt: number }>;
+      return reply.send({ workspace, heatmap: rows });
+    },
+  );
 };

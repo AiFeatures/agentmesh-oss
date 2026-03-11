@@ -4846,4 +4846,35 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-584  agent metrics summary
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/:agentId/agent-metrics",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as { workspace: string; agentId: string };
+      const tasks = db
+        .prepare(
+          `SELECT status, COUNT(*) as cnt FROM agent_tasks WHERE workspace_id = ? AND agent_id = ? GROUP BY status`,
+        )
+        .all(workspace, agentId) as Array<{ status: string; cnt: number }>;
+      const handoffs = db
+        .prepare(
+          `SELECT status, COUNT(*) as cnt FROM handoffs WHERE workspace_id = ? AND (from_agent_id = ? OR to_agent_id = ?) GROUP BY status`,
+        )
+        .all(workspace, agentId, agentId) as Array<{ status: string; cnt: number }>;
+      const claims = db
+        .prepare(
+          `SELECT status, COUNT(*) as cnt FROM claims WHERE workspace_id = ? AND agent_id = ? GROUP BY status`,
+        )
+        .all(workspace, agentId) as Array<{ status: string; cnt: number }>;
+      return reply.send({
+        agent_id: agentId,
+        workspace,
+        tasks: Object.fromEntries(tasks.map((t) => [t.status, t.cnt])),
+        handoffs: Object.fromEntries(handoffs.map((h) => [h.status, h.cnt])),
+        claims: Object.fromEntries(claims.map((c) => [c.status, c.cnt])),
+      });
+    },
+  );
 };
