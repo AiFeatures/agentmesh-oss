@@ -3700,4 +3700,47 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-576  blocker resolution funnel
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/resolution-funnel",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const total = (
+        db
+          .prepare("SELECT COUNT(*) AS cnt FROM blockers WHERE workspace_id = ?")
+          .get(workspace) as { cnt: number }
+      ).cnt;
+      const open = (
+        db
+          .prepare(
+            "SELECT COUNT(*) AS cnt FROM blockers WHERE workspace_id = ? AND status = 'open'",
+          )
+          .get(workspace) as { cnt: number }
+      ).cnt;
+      const escalated = (
+        db
+          .prepare(
+            "SELECT COUNT(*) AS cnt FROM blockers WHERE workspace_id = ? AND escalation_level > 0",
+          )
+          .get(workspace) as { cnt: number }
+      ).cnt;
+      const resolved = (
+        db
+          .prepare(
+            "SELECT COUNT(*) AS cnt FROM blockers WHERE workspace_id = ? AND status = 'resolved'",
+          )
+          .get(workspace) as { cnt: number }
+      ).cnt;
+      return reply.send({
+        workspace,
+        funnel: { total, open, escalated, resolved },
+        conversion_rates: {
+          escalation_rate: total > 0 ? +(escalated / total).toFixed(3) : 0,
+          resolution_rate: total > 0 ? +(resolved / total).toFixed(3) : 0,
+        },
+      });
+    },
+  );
 };

@@ -20389,3 +20389,183 @@ test("F-573 workspace stale entities returns categorized results", async () => {
   assert.ok(typeof res.json().total === "number");
   await app.close();
 });
+
+// F-574  agent collaboration partners
+test("F-574 agent collaboration partners returns partner lists", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const s = Date.now().toString(36);
+  const ws = `wcp-${s}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "CP" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a1-${s}`, display_name: "A1", capabilities: ["ts"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/a1-${s}/collaboration-partners`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().agent_id, `a1-${s}`);
+  assert.ok(Array.isArray(res.json().handoff_partners));
+  assert.ok(Array.isArray(res.json().scope_partners));
+  await app.close();
+});
+
+// F-575  batch claim priority update
+test("F-575 batch claim priority update modifies claim priorities", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const s = Date.now().toString(36);
+  const ws = `wbp-${s}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "BP" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-${s}`, display_name: "A", capabilities: ["ts"] },
+  });
+  const c1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-${s}`, scope: `s1-${s}`, paths: ["a.ts"], ttl_seconds: 300 },
+  });
+  assert.strictEqual(c1.statusCode, 201);
+  const cid = c1.json().claim_id ?? c1.json().id;
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims/batch-priority-update`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { updates: [{ claim_id: cid, priority: "high" }] },
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().updated, 1);
+  assert.strictEqual(res.json().skipped, 0);
+  await app.close();
+});
+
+// F-576  blocker resolution funnel
+test("F-576 blocker resolution funnel returns counts and rates", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const s = Date.now().toString(36);
+  const ws = `wrf-${s}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "RF" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-${s}`, display_name: "A", capabilities: ["ts"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-${s}`, title: "B1", severity: "high" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/resolution-funnel`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().funnel.total, 1);
+  assert.strictEqual(res.json().funnel.open, 1);
+  assert.ok(typeof res.json().conversion_rates.resolution_rate === "number");
+  await app.close();
+});
+
+// F-577  handoff pending aging
+test("F-577 handoff pending aging returns age buckets", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const s = Date.now().toString(36);
+  const ws = `wpa-${s}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "PA" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-${s}`, display_name: "A", capabilities: ["ts"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { from_agent_id: `a-${s}`, summary: "test handoff" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/pending-aging`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().buckets));
+  assert.ok(typeof res.json().total_pending === "number");
+  assert.ok(res.json().total_pending >= 1);
+  await app.close();
+});
+
+// F-578  workspace bulk settings
+test("F-578 workspace bulk settings merges settings", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const s = Date.now().toString(36);
+  const ws = `wbs-${s}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "BS" },
+  });
+  const res = await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/bulk-settings`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { settings: { theme: "dark", max_agents: 10 } },
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().settings.theme, "dark");
+  assert.strictEqual(res.json().settings.max_agents, 10);
+  assert.ok(res.json().keys_updated.includes("theme"));
+  // Verify merge works
+  const res2 = await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/bulk-settings`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { settings: { language: "en" } },
+  });
+  assert.strictEqual(res2.statusCode, 200);
+  assert.strictEqual(res2.json().settings.theme, "dark");
+  assert.strictEqual(res2.json().settings.language, "en");
+  await app.close();
+});

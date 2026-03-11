@@ -3892,4 +3892,56 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-575  batch claim priority update
+  app.post(
+    "/api/v1/workspaces/:workspace/claims/batch-priority-update",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object" as const,
+          required: ["updates"],
+          properties: {
+            updates: {
+              type: "array" as const,
+              minItems: 1,
+              maxItems: 50,
+              items: {
+                type: "object" as const,
+                required: ["claim_id", "priority"],
+                properties: {
+                  claim_id: { type: "string" as const },
+                  priority: {
+                    type: "string" as const,
+                    enum: ["low", "normal", "high", "critical"],
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { updates } = request.body as {
+        updates: Array<{ claim_id: string; priority: string }>;
+      };
+      const stmt = db.prepare(
+        "UPDATE claims SET priority = ? WHERE claim_id = ? AND workspace_id = ? AND status = 'active'",
+      );
+      const results: Array<{ claim_id: string; updated: boolean }> = [];
+      for (const u of updates) {
+        const r = stmt.run(u.priority, u.claim_id, workspace);
+        results.push({ claim_id: u.claim_id, updated: r.changes > 0 });
+      }
+      return reply.send({
+        workspace,
+        updated: results.filter((r) => r.updated).length,
+        skipped: results.filter((r) => !r.updated).length,
+        results,
+      });
+    },
+  );
 };

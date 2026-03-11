@@ -3841,4 +3841,43 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-578  workspace bulk settings update
+  app.patch(
+    "/api/v1/workspaces/:workspace/bulk-settings",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object" as const,
+          required: ["settings"],
+          properties: {
+            settings: {
+              type: "object" as const,
+              additionalProperties: true,
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { settings: incoming } = request.body as { settings: Record<string, unknown> };
+      const row = db
+        .prepare("SELECT settings FROM workspaces WHERE workspace_id = ?")
+        .get(workspace) as { settings: string } | undefined;
+      if (!row) return reply.code(404).send({ error: "workspace not found" });
+      const current = JSON.parse(row.settings || "{}");
+      const merged = { ...current, ...incoming };
+      db.prepare("UPDATE workspaces SET settings = ? WHERE workspace_id = ?").run(
+        JSON.stringify(merged),
+        workspace,
+      );
+      return reply.send({
+        workspace,
+        settings: merged,
+        keys_updated: Object.keys(incoming),
+      });
+    },
+  );
 };

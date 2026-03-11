@@ -4763,4 +4763,51 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-574  agent collaboration partners
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/:agentId/collaboration-partners",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as {
+        workspace: string;
+        agentId: string;
+      };
+      const handoff_partners = db
+        .prepare(
+          `SELECT partner, SUM(cnt) AS interactions FROM (
+            SELECT to_agent_id AS partner, COUNT(*) AS cnt
+            FROM handoffs WHERE from_agent_id = ? AND workspace_id = ? AND to_agent_id IS NOT NULL
+            GROUP BY to_agent_id
+            UNION ALL
+            SELECT from_agent_id AS partner, COUNT(*) AS cnt
+            FROM handoffs WHERE to_agent_id = ? AND workspace_id = ?
+            GROUP BY from_agent_id
+          ) GROUP BY partner ORDER BY interactions DESC LIMIT 20`,
+        )
+        .all(agentId, workspace, agentId, workspace) as Array<{
+        partner: string;
+        interactions: number;
+      }>;
+      const scope_partners = db
+        .prepare(
+          `SELECT c2.agent_id AS partner, COUNT(DISTINCT c1.scope) AS shared_scopes
+           FROM claims c1
+           JOIN claims c2 ON c1.scope = c2.scope AND c1.workspace_id = c2.workspace_id
+             AND c1.agent_id != c2.agent_id
+           WHERE c1.agent_id = ? AND c1.workspace_id = ?
+           GROUP BY c2.agent_id ORDER BY shared_scopes DESC LIMIT 20`,
+        )
+        .all(agentId, workspace) as Array<{
+        partner: string;
+        shared_scopes: number;
+      }>;
+      return reply.send({
+        agent_id: agentId,
+        workspace,
+        handoff_partners,
+        scope_partners,
+      });
+    },
+  );
 };

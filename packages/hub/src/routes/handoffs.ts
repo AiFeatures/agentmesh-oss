@@ -4083,4 +4083,31 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-577  handoff pending aging buckets
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/pending-aging",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const buckets = db
+        .prepare(
+          `SELECT
+            CASE
+              WHEN (julianday('now') - julianday(created_at)) * 24 < 1 THEN '<1h'
+              WHEN (julianday('now') - julianday(created_at)) * 24 < 4 THEN '1-4h'
+              WHEN (julianday('now') - julianday(created_at)) * 24 < 24 THEN '4-24h'
+              ELSE '>24h'
+            END AS age_bucket,
+            COUNT(*) AS count
+           FROM handoffs
+           WHERE workspace_id = ? AND status = 'pending'
+           GROUP BY age_bucket
+           ORDER BY count DESC`,
+        )
+        .all(workspace) as Array<{ age_bucket: string; count: number }>;
+      const total = buckets.reduce((s, b) => s + b.count, 0);
+      return reply.send({ workspace, buckets, total_pending: total });
+    },
+  );
 };
