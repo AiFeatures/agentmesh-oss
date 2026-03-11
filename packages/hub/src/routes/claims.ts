@@ -76,7 +76,36 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
         ttlSeconds: body.ttl_seconds,
         priority: body.priority,
       });
+
+      // F-527 circular dependency detection
       if (body.depends_on?.length) {
+        const getDeps = db.prepare(
+          "SELECT depends_on_claim_id FROM claim_dependencies WHERE claim_id = ?",
+        );
+        const hasCycle = (startId: string, targetId: string): boolean => {
+          const visited = new Set<string>();
+          const queue = [startId];
+          while (queue.length > 0) {
+            const current = queue.shift()!;
+            if (current === targetId) return true;
+            if (visited.has(current)) continue;
+            visited.add(current);
+            const deps = getDeps.all(current) as { depends_on_claim_id: string }[];
+            for (const d of deps) queue.push(d.depends_on_claim_id);
+          }
+          return false;
+        };
+
+        for (const depId of body.depends_on) {
+          if (depId === claim.id || hasCycle(depId, claim.id)) {
+            return reply.code(400).send({
+              error: "Circular dependency detected",
+              claim_id: claim.id,
+              depends_on: depId,
+            });
+          }
+        }
+
         const insertDep = db.prepare(
           "INSERT OR IGNORE INTO claim_dependencies (claim_id, depends_on_claim_id) VALUES (?, ?)",
         );

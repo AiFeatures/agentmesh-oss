@@ -3416,4 +3416,95 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send(rows);
     },
   );
+
+  // F-528 workspace-health-score-detailed
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/health-score-detailed",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const ws = req.params.workspace;
+      const wsCheck = db
+        .prepare("SELECT workspace_id FROM workspaces WHERE workspace_id = ?")
+        .get(ws);
+      if (!wsCheck) return reply.code(404).send({ error: "Workspace not found" });
+
+      const agents = db
+        .prepare(
+          `SELECT
+             COUNT(*) AS total,
+             SUM(CASE WHEN status = 'online' THEN 1 ELSE 0 END) AS online,
+             SUM(CASE WHEN status = 'stale' THEN 1 ELSE 0 END) AS stale
+           FROM agents WHERE workspace_id = ?`,
+        )
+        .get(ws) as { total: number; online: number; stale: number };
+
+      const claims = db
+        .prepare(
+          `SELECT
+             COUNT(*) AS total,
+             SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active,
+             SUM(CASE WHEN status = 'expired' THEN 1 ELSE 0 END) AS expired
+           FROM claims WHERE workspace_id = ?`,
+        )
+        .get(ws) as { total: number; active: number; expired: number };
+
+      const blockers = db
+        .prepare(
+          `SELECT
+             COUNT(*) AS total,
+             SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) AS open_count,
+             SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) AS resolved
+           FROM blockers WHERE workspace_id = ?`,
+        )
+        .get(ws) as { total: number; open_count: number; resolved: number };
+
+      const handoffs = db
+        .prepare(
+          `SELECT
+             COUNT(*) AS total,
+             SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
+             SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejected
+           FROM handoffs WHERE workspace_id = ?`,
+        )
+        .get(ws) as { total: number; completed: number; rejected: number };
+
+      // Compute component scores (0-100)
+      const agentHealth = agents.total > 0 ? Math.round((100 * agents.online) / agents.total) : 100;
+      const claimHealth =
+        claims.total > 0 ? Math.round(100 - (100 * claims.expired) / claims.total) : 100;
+      const blockerHealth =
+        blockers.total > 0 ? Math.round((100 * blockers.resolved) / blockers.total) : 100;
+      const handoffHealth =
+        handoffs.total > 0 ? Math.round((100 * handoffs.completed) / handoffs.total) : 100;
+
+      const overall = Math.round(
+        agentHealth * 0.3 + claimHealth * 0.2 + blockerHealth * 0.25 + handoffHealth * 0.25,
+      );
+
+      return reply.send({
+        workspace: ws,
+        overall,
+        components: {
+          agent_health: agentHealth,
+          claim_health: claimHealth,
+          blocker_health: blockerHealth,
+          handoff_health: handoffHealth,
+        },
+        raw: {
+          agents: { total: agents.total, online: agents.online, stale: agents.stale },
+          claims: { total: claims.total, active: claims.active, expired: claims.expired },
+          blockers: {
+            total: blockers.total,
+            open: blockers.open_count,
+            resolved: blockers.resolved,
+          },
+          handoffs: {
+            total: handoffs.total,
+            completed: handoffs.completed,
+            rejected: handoffs.rejected,
+          },
+        },
+      });
+    },
+  );
 };

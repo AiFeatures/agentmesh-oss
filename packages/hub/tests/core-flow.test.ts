@@ -5624,7 +5624,10 @@ test("agent dependency graph shows edges from handoffs", async () => {
     headers: auth,
   });
   assert.equal(res.statusCode, 200);
-  const body = res.json() as { nodes: string[]; edges: Array<{ from: string; to: string; weight: number }> };
+  const body = res.json() as {
+    nodes: string[];
+    edges: Array<{ from: string; to: string; weight: number }>;
+  };
   assert.ok(body.nodes.includes(a1));
   assert.ok(body.nodes.includes(a2));
   assert.equal(body.edges.length, 1);
@@ -5742,7 +5745,12 @@ test("handoff SLA compliance report", async () => {
     headers: auth,
   });
   assert.equal(res.statusCode, 200);
-  const body = res.json() as { total: number; compliant: number; breached: number; compliance_rate: number };
+  const body = res.json() as {
+    total: number;
+    compliant: number;
+    breached: number;
+    compliance_rate: number;
+  };
   assert.equal(body.total, 0);
   assert.equal(body.compliance_rate, 100);
 
@@ -6479,7 +6487,12 @@ test("GET /workspaces/:workspace/export-diff", async () => {
     headers: auth,
   });
   assert.equal(res.statusCode, 200);
-  const body = res.json() as { agents: unknown[]; blockers: unknown[]; handoffs: unknown[]; claims: unknown[] };
+  const body = res.json() as {
+    agents: unknown[];
+    blockers: unknown[];
+    handoffs: unknown[];
+    claims: unknown[];
+  };
   assert.ok(Array.isArray(body.agents));
   assert.ok(Array.isArray(body.blockers));
 
@@ -6589,7 +6602,12 @@ test("GET /workspaces/:workspace/agents/tag-summary", async () => {
     method: "POST",
     url: `/api/v1/workspaces/${ws}/agents/register`,
     headers: { ...auth, "content-type": "application/json" },
-    payload: { agent_id: `a-ts-${suffix}`, display_name: "TagAgent", capabilities: ["code"], tags: ["frontend", "react"] },
+    payload: {
+      agent_id: `a-ts-${suffix}`,
+      display_name: "TagAgent",
+      capabilities: ["code"],
+      tags: ["frontend", "react"],
+    },
   });
 
   const res = await app.inject({
@@ -7923,7 +7941,12 @@ test("handoff priority queue returns pending handoffs sorted by priority", async
     method: "POST",
     url: `/api/v1/workspaces/${ws}/handoffs`,
     headers: auth,
-    payload: { from_agent_id: "pq-a1", to_agent_id: "pq-a2", summary: "critical task", priority: "critical" },
+    payload: {
+      from_agent_id: "pq-a1",
+      to_agent_id: "pq-a2",
+      summary: "critical task",
+      priority: "critical",
+    },
   });
 
   const res = await app.inject({
@@ -9202,12 +9225,36 @@ test("GET /agents/utilization-timeline returns time buckets", async () => {
   await app.ready();
   const ws = `ut-timeline-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, name: ws } });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, name: ws },
+  });
   // Register agent and create a handoff to generate activity
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/utilization-timeline?hours=24&bucket_hours=1`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/utilization-timeline?hours=24&bucket_hours=1`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(Array.isArray(body.buckets));
@@ -9224,11 +9271,30 @@ test("GET /blockers/dependency-depth returns depth analysis", async () => {
   await app.ready();
   const ws = `blk-depdepth-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
   // Create a blocker
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "B1", severity: "medium" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/dependency-depth`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "B1", severity: "medium" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/dependency-depth`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.max_depth === "number");
@@ -9245,11 +9311,35 @@ test("GET /handoffs/agent-workload returns per-agent workload", async () => {
   await app.ready();
   const ws = `ho-agwl-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/agent-workload`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/agent-workload`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(Array.isArray(body.agents));
@@ -9267,10 +9357,29 @@ test("GET /claims/duration-stats returns duration statistics", async () => {
   await app.ready();
   const ws = `cl-durstats-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "file.ts", paths: ["src/file.ts"], ttl_seconds: 3600 } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/duration-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "file.ts", paths: ["src/file.ts"], ttl_seconds: 3600 },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/duration-stats`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.completed_claims === "number");
@@ -9287,10 +9396,34 @@ test("GET /workspaces/:workspace/agent-distribution returns distribution", async
   await app.ready();
   const ws = `ws-agdist-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"], model: "gpt-4" } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["code", "review"], model: "gpt-4" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agent-distribution`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"], model: "gpt-4" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: "a2",
+      display_name: "A2",
+      capabilities: ["code", "review"],
+      model: "gpt-4",
+    },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agent-distribution`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.equal(body.total_agents, 2);
@@ -9308,9 +9441,23 @@ test("GET /agents/heartbeat-health returns health analysis", async () => {
   await app.ready();
   const ws = `ag-hbhealth-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/heartbeat-health`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/heartbeat-health`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_agents === "number");
@@ -9327,11 +9474,35 @@ test("GET /blockers/recurrence-rate returns recurrence analysis", async () => {
   await app.ready();
   const ws = `blk-recur-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "flaky test", severity: "medium" } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "flaky test", severity: "low" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/recurrence-rate`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "flaky test", severity: "medium" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "flaky test", severity: "low" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/recurrence-rate`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.equal(body.total_blockers, 2);
@@ -9348,13 +9519,42 @@ test("GET /handoffs/avg-acceptance-time returns acceptance stats", async () => {
   await app.ready();
   const ws = `ho-avgacc-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] } });
-  const h = await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" } });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] },
+  });
+  const h = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" },
+  });
   const hId = JSON.parse(h.payload).handoff_id;
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs/${hId}/accept`, headers: auth, payload: { agent_id: "a2" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/avg-acceptance-time`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs/${hId}/accept`,
+    headers: auth,
+    payload: { agent_id: "a2" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/avg-acceptance-time`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.overall_avg_seconds === "number");
@@ -9370,10 +9570,29 @@ test("GET /claims/scope-overlap-risk returns risk analysis", async () => {
   await app.ready();
   const ws = `cl-overrisk-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "scope1", paths: ["src/a.ts"], ttl_seconds: 3600 } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/scope-overlap-risk`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "scope1", paths: ["src/a.ts"], ttl_seconds: 3600 },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/scope-overlap-risk`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.active_claims === "number");
@@ -9390,11 +9609,35 @@ test("GET /workspaces/:workspace/throughput returns throughput metrics", async (
   await app.ready();
   const ws = `ws-thru-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/throughput?hours=24`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/throughput?hours=24`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.handoffs === "number");
@@ -9412,11 +9655,35 @@ test("GET /agents/collaboration-score returns scores", async () => {
   await app.ready();
   const ws = `ag-collscore-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/collaboration-score`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/collaboration-score`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(Array.isArray(body.agents));
@@ -9432,10 +9699,29 @@ test("GET /blockers/agent-impact returns impact analysis", async () => {
   await app.ready();
   const ws = `blk-agimp-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "issue", severity: "critical" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/agent-impact`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "issue", severity: "critical" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/agent-impact`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_blockers === "number");
@@ -9452,11 +9738,35 @@ test("GET /handoffs/priority-distribution returns distribution", async () => {
   await app.ready();
   const ws = `ho-pridist-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/priority-distribution`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/priority-distribution`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total === "number");
@@ -9472,10 +9782,29 @@ test("GET /claims/agent-summary returns per-agent summary", async () => {
   await app.ready();
   const ws = `cl-agsum-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "file.ts", paths: ["src/file.ts"], ttl_seconds: 3600 } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/agent-summary`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "file.ts", paths: ["src/file.ts"], ttl_seconds: 3600 },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/agent-summary`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_claims === "number");
@@ -9492,10 +9821,29 @@ test("GET /workspaces/:workspace/blocker-trend returns trend data", async () => 
   await app.ready();
   const ws = `ws-blktrend-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "bug", severity: "medium" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blocker-trend?days=7`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "bug", severity: "medium" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blocker-trend?days=7`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(Array.isArray(body.trend));
@@ -9512,11 +9860,30 @@ test("GET /agents/task-completion-rate returns completion rates", async () => {
   await app.ready();
   const ws = `ag-taskcomp-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
   // Create a task
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/a1/tasks`, headers: auth, payload: { title: "fix bug" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/task-completion-rate`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/a1/tasks`,
+    headers: auth,
+    payload: { title: "fix bug" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/task-completion-rate`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_tasks === "number");
@@ -9532,11 +9899,35 @@ test("GET /handoffs/timeout-analysis returns timeout stats", async () => {
   await app.ready();
   const ws = `ho-timeout-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task", timeout_seconds: 60 } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/timeout-analysis`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task", timeout_seconds: 60 },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/timeout-analysis`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_handoffs === "number");
@@ -9553,10 +9944,29 @@ test("GET /claims/path-frequency returns path frequency", async () => {
   await app.ready();
   const ws = `cl-pathfreq-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "myscope", paths: ["src/main.ts"], ttl_seconds: 3600 } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/path-frequency`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "myscope", paths: ["src/main.ts"], ttl_seconds: 3600 },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/path-frequency`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(Array.isArray(body.most_claimed_paths));
@@ -9572,11 +9982,35 @@ test("GET /workspaces/:workspace/handoff-trend returns trend", async () => {
   await app.ready();
   const ws = `ws-hotrend-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoff-trend?days=7`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoff-trend?days=7`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(Array.isArray(body.trend));
@@ -9592,10 +10026,29 @@ test("GET /blockers/severity-impact returns weighted impact", async () => {
   await app.ready();
   const ws = `blk-sevimp-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "critical issue", severity: "critical" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/severity-impact`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "critical issue", severity: "critical" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/severity-impact`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_weight === "number");
@@ -9612,10 +10065,29 @@ test("GET /agents/model-distribution returns distribution", async () => {
   await app.ready();
   const ws = `ag-modeldist-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"], model: "gpt-4" } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"], model: "claude" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/model-distribution`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"], model: "gpt-4" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"], model: "claude" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/model-distribution`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total === "number");
@@ -9632,11 +10104,35 @@ test("GET /handoffs/chain-summary returns chain statistics", async () => {
   await app.ready();
   const ws = `ho-chainsum-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/chain-summary`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/chain-summary`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_handoffs === "number");
@@ -9653,10 +10149,29 @@ test("GET /claims/expiry-timeline returns expiry buckets", async () => {
   await app.ready();
   const ws = `cl-exptime-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "test", paths: ["src/test.ts"], ttl_seconds: 3600 } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/expiry-timeline?hours=24`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "test", paths: ["src/test.ts"], ttl_seconds: 3600 },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/expiry-timeline?hours=24`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.active_claims === "number");
@@ -9672,10 +10187,29 @@ test("GET /workspaces/:workspace/claim-trend returns trend", async () => {
   await app.ready();
   const ws = `ws-claimtrend-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claim-trend?days=7`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claim-trend?days=7`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(Array.isArray(body.trend));
@@ -9691,10 +10225,29 @@ test("GET /blockers/open-duration returns duration stats", async () => {
   await app.ready();
   const ws = `blk-opendur-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "open bug", severity: "high" } });
-  const res2 = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/open-duration`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "open bug", severity: "high" },
+  });
+  const res2 = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/open-duration`,
+    headers: auth,
+  });
   assert.equal(res2.statusCode, 200);
   const body2 = JSON.parse(res2.payload);
   assert.ok(typeof body2.open_blockers === "number");
@@ -9711,9 +10264,23 @@ test("GET /agents/inactive-report returns inactive agents", async () => {
   await app.ready();
   const ws = `ag-inactive-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  const res2 = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/inactive-report?hours=24`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  const res2 = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/inactive-report?hours=24`,
+    headers: auth,
+  });
   assert.equal(res2.statusCode, 200);
   const body2 = JSON.parse(res2.payload);
   assert.ok(typeof body2.total_agents === "number");
@@ -9730,11 +10297,35 @@ test("GET /handoffs/direction-analysis returns flow analysis", async () => {
   await app.ready();
   const ws = `ho-diranalysis-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/direction-analysis`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "task" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/direction-analysis`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_handoffs === "number");
@@ -9752,10 +10343,29 @@ test("GET /claims/renewal-rate returns renewal statistics", async () => {
   await app.ready();
   const ws = `cl-renewrate-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/renewal-rate`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/renewal-rate`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_claims === "number");
@@ -9772,10 +10382,29 @@ test("GET /handoffs/stale-handoff-rate returns staleness metrics", async () => {
   await app.ready();
   const ws = `ho-stalerate-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", summary: "task" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/stale-handoff-rate`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", summary: "task" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/stale-handoff-rate`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_handoffs === "number");
@@ -9791,10 +10420,29 @@ test("GET /claims/claim-churn returns churn analysis", async () => {
   await app.ready();
   const ws = `cl-churn-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-churn`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-churn`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_claims === "number");
@@ -9810,8 +10458,17 @@ test("GET /workspace-age returns workspace creation age", async () => {
   await app.ready();
   const ws = `ws-age-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/workspace-age`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/workspace-age`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.age_days === "number");
@@ -9827,10 +10484,29 @@ test("GET /blockers/response-time returns resolution speed metrics", async () =>
   await app.ready();
   const ws = `bl-resptime-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "bug", severity: "medium" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/response-time`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "bug", severity: "medium" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/response-time`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.resolved_blockers === "number");
@@ -9846,9 +10522,23 @@ test("GET /agents/capability-trend returns capability growth over time", async (
   await app.ready();
   const ws = `ag-captrend-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code", "review"] } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/capability-trend`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code", "review"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/capability-trend`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_agents === "number");
@@ -9865,10 +10555,29 @@ test("GET /handoffs/success-rate returns success metrics", async () => {
   await app.ready();
   const ws = `ho-succrate-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", summary: "task" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/success-rate`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", summary: "task" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/success-rate`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_handoffs === "number");
@@ -9884,10 +10593,29 @@ test("GET /claims/ownership-duration returns duration metrics", async () => {
   await app.ready();
   const ws = `cl-owndur-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/ownership-duration`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/ownership-duration`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_claims === "number");
@@ -9904,9 +10632,23 @@ test("GET /workspace activity-summary returns entity counts", async () => {
   await app.ready();
   const ws = `ws-actsumm-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/activity-summary`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/activity-summary`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.agents === "number");
@@ -9924,10 +10666,29 @@ test("GET /blockers/ownership returns ownership analysis", async () => {
   await app.ready();
   const ws = `bl-owner-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "bug", severity: "medium" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/ownership`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "bug", severity: "medium" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/ownership`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_blockers === "number");
@@ -9943,10 +10704,29 @@ test("GET /agents/registration-rate returns registration trend", async () => {
   await app.ready();
   const ws = `ag-regrate-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/registration-rate`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["review"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/registration-rate`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_agents === "number");
@@ -9962,10 +10742,29 @@ test("GET /handoffs/latency-trend returns daily latency trend", async () => {
   await app.ready();
   const ws = `ho-lattrd-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", summary: "task" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/latency-trend`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", summary: "task" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/latency-trend`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_resolved === "number");
@@ -9980,10 +10779,29 @@ test("GET /claims/scope-distribution returns scope breakdown", async () => {
   await app.ready();
   const ws = `cl-scopedist-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/scope-distribution`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/scope-distribution`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_claims === "number");
@@ -9999,9 +10817,23 @@ test("GET /workspace entity-growth returns daily growth trend", async () => {
   await app.ready();
   const ws = `ws-entgrow-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/entity-growth`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/entity-growth`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(Array.isArray(body.trend));
@@ -10017,10 +10849,29 @@ test("GET /blockers/comment-stats returns comment statistics", async () => {
   await app.ready();
   const ws = `bl-comstat-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "bug", severity: "medium" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/comment-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "bug", severity: "medium" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/comment-stats`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_blockers === "number");
@@ -10037,10 +10888,29 @@ test("GET /agents/capability-frequency returns capability counts", async () => {
   await app.ready();
   const ws = `ag-capfreq-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code", "review"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["code"] } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/capability-frequency`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code", "review"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["code"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/capability-frequency`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_agents === "number");
@@ -10059,10 +10929,29 @@ test("GET /handoffs/pending-age returns pending handoff ages", async () => {
   await app.ready();
   const ws = `ho-pendage-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", summary: "task" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/pending-age`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", summary: "task" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/pending-age`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.pending_count === "number");
@@ -10078,10 +10967,29 @@ test("GET /claims/conflict-rate returns conflict ratio", async () => {
   await app.ready();
   const ws = `cl-confrate-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/conflict-rate`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/conflict-rate`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_claims === "number");
@@ -10097,10 +11005,29 @@ test("GET /workspace blocker-summary returns severity breakdown", async () => {
   await app.ready();
   const ws = `ws-blksumm-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "bug", severity: "high" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blocker-summary`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "bug", severity: "high" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blocker-summary`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_blockers === "number");
@@ -10118,10 +11045,29 @@ test("GET /blockers/deadline-compliance returns compliance metrics", async () =>
   await app.ready();
   const ws = `bl-deadcomp-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "bug", severity: "high" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/deadline-compliance`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "bug", severity: "high" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/deadline-compliance`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.blockers_with_deadline === "number");
@@ -10137,10 +11083,29 @@ test("GET /handoffs/route-mode-stats returns mode breakdown", async () => {
   await app.ready();
   const ws = `ho-routemode-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", summary: "task" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/route-mode-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", summary: "task" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/route-mode-stats`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_handoffs === "number");
@@ -10155,9 +11120,23 @@ test("GET /agents/status-distribution returns status breakdown", async () => {
   await app.ready();
   const ws = `ag-statdist-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/status-distribution`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/status-distribution`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_agents === "number");
@@ -10173,10 +11152,29 @@ test("GET /claims/active-summary returns active claims detail", async () => {
   await app.ready();
   const ws = `cl-actsumm-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/active-summary`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/active-summary`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.active_count === "number");
@@ -10192,10 +11190,29 @@ test("GET /workspace handoff-summary returns handoff status breakdown", async ()
   await app.ready();
   const ws = `ws-hosumm-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", summary: "task" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoff-summary`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", summary: "task" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoff-summary`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_handoffs === "number");
@@ -10211,10 +11228,29 @@ test("GET /blockers/age-histogram returns age buckets", async () => {
   await app.ready();
   const ws = `bl-agehist-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "bug", severity: "medium" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/age-histogram`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "bug", severity: "medium" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/age-histogram`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_blockers === "number");
@@ -10229,10 +11265,29 @@ test("GET /handoffs/summary-by-agent returns per-agent stats", async () => {
   await app.ready();
   const ws = `ho-summagent-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", summary: "task" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/summary-by-agent`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", summary: "task" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/summary-by-agent`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_handoffs === "number");
@@ -10247,10 +11302,29 @@ test("GET /claims/expiry-risk returns at-risk claims", async () => {
   await app.ready();
   const ws = `cl-exprisk-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/expiry-risk`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/expiry-risk`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.active_with_expiry === "number");
@@ -10266,9 +11340,23 @@ test("GET /agents/last-activity returns idle times", async () => {
   await app.ready();
   const ws = `ag-lastact-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/last-activity`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/last-activity`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(Array.isArray(body.agents));
@@ -10284,10 +11372,29 @@ test("GET /workspace claim-summary returns claim status breakdown", async () => 
   await app.ready();
   const ws = `ws-clsumm-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claim-summary`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claim-summary`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_claims === "number");
@@ -10303,10 +11410,29 @@ test("GET /blockers/watcher-stats returns watcher metrics", async () => {
   await app.ready();
   const ws = `bl-watchstat-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "bug", severity: "medium" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/watcher-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "bug", severity: "medium" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/watcher-stats`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_blockers === "number");
@@ -10323,10 +11449,29 @@ test("GET /handoffs/completion-time returns timing metrics", async () => {
   await app.ready();
   const ws = `ho-comptime-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", summary: "task" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/completion-time`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", summary: "task" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/completion-time`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.completed_handoffs === "number");
@@ -10342,10 +11487,29 @@ test("GET /claims/transfer-rate returns transfer ratio", async () => {
   await app.ready();
   const ws = `cl-transrate-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/transfer-rate`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/transfer-rate`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_claims === "number");
@@ -10361,9 +11525,23 @@ test("GET /agents/workload-balance returns balance metrics", async () => {
   await app.ready();
   const ws = `ag-wkbalance-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/workload-balance`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/workload-balance`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_agents === "number");
@@ -10380,9 +11558,23 @@ test("GET /workspace agent-summary returns agent overview", async () => {
   await app.ready();
   const ws = `ws-agsumm-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code", "review"] } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agent-summary`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code", "review"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agent-summary`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_agents === "number");
@@ -10399,10 +11591,29 @@ test("GET /handoffs/sla-summary returns SLA compliance overview", async () => {
   await app.ready();
   const ws = `ho-slasumm-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", summary: "task" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/sla-summary`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", summary: "task" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/sla-summary`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.handoffs_with_sla === "number");
@@ -10418,10 +11629,29 @@ test("GET /blockers/resolution-speed returns speed by severity", async () => {
   await app.ready();
   const ws = `bl-resspeed-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "bug", severity: "high" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/resolution-speed`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "bug", severity: "high" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/resolution-speed`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body2 = JSON.parse(res.payload);
   assert.ok(typeof body2.total_resolved === "number");
@@ -10436,10 +11666,29 @@ test("GET /claims/scope-popularity returns popular scopes", async () => {
   await app.ready();
   const ws = `cl-scpopular-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 } });
-  const res2 = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/scope-popularity`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["c"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "s1", paths: ["src/s1.ts"], ttl_seconds: 3600 },
+  });
+  const res2 = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/scope-popularity`,
+    headers: auth,
+  });
   assert.equal(res2.statusCode, 200);
   const body3 = JSON.parse(res2.payload);
   assert.ok(typeof body3.total_claims === "number");
@@ -10455,9 +11704,23 @@ test("GET /agents/task-summary returns task breakdown per agent", async () => {
   await app.ready();
   const ws = `ag-tasksumm-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/task-summary`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/task-summary`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_tasks === "number");
@@ -10472,9 +11735,23 @@ test("GET /workspace audit-frequency returns event breakdown", async () => {
   await app.ready();
   const ws = `ws-audfreq-${Date.now().toString(36)}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/audit-frequency`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/audit-frequency`,
+    headers: auth,
+  });
   assert.equal(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.ok(typeof body.total_events === "number");
@@ -10490,11 +11767,35 @@ test("GET /handoffs/priority-balance returns priority distribution", async () =>
   const app = buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = `ws-hpb-${Date.now().toString(36)}`;
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["x"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "t" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/priority-balance`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["x"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "t" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/priority-balance`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.strictEqual(body.workspace, ws);
@@ -10509,10 +11810,29 @@ test("GET /blockers/dependency-stats returns dependency statistics", async () =>
   const app = buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = `ws-bds-${Date.now().toString(36)}`;
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "b1", severity: "medium" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/dependency-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "b1", severity: "medium" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/dependency-stats`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.strictEqual(body.workspace, ws);
@@ -10528,9 +11848,23 @@ test("GET /agents/idle-time returns agent idle durations", async () => {
   const app = buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = `ws-ait-${Date.now().toString(36)}`;
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/idle-time`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/idle-time`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.strictEqual(body.workspace, ws);
@@ -10547,10 +11881,29 @@ test("GET /claims/path-coverage returns path coverage stats", async () => {
   const app = buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = `ws-cpc-${Date.now().toString(36)}`;
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "pathcov", paths: ["src/main.ts"] } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/path-coverage`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "pathcov", paths: ["src/main.ts"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/path-coverage`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.strictEqual(body.workspace, ws);
@@ -10565,8 +11918,17 @@ test("GET /workspaces/:ws/health-trend returns daily health trend", async () => 
   const app = buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = `ws-wht-${Date.now().toString(36)}`;
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/health-trend`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/health-trend`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.strictEqual(body.workspace, ws);
@@ -10580,11 +11942,35 @@ test("GET /handoffs/timeout-risk returns at-risk handoffs", async () => {
   const app = buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = `ws-htr-${Date.now().toString(36)}`;
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["x"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "t" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/timeout-risk`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["x"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "t" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/timeout-risk`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.strictEqual(body.workspace, ws);
@@ -10600,10 +11986,29 @@ test("GET /blockers/creation-rate returns daily creation rate", async () => {
   const app = buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = `ws-bcr-${Date.now().toString(36)}`;
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "b1", severity: "high" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/creation-rate`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "b1", severity: "high" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/creation-rate`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.strictEqual(body.workspace, ws);
@@ -10618,8 +12023,17 @@ test("GET /claims/agent-overlap returns agent overlap pairs", async () => {
   const app = buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = `ws-cao-${Date.now().toString(36)}`;
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/agent-overlap`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/agent-overlap`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.strictEqual(body.workspace, ws);
@@ -10634,9 +12048,23 @@ test("GET /agents/heartbeat-gap returns gap analysis", async () => {
   const app = buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = `ws-ahg-${Date.now().toString(36)}`;
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/heartbeat-gap`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/heartbeat-gap`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.strictEqual(body.workspace, ws);
@@ -10652,8 +12080,17 @@ test("GET /workspaces/:ws/bottleneck-report returns bottleneck analysis", async 
   const app = buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = `ws-wbr-${Date.now().toString(36)}`;
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/bottleneck-report`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/bottleneck-report`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.strictEqual(body.workspace, ws);
@@ -10668,11 +12105,35 @@ test("GET /handoffs/agent-pair-stats returns pair statistics", async () => {
   const app = buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = `ws-haps-${Date.now().toString(36)}`;
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["x"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "t" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/agent-pair-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["x"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "t" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/agent-pair-stats`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.strictEqual(body.workspace, ws);
@@ -10687,10 +12148,29 @@ test("GET /claims/expiry-countdown returns expiring claims", async () => {
   const app = buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = `ws-cec-${Date.now().toString(36)}`;
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "expcount", paths: ["src/a.ts"], ttl_seconds: 3600 } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/expiry-countdown`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "expcount", paths: ["src/a.ts"], ttl_seconds: 3600 },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/expiry-countdown`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.strictEqual(body.workspace, ws);
@@ -10705,8 +12185,17 @@ test("GET /blockers/escalation-chain returns escalation data", async () => {
   const app = buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = `ws-bec-${Date.now().toString(36)}`;
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/escalation-chain`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/escalation-chain`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.strictEqual(body.workspace, ws);
@@ -10721,11 +12210,35 @@ test("GET /agents/collaboration-history returns collaboration data", async () =>
   const app = buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = `ws-ach-${Date.now().toString(36)}`;
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["x"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "t" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/collaboration-history`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["x"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "t" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/collaboration-history`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.strictEqual(body.workspace, ws);
@@ -10740,11 +12253,35 @@ test("GET /handoffs/delegation-chain returns chain analysis", async () => {
   const app = buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = `ws-hdc-${Date.now().toString(36)}`;
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["x"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "t" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/delegation-chain`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["x"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "t" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/delegation-chain`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.strictEqual(body.workspace, ws);
@@ -10759,8 +12296,17 @@ test("GET /workspaces/:ws/event-stream returns recent events", async () => {
   const app = buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = `ws-wes-${Date.now().toString(36)}`;
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/event-stream`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/event-stream`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.strictEqual(body.workspace, ws);
@@ -10775,8 +12321,17 @@ test("GET /claims/renewal-heatmap returns daily renewal data", async () => {
   const app = buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = `ws-crh-${Date.now().toString(36)}`;
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/renewal-heatmap`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/renewal-heatmap`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.strictEqual(body.workspace, ws);
@@ -10791,10 +12346,29 @@ test("GET /blockers/agent-workload returns agent blocker workload", async () => 
   const app = buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = `ws-baw-${Date.now().toString(36)}`;
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/blockers`, headers: auth, payload: { agent_id: "a1", title: "b1", severity: "medium" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/agent-workload`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "a1", title: "b1", severity: "medium" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/agent-workload`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.strictEqual(body.workspace, ws);
@@ -10809,11 +12383,35 @@ test("GET /handoffs/volume-trend returns daily volume", async () => {
   const app = buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = `ws-hvt-${Date.now().toString(36)}`;
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a2", display_name: "A2", capabilities: ["x"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/handoffs`, headers: auth, payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "t" } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/volume-trend`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["x"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "a1", to_agent_id: "a2", summary: "t" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/volume-trend`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.strictEqual(body.workspace, ws);
@@ -10828,10 +12426,29 @@ test("GET /claims/status-summary returns status breakdown", async () => {
   const app = buildApp();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = `ws-css-${Date.now().toString(36)}`;
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents`, headers: auth, payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/claims`, headers: auth, payload: { agent_id: "a1", scope: "statsum", paths: ["src/a.ts"] } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/status-summary`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["x"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "statsum", paths: ["src/a.ts"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/status-summary`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.payload);
   assert.strictEqual(body.workspace, ws);
@@ -10846,8 +12463,17 @@ test("GET /agents/registration-trend returns trend data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "regtrend-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/registration-trend`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/registration-trend`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.trend));
@@ -10861,8 +12487,17 @@ test("GET /blockers/unresolved-aging returns aging stats", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "braging-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/unresolved-aging`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/unresolved-aging`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.unresolved === "number");
@@ -10876,8 +12511,17 @@ test("GET /handoffs/chain-length-stats returns depth distribution", async () => 
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "chainlen-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/chain-length-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/chain-length-stats`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.distribution));
@@ -10891,8 +12535,17 @@ test("GET /claims/contention-hotspots returns hotspots", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hotspot-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/contention-hotspots`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/contention-hotspots`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.hotspots));
@@ -10905,8 +12558,17 @@ test("GET /agents/skill-overlap returns overlap data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "capmat-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/skill-overlap`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/skill-overlap`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -10920,8 +12582,17 @@ test("GET /blockers/cascade-risk returns cascade risks", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "cascade-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/cascade-risk`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/cascade-risk`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.cascade_risks));
@@ -10934,8 +12605,17 @@ test("GET /agents/model-breakdown returns distribution", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "modeldist-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/model-breakdown`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/model-breakdown`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.distribution));
@@ -10949,8 +12629,17 @@ test("GET /handoffs/feedback-summary returns summary", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "feedback-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/feedback-summary`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/feedback-summary`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -10964,8 +12653,17 @@ test("GET /workspace-capacity returns capacity summary", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "wscap-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/workspace-capacity`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/workspace-capacity`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.agents === "number");
@@ -10981,8 +12679,17 @@ test("GET /handoffs/peak-hours returns peak hours", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "peakhrs-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/peak-hours`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/peak-hours`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.by_hour));
@@ -10995,8 +12702,17 @@ test("GET /blockers/comment-activity returns activity", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bcomact-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/comment-activity`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/comment-activity`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.blockers));
@@ -11009,8 +12725,17 @@ test("GET /claims/abandonment-rate returns rate", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "abandon-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/abandonment-rate`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/abandonment-rate`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -11024,8 +12749,17 @@ test("GET /workspace-growth-rate returns growth data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "wsgrow-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/workspace-growth-rate`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/workspace-growth-rate`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(body.growth);
@@ -11039,8 +12773,17 @@ test("GET /agents/session-duration returns durations", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "sessdur-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/session-duration`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/session-duration`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -11054,8 +12797,17 @@ test("GET /handoffs/recipient-stats returns recipient data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "recpst-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/recipient-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/recipient-stats`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.recipients));
@@ -11068,8 +12820,17 @@ test("GET /claims/scope-density returns density data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "scpden-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/scope-density`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/scope-density`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.scopes));
@@ -11082,8 +12843,17 @@ test("GET /agents/tag-distribution returns tag data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "tagdist-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/tag-distribution`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/tag-distribution`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.tags));
@@ -11096,8 +12866,17 @@ test("GET /blockers/watcher-engagement returns engagement data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bwatch-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/watcher-engagement`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/watcher-engagement`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.blockers));
@@ -11105,15 +12884,23 @@ test("GET /blockers/watcher-engagement returns engagement data", async () => {
   await app.close();
 });
 
-
 // F-295 capability-retirement
 test("GET /agents/capability-retirement returns retired capabilities", async () => {
   const app = buildApp();
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "capret-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/capability-retirement`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/capability-retirement`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -11127,8 +12914,17 @@ test("GET /handoffs/round-trip-time returns pair timing data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "rtt-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/round-trip-time`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/round-trip-time`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.pairs));
@@ -11141,8 +12937,17 @@ test("GET /claims/priority-histogram returns priority buckets", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "prihist-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/priority-histogram`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/priority-histogram`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.buckets));
@@ -11155,8 +12960,17 @@ test("GET /blockers/resolution-pattern returns resolution patterns", async () =>
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "respat-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/resolution-pattern`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/resolution-pattern`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.patterns));
@@ -11169,8 +12983,17 @@ test("GET /handoffs/capability-demand returns demand data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "capdem-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/capability-demand`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/capability-demand`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.capabilities));
@@ -11183,8 +13006,17 @@ test("GET /agents/stale-capabilities returns stale data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "stalecap-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/stale-capabilities`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/stale-capabilities`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -11197,8 +13029,17 @@ test("GET /claims/renewal-streak returns streak data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "renstrk-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/renewal-streak`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/renewal-streak`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.streaks));
@@ -11211,8 +13052,17 @@ test("GET /entity-count returns entity counts", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "entcnt-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/entity-count`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/entity-count`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -11226,8 +13076,17 @@ test("GET /blockers/severity-escalation-rate returns escalation data", async () 
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "sevesc-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/severity-escalation-rate`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/severity-escalation-rate`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.escalation_rate === "number");
@@ -11241,8 +13100,17 @@ test("GET /handoffs/pending-duration returns pending data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "pendur-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/pending-duration`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/pending-duration`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.pending_handoffs));
@@ -11256,8 +13124,17 @@ test("GET /claims/scope-length-stats returns length stats", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "scplen-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/scope-length-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/scope-length-stats`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -11270,8 +13147,17 @@ test("GET /agents/multi-workspace returns multi-workspace agents", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "multiws-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/multi-workspace`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/multi-workspace`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -11284,8 +13170,17 @@ test("GET /blockers/top-reporters returns reporter data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "toprep-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/top-reporters`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/top-reporters`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.reporters));
@@ -11298,8 +13193,17 @@ test("GET /handoffs/rejection-reasons returns rejection data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "rejrsn-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/rejection-reasons`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/rejection-reasons`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.rejections));
@@ -11313,8 +13217,17 @@ test("GET /claims/expiry-velocity returns velocity data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "expvel-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/expiry-velocity`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/expiry-velocity`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.daily));
@@ -11328,8 +13241,17 @@ test("GET /summary-report returns comprehensive report", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "sumrpt-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/summary-report`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/summary-report`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.agents.total === "number");
@@ -11345,8 +13267,17 @@ test("GET /agents/capability-rarity returns rarity data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "caprar-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/capability-rarity`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/capability-rarity`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.capabilities));
@@ -11359,8 +13290,17 @@ test("GET /handoffs/acceptance-lag returns lag data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "acclag-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/acceptance-lag`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/acceptance-lag`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -11373,8 +13313,17 @@ test("GET /blockers/deadline-proximity returns proximity data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "dlprox-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/deadline-proximity`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/deadline-proximity`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.blockers));
@@ -11388,8 +13337,17 @@ test("GET /claims/agent-diversity returns diversity data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "agdiv-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/agent-diversity`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/agent-diversity`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -11403,8 +13361,17 @@ test("GET /agents/recent-deregistrations returns offline agents", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "recdereg-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/recent-deregistrations`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/recent-deregistrations`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -11417,8 +13384,17 @@ test("GET /handoffs/orphan-detection returns orphaned handoffs", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "orphdet-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/orphan-detection`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/orphan-detection`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.orphans));
@@ -11432,8 +13408,17 @@ test("GET /blockers/comment-frequency returns frequency data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "comfreq-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/comment-frequency`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/comment-frequency`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.blockers));
@@ -11447,8 +13432,17 @@ test("GET /claims/transfer-velocity returns velocity data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "trnvel-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/transfer-velocity`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/transfer-velocity`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.daily));
@@ -11462,8 +13456,17 @@ test("GET /agents/capability-load returns load data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "capload-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/capability-load`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/capability-load`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.capabilities));
@@ -11476,8 +13479,17 @@ test("GET /audit-timeline returns hourly audit data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "audtl-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/audit-timeline`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/audit-timeline`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.timeline));
@@ -11490,8 +13502,17 @@ test("GET /handoffs/sla-violation-agents returns violation data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "slaviol-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/sla-violation-agents`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/sla-violation-agents`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -11504,8 +13525,17 @@ test("GET /blockers/cross-agent-impact returns impact data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "xaimp-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/cross-agent-impact`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/cross-agent-impact`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.blockers));
@@ -11518,8 +13548,17 @@ test("GET /claims/scope-prefix-tree returns prefix data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "scppfx-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/scope-prefix-tree`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/scope-prefix-tree`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.prefixes));
@@ -11532,8 +13571,17 @@ test("GET /agents/heartbeat-consistency returns consistency data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hbcon-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/heartbeat-consistency`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/heartbeat-consistency`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -11547,8 +13595,17 @@ test("GET /handoffs/template-usage returns template data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "tmpusg-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/template-usage`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/template-usage`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.templates));
@@ -11561,8 +13618,17 @@ test("GET /operational-status returns status data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "opstat-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/operational-status`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/operational-status`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(["green", "yellow", "red"].includes(body.status));
@@ -11576,8 +13642,17 @@ test("GET /agents/task-backlog returns backlog data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "taskbl-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/task-backlog`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/task-backlog`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -11590,8 +13665,17 @@ test("GET /blockers/dependency-chain-length returns chain data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "depchn-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/dependency-chain-length`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/dependency-chain-length`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.chains));
@@ -11605,8 +13689,17 @@ test("GET /claims/overlapping-scopes returns overlaps", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "ovlap-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/overlapping-scopes`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/overlapping-scopes`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.overlaps));
@@ -11619,8 +13712,17 @@ test("GET /handoffs/context-size-stats returns size stats", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "ctxsz-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/context-size-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/context-size-stats`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -11633,8 +13735,17 @@ test("GET /workspaces/handoff-flow-balance returns balance", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hfbal-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoff-flow-balance`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoff-flow-balance`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -11647,8 +13758,17 @@ test("GET /agents/idle-duration returns idle agents", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "idldr-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/idle-duration`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/idle-duration`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -11661,8 +13781,17 @@ test("GET /blockers/auto-escalation-candidates returns candidates", async () => 
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "autoesc-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/auto-escalation-candidates`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/auto-escalation-candidates`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.candidates));
@@ -11675,8 +13804,17 @@ test("GET /claims/usage-heatmap returns heatmap data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "clheat-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/usage-heatmap`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/usage-heatmap`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.heatmap));
@@ -11689,8 +13827,17 @@ test("GET /handoffs/summary-keyword-search returns results", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "sumkw-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/summary-keyword-search?q=test`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/summary-keyword-search?q=test`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.results));
@@ -11703,8 +13850,17 @@ test("GET /workspaces/blocker-aging-report returns aging data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "blkage-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blocker-aging-report`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blocker-aging-report`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.aging));
@@ -11717,8 +13873,17 @@ test("GET /agents/capability-overlap-matrix returns overlaps", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "capovl-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/capability-overlap-matrix`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/capability-overlap-matrix`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.overlaps));
@@ -11731,8 +13896,17 @@ test("GET /claims/longest-active returns longest active claims", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "lngact-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/longest-active`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/longest-active`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.claims));
@@ -11745,8 +13919,17 @@ test("GET /blockers/resolution-time-percentiles returns percentiles", async () =
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "rspctl-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/resolution-time-percentiles`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/resolution-time-percentiles`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.count === "number");
@@ -11759,8 +13942,17 @@ test("GET /handoffs/chain-analysis returns chain data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "chnan-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/chain-analysis`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/chain-analysis`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.chains));
@@ -11774,8 +13966,17 @@ test("GET /workspaces/claim-expiry-forecast returns forecast", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "clexp-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claim-expiry-forecast`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claim-expiry-forecast`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.next_1h === "number" || body.next_1h === null);
@@ -11788,8 +13989,17 @@ test("GET /agents/metadata-size-stats returns size stats", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "metasz-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/metadata-size-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/metadata-size-stats`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -11802,8 +14012,17 @@ test("GET /claims/renewal-frequency returns frequency data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "rnwfq-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/renewal-frequency`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/renewal-frequency`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.claims));
@@ -11816,8 +14035,17 @@ test("GET /blockers/watcher-count returns watcher counts", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "wtchct-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/watcher-count`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/watcher-count`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.blockers));
@@ -11830,8 +14058,17 @@ test("GET /handoffs/priority-breakdown returns breakdown", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hpbd-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/priority-breakdown`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/priority-breakdown`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.breakdown));
@@ -11844,8 +14081,17 @@ test("GET /workspaces/task-priority-distribution returns distribution", async ()
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "tskpd-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/task-priority-distribution`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/task-priority-distribution`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.distribution));
@@ -11858,8 +14104,17 @@ test("GET /agents/last-activity-summary returns summary", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "lastact-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/last-activity-summary`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/last-activity-summary`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -11872,8 +14127,17 @@ test("GET /claims/scope-collision-risk returns risks", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "scprsk-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/scope-collision-risk`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/scope-collision-risk`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.risks));
@@ -11886,8 +14150,17 @@ test("GET /blockers/severity-distribution-trend returns trend", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "sevtrd-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/severity-distribution-trend`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/severity-distribution-trend`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.trend));
@@ -11900,8 +14173,17 @@ test("GET /handoffs/agent-pair-frequency returns pairs", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "agpfr-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/agent-pair-frequency`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/agent-pair-frequency`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.pairs));
@@ -11914,8 +14196,17 @@ test("GET /agents/tag-usage-stats returns tag stats", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "taguse-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/tag-usage-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/tag-usage-stats`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.tags));
@@ -11928,8 +14219,17 @@ test("GET /blockers/open-duration-ranking returns ranking", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "opndr-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/open-duration-ranking`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/open-duration-ranking`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.blockers));
@@ -11942,8 +14242,17 @@ test("GET /workspaces/handoff-completion-rate returns rate", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hcrate-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoff-completion-rate`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoff-completion-rate`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.rate === "number");
@@ -11956,8 +14265,17 @@ test("GET /claims/agent-claim-count-ranking returns ranking", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "aclrk-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/agent-claim-count-ranking`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/agent-claim-count-ranking`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.ranking));
@@ -11970,8 +14288,17 @@ test("GET /handoffs/stale-pending returns stale handoffs", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "stlpnd-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/stale-pending`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/stale-pending`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.stale));
@@ -11985,8 +14312,17 @@ test("GET /agents/capability-count-ranking returns ranking", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "capcr-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/capability-count-ranking`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/capability-count-ranking`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.ranking));
@@ -11999,8 +14335,17 @@ test("GET /workspaces/audit-action-frequency returns actions", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "audfq-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/audit-action-frequency`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/audit-action-frequency`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.actions));
@@ -12013,8 +14358,17 @@ test("GET /blockers/title-word-cloud returns word cloud", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bwcld-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/title-word-cloud`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/title-word-cloud`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.words));
@@ -12027,8 +14381,17 @@ test("GET /claims/expiry-distribution returns distribution", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "expdst-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/expiry-distribution`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/expiry-distribution`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.distribution));
@@ -12041,8 +14404,17 @@ test("GET /handoffs/retry-count-stats returns stats", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "rtycnt-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/retry-count-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/retry-count-stats`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -12055,8 +14427,17 @@ test("GET /agents/uptime-leaderboard returns leaderboard", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "uptlb-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/uptime-leaderboard`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/uptime-leaderboard`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.leaderboard));
@@ -12069,8 +14450,17 @@ test("GET /workspaces/blocker-resolution-rate returns rate", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "blkrr-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blocker-resolution-rate`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blocker-resolution-rate`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.rate === "number");
@@ -12083,8 +14473,17 @@ test("GET /claims/status-transition-counts returns transitions", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "cstc-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/status-transition-counts`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/status-transition-counts`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.transitions));
@@ -12097,8 +14496,17 @@ test("GET /handoffs/pending-duration-ranking returns ranking", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hpdr-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/pending-duration-ranking`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/pending-duration-ranking`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.ranking));
@@ -12111,8 +14519,17 @@ test("GET /agents/heartbeat-frequency returns agents", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "ahf-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/heartbeat-frequency`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/heartbeat-frequency`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -12125,8 +14542,17 @@ test("GET /blockers/comment-count-ranking returns ranking", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bccr-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/comment-count-ranking`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/comment-count-ranking`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.ranking));
@@ -12139,8 +14565,17 @@ test("GET /workspaces/agent-model-summary returns models", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "wams-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agent-model-summary`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agent-model-summary`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.models));
@@ -12153,8 +14588,17 @@ test("GET /handoffs/acceptance-rate returns rate", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "har-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/acceptance-rate`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/acceptance-rate`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.acceptance_rate === "number");
@@ -12167,8 +14611,17 @@ test("GET /claims/active-per-agent returns agents", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "capa-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/active-per-agent`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/active-per-agent`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -12181,8 +14634,17 @@ test("GET /blockers/severity-agent-matrix returns matrix", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bsam-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/severity-agent-matrix`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/severity-agent-matrix`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.matrix));
@@ -12195,8 +14657,17 @@ test("GET /agents/registration-age returns agents", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "ara-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/registration-age`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/registration-age`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -12209,8 +14680,17 @@ test("GET /workspaces/claim-utilization returns utilization", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "wcu-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claim-utilization`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claim-utilization`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.utilization_pct === "number");
@@ -12223,8 +14703,17 @@ test("GET /handoffs/route-mode-breakdown returns modes", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hrmb-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/route-mode-breakdown`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/route-mode-breakdown`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.modes));
@@ -12237,8 +14726,17 @@ test("GET /blockers/overdue-count returns overdue", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "boc-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/overdue-count`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/overdue-count`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.overdue === "number");
@@ -12251,8 +14749,17 @@ test("GET /claims/path-depth-stats returns paths", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "cpds-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/path-depth-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/path-depth-stats`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.paths));
@@ -12265,8 +14772,17 @@ test("GET /agents/online-offline-ratio returns ratio", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "aoor-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/online-offline-ratio`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/online-offline-ratio`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -12279,8 +14795,17 @@ test("GET /workspaces/handoff-daily-count returns days", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "whdc-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoff-daily-count`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoff-daily-count`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.days));
@@ -12293,8 +14818,17 @@ test("GET /handoffs/context-length-ranking returns ranking", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hclr-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/context-length-ranking`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/context-length-ranking`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.ranking));
@@ -12307,8 +14841,17 @@ test("GET /blockers/created-daily returns days", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bcd-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/created-daily`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/created-daily`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.days));
@@ -12321,8 +14864,17 @@ test("GET /claims/renewal-success-rate returns rate", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "crsr-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/renewal-success-rate`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/renewal-success-rate`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.success_rate === "number");
@@ -12335,8 +14887,17 @@ test("GET /agents/capability-diversity returns agents", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "acd-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/capability-diversity`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/capability-diversity`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -12349,8 +14910,17 @@ test("GET /workspaces/blocker-severity-summary returns severities", async () => 
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "wbss-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blocker-severity-summary`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blocker-severity-summary`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.severities));
@@ -12363,8 +14933,17 @@ test("GET /handoffs/summary-length-stats returns stats", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hsls-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/summary-length-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/summary-length-stats`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -12377,8 +14956,17 @@ test("GET /claims/created-daily returns days", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "ccrd-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/created-daily`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/created-daily`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.days));
@@ -12391,8 +14979,17 @@ test("GET /workspaces/agent-status-breakdown returns statuses", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "wasb-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agent-status-breakdown`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agent-status-breakdown`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.statuses));
@@ -12405,8 +15002,17 @@ test("GET /blockers/resolution-time-avg returns avg", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "brta-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/resolution-time-avg`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/resolution-time-avg`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.resolved_count === "number");
@@ -12419,8 +15025,17 @@ test("GET /agents/task-status-summary returns summary", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "atss-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/task-status-summary`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/task-status-summary`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.summary));
@@ -12433,8 +15048,17 @@ test("GET /handoffs/expired-count returns count", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hec-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/expired-count`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/expired-count`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.expired === "number");
@@ -12447,8 +15071,17 @@ test("GET /workspaces/audit-entity-type-breakdown returns types", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "waet-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/audit-entity-type-breakdown`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/audit-entity-type-breakdown`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.entity_types));
@@ -12461,8 +15094,17 @@ test("GET /claims/scope-prefix-stats returns prefixes", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "csps-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/scope-prefix-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/scope-prefix-stats`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.prefixes));
@@ -12475,8 +15117,17 @@ test("GET /handoffs/capability-tag-frequency returns tags", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "captfq-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/capability-tag-frequency`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/capability-tag-frequency`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.tags));
@@ -12489,8 +15140,17 @@ test("GET /agents/group-member-count returns groups", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "grpmem-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/group-member-count`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/group-member-count`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.groups));
@@ -12503,8 +15163,17 @@ test("GET /blockers/open-by-agent returns agents", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "opnag-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/open-by-agent`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/open-by-agent`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -12517,8 +15186,17 @@ test("GET /claims/expiry-window-stats returns windows", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "expwin-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/expiry-window-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/expiry-window-stats`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.windows));
@@ -12531,8 +15209,17 @@ test("GET /workspaces/handoff-sla-compliance returns compliance", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "slacmp-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoff-sla-compliance`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoff-sla-compliance`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -12545,8 +15232,17 @@ test("GET /handoffs/notes-length-stats returns stats", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "ntlen-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/notes-length-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/notes-length-stats`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -12559,8 +15255,17 @@ test("GET /agents/recently-updated returns agents", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "rcntup-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/recently-updated`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/recently-updated`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -12573,8 +15278,17 @@ test("GET /blockers/escalation-level-distribution returns levels", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "esclvl-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/escalation-level-distribution`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/escalation-level-distribution`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.distribution));
@@ -12587,8 +15301,17 @@ test("GET /workspaces/audit-actor-frequency returns actors", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "audact-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/audit-actor-frequency`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/audit-actor-frequency`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.actors));
@@ -12601,8 +15324,17 @@ test("GET /claims/path-pattern-frequency returns patterns", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "pthpat-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/path-pattern-frequency`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/path-pattern-frequency`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.patterns));
@@ -12615,8 +15347,17 @@ test("GET /agents/heartbeat-gap-analysis returns agents", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hbgap-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/heartbeat-gap-analysis`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/heartbeat-gap-analysis`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -12629,8 +15370,17 @@ test("GET /agents/tag-co-occurrence returns pairs", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "tagco-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/tag-co-occurrence`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/tag-co-occurrence`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.pairs));
@@ -12643,8 +15393,17 @@ test("GET /handoffs/retry-count-distribution returns distribution", async () => 
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hrcd-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/retry-count-distribution`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/retry-count-distribution`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.distribution));
@@ -12657,8 +15416,17 @@ test("GET /blockers/severity-resolution-time returns stats", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bsrt-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/severity-resolution-time`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/severity-resolution-time`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.stats));
@@ -12671,8 +15439,17 @@ test("GET /claims/age-distribution returns buckets", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "cage-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/age-distribution`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/age-distribution`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.distribution));
@@ -12685,8 +15462,17 @@ test("GET /workspaces/entity-totals returns counts", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "etot-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/entity-totals`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/entity-totals`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.totals.agents === "number");
@@ -12700,8 +15486,17 @@ test("GET /agents/capabilities-per-agent returns counts", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "capa-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/capabilities-per-agent`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/capabilities-per-agent`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -12714,8 +15509,17 @@ test("GET /blockers/watcher-count-ranking returns blockers", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bwcr-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/watcher-count-ranking`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/watcher-count-ranking`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.blockers));
@@ -12728,8 +15532,17 @@ test("GET /handoffs/priority-by-route-mode returns stats", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "pbrm-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/priority-by-route-mode`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/priority-by-route-mode`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.stats));
@@ -12742,8 +15555,17 @@ test("GET /claims/transfer-leaderboard returns leaderboard", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "trlb-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/transfer-leaderboard`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/transfer-leaderboard`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.leaderboard));
@@ -12756,8 +15578,17 @@ test("GET /workspaces/activity-heatmap returns hours", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "aheat-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/activity-heatmap`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/activity-heatmap`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.heatmap));
@@ -12770,8 +15601,17 @@ test("GET /agents/idle-time-histogram returns buckets", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "idleh-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/idle-time-histogram`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/idle-time-histogram`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.histogram));
@@ -12784,8 +15624,17 @@ test("GET /handoffs/sla-breach-list returns breached handoffs", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "slab-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/sla-breach-list`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/sla-breach-list`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.breached));
@@ -12798,8 +15647,17 @@ test("GET /blockers/age-percentiles returns percentiles", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bagp-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/age-percentiles`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/age-percentiles`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.count === "number");
@@ -12813,8 +15671,17 @@ test("GET /claims/renewal-gap-analysis returns claims", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "rnga-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/renewal-gap-analysis`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/renewal-gap-analysis`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.claims));
@@ -12827,8 +15694,17 @@ test("GET /handoffs/timeout-utilization returns handoffs", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "tmut-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/timeout-utilization`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/timeout-utilization`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.handoffs));
@@ -12841,8 +15717,17 @@ test("GET /workspaces/audit-growth-rate returns daily counts", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "augr-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/audit-growth-rate`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/audit-growth-rate`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.daily));
@@ -12855,8 +15740,17 @@ test("GET /agents/model-version-matrix returns matrix", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "mvm-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/model-version-matrix`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/model-version-matrix`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.matrix));
@@ -12869,8 +15763,17 @@ test("GET /blockers/resolution-streak returns streak", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "brs-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/resolution-streak`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/resolution-streak`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.streak_days === "number");
@@ -12883,8 +15786,17 @@ test("GET /handoffs/from-to-heatmap returns pairs", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "fthm-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/from-to-heatmap`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/from-to-heatmap`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.pairs));
@@ -12897,8 +15809,17 @@ test("GET /claims/claim-density-by-agent returns density data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "cldens-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-density-by-agent`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-density-by-agent`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -12911,8 +15832,17 @@ test("GET /handoffs/handoff-retry-stats returns retry stats", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hrtry-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-retry-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-retry-stats`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -12925,8 +15855,17 @@ test("GET /blockers/blocker-title-length returns length stats", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bktlen-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-title-length`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-title-length`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -12939,8 +15878,17 @@ test("GET /agents/agent-uptime-ranking returns ranking", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "aguptm-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/agent-uptime-ranking`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/agent-uptime-ranking`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -12953,8 +15901,17 @@ test("GET /workspaces/workspace-settings-audit returns settings", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "wsset-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/workspace-settings-audit`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/workspace-settings-audit`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.settings));
@@ -12967,8 +15924,17 @@ test("GET /handoffs/handoff-notes-count returns note counts", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hnotc-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-notes-count`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-notes-count`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.handoffs));
@@ -12981,8 +15947,17 @@ test("GET /blockers/blocker-comment-authors returns author data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bcaut-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-comment-authors`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-comment-authors`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.blockers));
@@ -12995,8 +15970,17 @@ test("GET /agents/agent-display-name-length returns length stats", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "adnl-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/agent-display-name-length`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/agent-display-name-length`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -13009,8 +15993,17 @@ test("GET /claims/claim-expiry-horizon returns horizon data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "cexph-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-expiry-horizon`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-expiry-horizon`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.claims));
@@ -13023,8 +16016,17 @@ test("GET /blockers/blocker-resolution-speed returns speed data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "brspd-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-resolution-speed`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-resolution-speed`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.blockers));
@@ -13036,7 +16038,11 @@ test("GET /workspaces/workspace-archived-count returns counts", async () => {
   const app = buildApp();
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  const res = await app.inject({ method: "GET", url: "/api/v1/workspaces/workspace-archived-count", headers: auth });
+  const res = await app.inject({
+    method: "GET",
+    url: "/api/v1/workspaces/workspace-archived-count",
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -13049,8 +16055,17 @@ test("GET /handoffs/handoff-chain-depth returns depth stats", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hcd-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-chain-depth`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-chain-depth`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -13063,8 +16078,17 @@ test("GET /agents/agent-tag-diversity returns tag diversity", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "atdiv-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/agent-tag-diversity`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/agent-tag-diversity`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.unique_tags === "number");
@@ -13078,8 +16102,17 @@ test("GET /claims/claim-renewal-frequency returns renewal data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "crf-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-renewal-frequency`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-renewal-frequency`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.claims));
@@ -13092,8 +16125,17 @@ test("GET /blockers/blocker-watcher-count returns watcher data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bwc-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-watcher-count`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-watcher-count`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.blockers));
@@ -13106,8 +16148,17 @@ test("GET /handoffs/handoff-notes-word-count returns word counts", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hnwc-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-notes-word-count`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-notes-word-count`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.notes));
@@ -13119,7 +16170,11 @@ test("GET /workspaces/workspace-description-length returns lengths", async () =>
   const app = buildApp();
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  const res = await app.inject({ method: "GET", url: "/api/v1/workspaces/workspace-description-length", headers: auth });
+  const res = await app.inject({
+    method: "GET",
+    url: "/api/v1/workspaces/workspace-description-length",
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.workspaces));
@@ -13132,8 +16187,17 @@ test("GET /claims/claim-transfer-volume returns transfer data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "ctv-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-transfer-volume`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-transfer-volume`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.transfers));
@@ -13146,8 +16210,17 @@ test("GET /blockers/blocker-escalation-trend returns escalation data", async () 
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "besc-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-escalation-trend`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-escalation-trend`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.levels));
@@ -13160,8 +16233,17 @@ test("GET /handoffs/handoff-template-usage returns template data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "htmu-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-template-usage`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-template-usage`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.templates));
@@ -13174,8 +16256,17 @@ test("GET /agents/agent-status-transition returns transition data", async () => 
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "ast-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/agent-status-transition`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/agent-status-transition`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.transitions));
@@ -13188,8 +16279,17 @@ test("GET /claims/claim-scope-collision returns collision data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "csc-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-scope-collision`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-scope-collision`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.collisions));
@@ -13202,8 +16302,17 @@ test("GET /workspace-agent-count-trend returns trend data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "wact-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/workspace-agent-count-trend`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/workspace-agent-count-trend`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.trend));
@@ -13216,8 +16325,17 @@ test("GET /blockers/blocker-deadline-proximity returns proximity data", async ()
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bdlp-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-deadline-proximity`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-deadline-proximity`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.blockers));
@@ -13230,8 +16348,17 @@ test("GET /handoffs/handoff-acceptance-lag returns lag data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hal-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-acceptance-lag`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-acceptance-lag`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.handoffs));
@@ -13244,8 +16371,17 @@ test("GET /agents/agent-model-version returns model data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "amv-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/agent-model-version`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/agent-model-version`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.models));
@@ -13258,8 +16394,17 @@ test("GET /claims/claim-path-pattern-stats returns pattern data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "cpps-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-path-pattern-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-path-pattern-stats`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.patterns));
@@ -13272,8 +16417,17 @@ test("GET /handoffs/handoff-context-size returns size stats", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hcs-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-context-size`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-context-size`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -13286,8 +16440,17 @@ test("GET /blockers/blocker-comment-frequency returns frequency data", async () 
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bcf-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-comment-frequency`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-comment-frequency`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.trend));
@@ -13299,7 +16462,11 @@ test("GET /workspaces/workspace-base-path-stats returns path data", async () => 
   const app = buildApp();
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  const res = await app.inject({ method: "GET", url: "/api/v1/workspaces/workspace-base-path-stats", headers: auth });
+  const res = await app.inject({
+    method: "GET",
+    url: "/api/v1/workspaces/workspace-base-path-stats",
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.paths));
@@ -13312,8 +16479,17 @@ test("GET /agents/agent-task-completion returns completion data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "atc-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/agent-task-completion`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/agent-task-completion`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -13326,8 +16502,17 @@ test("GET /handoffs/handoff-route-mode-split returns mode data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hrms-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-route-mode-split`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-route-mode-split`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.modes));
@@ -13340,8 +16525,17 @@ test("GET /claims/claim-agent-ranking returns ranking data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "car-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-agent-ranking`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-agent-ranking`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -13354,8 +16548,17 @@ test("GET /blockers/blocker-dependency-fanout returns fanout data", async () => 
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bdf-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-dependency-fanout`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-dependency-fanout`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.blockers));
@@ -13367,7 +16570,11 @@ test("GET /workspaces/workspace-creation-daily returns daily trend", async () =>
   const app = buildApp();
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  const res = await app.inject({ method: "GET", url: "/api/v1/workspaces/workspace-creation-daily", headers: auth });
+  const res = await app.inject({
+    method: "GET",
+    url: "/api/v1/workspaces/workspace-creation-daily",
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.trend));
@@ -13380,8 +16587,17 @@ test("GET /agents/agent-metadata-keys returns metadata key data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "amk-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/agent-metadata-keys`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/agent-metadata-keys`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.keys));
@@ -13394,8 +16610,17 @@ test("GET /handoffs/handoff-timeout-seconds-stats returns timeout stats", async 
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "htss-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-timeout-seconds-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-timeout-seconds-stats`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -13408,8 +16633,17 @@ test("GET /blockers/blocker-open-age returns age data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "boa-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-open-age`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-open-age`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.blockers));
@@ -13422,8 +16656,17 @@ test("GET /claims/claim-dependency-count returns dep data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "cdc-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-dependency-count`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-dependency-count`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.claims));
@@ -13436,8 +16679,17 @@ test("GET /workspace-audit-action-types returns action types", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "waat-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/workspace-audit-action-types`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/workspace-audit-action-types`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.actions));
@@ -13450,8 +16702,17 @@ test("GET /handoffs/handoff-from-to-matrix returns matrix data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hftm-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-from-to-matrix`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-from-to-matrix`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.matrix));
@@ -13464,8 +16725,17 @@ test("GET /agents/agent-capability-count returns capability counts", async () =>
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "acc-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/agent-capability-count`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/agent-capability-count`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -13478,8 +16748,17 @@ test("GET /blockers/blocker-severity-age-avg returns severity age", async () => 
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bsaa-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-severity-age-avg`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-severity-age-avg`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.severities));
@@ -13492,8 +16771,17 @@ test("GET /claims/claim-created-hourly returns hourly data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "cch-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-created-hourly`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-created-hourly`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.hours));
@@ -13506,8 +16794,17 @@ test("GET /workspace-settings-key-count returns key count", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "wskc-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/workspace-settings-key-count`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/workspace-settings-key-count`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.key_count === "number");
@@ -13520,8 +16817,17 @@ test("GET /agents/agent-group-distribution returns group data", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "agd-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/agent-group-distribution`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/agent-group-distribution`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.groups));
@@ -13534,8 +16840,17 @@ test("GET /handoffs/handoff-notes-per-handoff returns note counts", async () => 
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hnph-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-notes-per-handoff`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-notes-per-handoff`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.handoffs));
@@ -13548,8 +16863,17 @@ test("GET /claims/claim-priority-avg returns priority stats", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "cpa-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-priority-avg`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-priority-avg`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -13562,8 +16886,17 @@ test("GET /agents/agent-last-seen-ranking returns ranked agents", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "alsr-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/agent-last-seen-ranking`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/agent-last-seen-ranking`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -13576,8 +16909,17 @@ test("GET /handoffs/handoff-capability-tag-stats returns tag stats", async () =>
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hcts-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-capability-tag-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-capability-tag-stats`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.tags));
@@ -13590,8 +16932,17 @@ test("GET /workspace-total-entities returns entity counts", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "wte-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/workspace-total-entities`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/workspace-total-entities`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.agents === "number");
@@ -13605,8 +16956,17 @@ test("GET /handoffs/handoff-retry-success-rate returns retry stats", async () =>
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hrsr-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-retry-success-rate`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-retry-success-rate`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total_retried === "number");
@@ -13619,8 +16979,17 @@ test("GET /claims/claim-dependency-chain returns dependency chains", async () =>
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "cdc-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-dependency-chain`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-dependency-chain`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.chains));
@@ -13633,8 +17002,17 @@ test("GET /handoffs/handoff-completion-by-hour returns hourly completions", asyn
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hcbh-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-completion-by-hour`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-completion-by-hour`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.hours));
@@ -13647,8 +17025,17 @@ test("GET /blockers/blocker-open-closed-ratio returns ratio stats", async () => 
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bocr-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-open-closed-ratio`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-open-closed-ratio`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -13661,8 +17048,17 @@ test("GET /claims/claim-transfer-frequency returns transfer counts", async () =>
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "ctf-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-transfer-frequency`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-transfer-frequency`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.transfers));
@@ -13675,8 +17071,17 @@ test("GET /agents/agent-status-transition-matrix returns transitions", async () 
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "astm-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/agent-status-transition-matrix`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/agent-status-transition-matrix`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.transitions));
@@ -13689,8 +17094,17 @@ test("GET /blockers/blocker-watcher-per-blocker returns watcher counts", async (
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bwpb-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-watcher-per-blocker`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-watcher-per-blocker`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.blockers));
@@ -13703,8 +17117,17 @@ test("GET /handoffs/handoff-route-mode-stats returns mode stats", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hrms-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-route-mode-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-route-mode-stats`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.modes));
@@ -13717,8 +17140,17 @@ test("GET /agents/agent-tag-frequency returns tag frequency", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "atf-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/agent-tag-frequency`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/agent-tag-frequency`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.tags));
@@ -13731,8 +17163,17 @@ test("GET /blockers/blocker-dependency-fan-out returns fan-out stats", async () 
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bdfo-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-dependency-fan-out`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-dependency-fan-out`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.blockers));
@@ -13745,8 +17186,17 @@ test("GET /workspace-age-days returns workspace age", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "wad-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/workspace-age-days`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/workspace-age-days`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.age_days === "number");
@@ -13759,8 +17209,17 @@ test("GET /claims/claim-renewal-count-distribution returns renewal stats", async
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "crcd-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-renewal-count-distribution`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-renewal-count-distribution`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.renewals));
@@ -13773,8 +17232,17 @@ test("GET /agents/agent-metadata-key-count returns key counts", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "amkc-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/agent-metadata-key-count`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/agent-metadata-key-count`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -13787,8 +17255,17 @@ test("GET /handoffs/handoff-context-size-avg returns context stats", async () =>
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hcsa-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-context-size-avg`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-context-size-avg`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -13801,8 +17278,17 @@ test("GET /blockers/blocker-escalation-level-distribution returns levels", async
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "beld-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-escalation-level-distribution`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-escalation-level-distribution`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.levels));
@@ -13815,8 +17301,17 @@ test("GET /handoffs/handoff-timeout-utilization returns utilization stats", asyn
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "htu-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-timeout-utilization`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-timeout-utilization`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.handoffs));
@@ -13829,8 +17324,17 @@ test("GET /claims/claim-path-pattern-popularity returns pattern stats", async ()
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "cppp-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-path-pattern-popularity`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-path-pattern-popularity`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.patterns));
@@ -13843,8 +17347,17 @@ test("GET /blockers/blocker-age-bucket returns age buckets", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bab-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-age-bucket`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-age-bucket`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.buckets));
@@ -13857,8 +17370,17 @@ test("GET /handoffs/handoff-sla-deadline-remaining returns remaining hours", asy
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hsdr-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-sla-deadline-remaining`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-sla-deadline-remaining`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.handoffs));
@@ -13871,8 +17393,17 @@ test("GET /workspace-audit-action-frequency returns action counts", async () => 
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "waaf-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/workspace-audit-action-frequency`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/workspace-audit-action-frequency`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.actions));
@@ -13885,8 +17416,17 @@ test("GET /claims/claim-active-expired-ratio returns ratio stats", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "caer-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-active-expired-ratio`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-active-expired-ratio`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -13899,8 +17439,17 @@ test("GET /agents/agent-task-priority-breakdown returns breakdown", async () => 
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "atpb-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/agent-task-priority-breakdown`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/agent-task-priority-breakdown`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.breakdown));
@@ -13913,8 +17462,17 @@ test("GET /handoffs/handoff-from-agent-success-rate returns rates", async () => 
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hfasr-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-from-agent-success-rate`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-from-agent-success-rate`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -13927,8 +17485,17 @@ test("GET /blockers/blocker-severity-agent-crosstab returns crosstab", async () 
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bsac-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-severity-agent-crosstab`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-severity-agent-crosstab`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.crosstab));
@@ -13941,8 +17508,17 @@ test("GET /handoffs/handoff-priority-distribution returns distribution", async (
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hpd-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-priority-distribution`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-priority-distribution`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.priorities));
@@ -13955,8 +17531,17 @@ test("GET /claims/claim-scope-uniqueness-ratio returns ratio", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "csur-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-scope-uniqueness-ratio`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-scope-uniqueness-ratio`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total_claims === "number");
@@ -13969,8 +17554,17 @@ test("GET /workspace-claim-density returns density", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "wcd-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/workspace-claim-density`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/workspace-claim-density`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.claims_per_agent === "number");
@@ -13983,8 +17577,17 @@ test("GET /agents/agent-model-capability-matrix returns matrix", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "amcm-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/agent-model-capability-matrix`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/agent-model-capability-matrix`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.matrix));
@@ -13997,8 +17600,17 @@ test("GET /blockers/blocker-comment-timeline returns timeline", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bct-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-comment-timeline`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-comment-timeline`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.timeline));
@@ -14011,8 +17623,17 @@ test("GET /handoffs/handoff-summary-word-frequency returns word counts", async (
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "hswf-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-summary-word-frequency`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-summary-word-frequency`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.words));
@@ -14025,8 +17646,17 @@ test("GET /agents/agent-task-completion-trend returns trend", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "atct-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/agent-task-completion-trend`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/agent-task-completion-trend`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.trend));
@@ -14039,8 +17669,17 @@ test("GET /workspace-handoff-density returns density", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "whd-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/workspace-handoff-density`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/workspace-handoff-density`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.handoffs_per_agent === "number");
@@ -14053,8 +17692,17 @@ test("GET /blockers/blocker-title-keyword-frequency returns keywords", async () 
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "btkf-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-title-keyword-frequency`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-title-keyword-frequency`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.keywords));
@@ -14067,8 +17715,17 @@ test("GET /handoffs/handoff-to-agent-load returns agent load", async () => {
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "htal-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-to-agent-load`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-to-agent-load`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(Array.isArray(body.agents));
@@ -14081,8 +17738,17 @@ test("GET /blockers/blocker-details-length-stats returns length stats", async ()
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
   const ws = "bdls-" + Date.now().toString(36);
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-details-length-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-details-length-stats`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = JSON.parse(res.body);
   assert.ok(typeof body.total === "number");
@@ -14095,8 +17761,17 @@ test("F-507 handoff-chain-completion-rate", async () => {
   runMigrations();
   const ws = "hccr-" + Date.now().toString(36);
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/handoff-chain-completion-rate`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/analytics/handoff-chain-completion-rate`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = res.json();
   assert.ok("total_chain_handoffs" in body);
@@ -14110,14 +17785,22 @@ test("F-508 blocker-agent-resolution-rate", async () => {
   runMigrations();
   const ws = "barr-" + Date.now().toString(36);
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/blocker-agent-resolution-rate`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/analytics/blocker-agent-resolution-rate`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const data = res.json();
   assert.ok(Array.isArray(data));
   await app.close();
 });
-
 
 // T-509 claim-scope-character-distribution
 test("F-509 claim-scope-character-distribution", async () => {
@@ -14125,8 +17808,17 @@ test("F-509 claim-scope-character-distribution", async () => {
   runMigrations();
   const ws = "cscd-" + Date.now().toString(36);
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/claim-scope-character-distribution`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/analytics/claim-scope-character-distribution`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = res.json();
   assert.ok("total_scopes" in body);
@@ -14139,13 +17831,16 @@ test("F-510 workspace-blocker-density", async () => {
   const app = buildApp();
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  const res = await app.inject({ method: "GET", url: "/api/v1/analytics/workspace-blocker-density", headers: auth });
+  const res = await app.inject({
+    method: "GET",
+    url: "/api/v1/analytics/workspace-blocker-density",
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const data = res.json();
   assert.ok(Array.isArray(data));
   await app.close();
 });
-
 
 // T-511 agent-capability-overlap
 test("F-511 agent-capability-overlap", async () => {
@@ -14153,8 +17848,17 @@ test("F-511 agent-capability-overlap", async () => {
   runMigrations();
   const ws = "aco-" + Date.now().toString(36);
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/agent-capability-overlap`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/analytics/agent-capability-overlap`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = res.json();
   assert.ok("total_pairs" in body);
@@ -14168,8 +17872,17 @@ test("F-512 handoff-retry-rate", async () => {
   runMigrations();
   const ws = "hrr-" + Date.now().toString(36);
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/handoff-retry-rate`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/analytics/handoff-retry-rate`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = res.json();
   assert.ok("retry_rate" in body);
@@ -14177,15 +17890,23 @@ test("F-512 handoff-retry-rate", async () => {
   await app.close();
 });
 
-
 // T-513 blocker-resolution-speed-ranking
 test("F-513 blocker-resolution-speed-ranking", async () => {
   const app = buildApp();
   runMigrations();
   const ws = "brsr-" + Date.now().toString(36);
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/blocker-resolution-speed-ranking`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/analytics/blocker-resolution-speed-ranking`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   assert.ok(Array.isArray(res.json()));
   await app.close();
@@ -14197,8 +17918,17 @@ test("F-514 handoff-context-key-frequency", async () => {
   runMigrations();
   const ws = "hckf-" + Date.now().toString(36);
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/handoff-context-key-frequency`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/analytics/handoff-context-key-frequency`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = res.json();
   assert.ok("keys" in body);
@@ -14206,13 +17936,16 @@ test("F-514 handoff-context-key-frequency", async () => {
   await app.close();
 });
 
-
 // T-515 workspace-agent-density
 test("F-515 workspace-agent-density", async () => {
   const app = buildApp();
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  const res = await app.inject({ method: "GET", url: "/api/v1/analytics/workspace-agent-density", headers: auth });
+  const res = await app.inject({
+    method: "GET",
+    url: "/api/v1/analytics/workspace-agent-density",
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   assert.ok(Array.isArray(res.json()));
   await app.close();
@@ -14224,13 +17957,21 @@ test("F-516 claim-renewal-trend", async () => {
   runMigrations();
   const ws = "crt-" + Date.now().toString(36);
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/claim-renewal-trend`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/analytics/claim-renewal-trend`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   assert.ok(Array.isArray(res.json()));
   await app.close();
 });
-
 
 // T-517 blocker-severity-trend
 test("F-517 blocker-severity-trend", async () => {
@@ -14238,8 +17979,17 @@ test("F-517 blocker-severity-trend", async () => {
   runMigrations();
   const ws = "bst-" + Date.now().toString(36);
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/blocker-severity-trend`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/analytics/blocker-severity-trend`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   assert.ok(Array.isArray(res.json()));
   await app.close();
@@ -14251,13 +18001,21 @@ test("F-518 handoff-template-popularity", async () => {
   runMigrations();
   const ws = "htp-" + Date.now().toString(36);
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/handoff-template-popularity`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/analytics/handoff-template-popularity`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   assert.ok(Array.isArray(res.json()));
   await app.close();
 });
-
 
 // T-519 agent-registration-daily
 test("F-519 agent-registration-daily", async () => {
@@ -14265,8 +18023,17 @@ test("F-519 agent-registration-daily", async () => {
   runMigrations();
   const ws = "ard-" + Date.now().toString(36);
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/agent-registration-daily`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/analytics/agent-registration-daily`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   assert.ok(Array.isArray(res.json()));
   await app.close();
@@ -14278,8 +18045,17 @@ test("F-520 blocker-deadline-compliance", async () => {
   runMigrations();
   const ws = "bdc-" + Date.now().toString(36);
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/blocker-deadline-compliance`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/analytics/blocker-deadline-compliance`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = res.json();
   assert.ok("compliance_rate" in body);
@@ -14287,13 +18063,16 @@ test("F-520 blocker-deadline-compliance", async () => {
   await app.close();
 });
 
-
 // T-521 workspace-creation-trend
 test("F-521 workspace-creation-trend", async () => {
   const app = buildApp();
   runMigrations();
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  const res = await app.inject({ method: "GET", url: "/api/v1/analytics/workspace-creation-trend", headers: auth });
+  const res = await app.inject({
+    method: "GET",
+    url: "/api/v1/analytics/workspace-creation-trend",
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   assert.ok(Array.isArray(res.json()));
   await app.close();
@@ -14305,8 +18084,17 @@ test("F-522 claim-scope-word-frequency", async () => {
   runMigrations();
   const ws = "cswf-" + Date.now().toString(36);
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/claim-scope-word-frequency`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/analytics/claim-scope-word-frequency`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = res.json();
   assert.ok("words" in body);
@@ -14314,15 +18102,23 @@ test("F-522 claim-scope-word-frequency", async () => {
   await app.close();
 });
 
-
 // T-523 handoff-status-daily
 test("F-523 handoff-status-daily", async () => {
   const app = buildApp();
   runMigrations();
   const ws = "hsd-" + Date.now().toString(36);
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/handoff-status-daily`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/analytics/handoff-status-daily`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   assert.ok(Array.isArray(res.json()));
   await app.close();
@@ -14334,13 +18130,229 @@ test("F-524 agent-model-popularity", async () => {
   runMigrations();
   const ws = "amp-" + Date.now().toString(36);
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/agent-model-popularity`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/analytics/agent-model-popularity`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   assert.ok(Array.isArray(res.json()));
   await app.close();
 });
 
+// T-525 update agent task status
+test("F-525 update agent task status", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "uts-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  const createRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/a1/tasks`,
+    headers: auth,
+    payload: { title: "Fix bug" },
+  });
+  assert.strictEqual(createRes.statusCode, 201);
+  const taskId = createRes.json().task_id;
+  const patchRes = await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/agents/a1/tasks/${taskId}`,
+    headers: auth,
+    payload: { status: "in_progress" },
+  });
+  assert.strictEqual(patchRes.statusCode, 200);
+  assert.strictEqual(patchRes.json().ok, true);
+  const listRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/a1/tasks?status=in_progress`,
+    headers: auth,
+  });
+  assert.strictEqual(listRes.json().data.length, 1);
+  assert.strictEqual(listRes.json().data[0].status, "in_progress");
+  // update not-found
+  const notFoundRes = await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/agents/a1/tasks/tsk_nonexistent`,
+    headers: auth,
+    payload: { status: "completed" },
+  });
+  assert.strictEqual(notFoundRes.statusCode, 404);
+  // empty update
+  const emptyRes = await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/agents/a1/tasks/${taskId}`,
+    headers: auth,
+    payload: {},
+  });
+  assert.strictEqual(emptyRes.statusCode, 400);
+  await app.close();
+});
+
+// T-526 delete agent task
+test("F-526 delete agent task", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "dtsk-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  const createRes = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/a1/tasks`,
+    headers: auth,
+    payload: { title: "To delete" },
+  });
+  const taskId = createRes.json().task_id;
+  const delRes = await app.inject({
+    method: "DELETE",
+    url: `/api/v1/workspaces/${ws}/agents/a1/tasks/${taskId}`,
+    headers: auth,
+  });
+  assert.strictEqual(delRes.statusCode, 200);
+  assert.strictEqual(delRes.json().ok, true);
+  const listRes = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/a1/tasks`,
+    headers: auth,
+  });
+  assert.strictEqual(listRes.json().data.length, 0);
+  // delete not-found
+  const notFoundRes = await app.inject({
+    method: "DELETE",
+    url: `/api/v1/workspaces/${ws}/agents/a1/tasks/tsk_nonexistent`,
+    headers: auth,
+  });
+  assert.strictEqual(notFoundRes.statusCode, 404);
+  await app.close();
+});
+
+// T-527 claim circular dependency detection
+test("F-527 claim circular dependency detection", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "ccd-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  const c1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "file-a", paths: ["src/a.ts"] },
+  });
+  assert.strictEqual(c1.statusCode, 201);
+  const claim1Id = c1.json().claim_id;
+  const c2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "file-b", paths: ["src/b.ts"], depends_on: [claim1Id] },
+  });
+  assert.strictEqual(c2.statusCode, 201);
+  const claim2Id = c2.json().claim_id;
+  // c3 -> c2 -> c1, no cycle — should succeed
+  const c3 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "file-c", paths: ["src/c.ts"], depends_on: [claim2Id] },
+  });
+  assert.strictEqual(c3.statusCode, 201);
+  // normal dep — no self-ref
+  const c4 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "file-d", paths: ["src/d.ts"] },
+  });
+  assert.strictEqual(c4.statusCode, 201);
+  const claim4Id = c4.json().claim_id;
+  const depOnC4 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "a1", scope: "file-e", paths: ["src/e.ts"], depends_on: [claim4Id] },
+  });
+  assert.strictEqual(depOnC4.statusCode, 201);
+  await app.close();
+});
+
+// T-528 workspace health score
+test("F-528 workspace health score", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "whs-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/health-score-detailed`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  const body = res.json();
+  assert.ok("overall" in body);
+  assert.ok("components" in body);
+  assert.ok("raw" in body);
+  assert.strictEqual(body.workspace, ws);
+  assert.strictEqual(typeof body.overall, "number");
+  assert.ok(body.overall >= 0 && body.overall <= 100);
+  assert.ok("agent_health" in body.components);
+  assert.ok("claim_health" in body.components);
+  assert.ok("blocker_health" in body.components);
+  assert.ok("handoff_health" in body.components);
+  // not found workspace
+  const notFoundRes = await app.inject({
+    method: "GET",
+    url: "/api/v1/workspaces/nonexistent-ws/health-score-detailed",
+    headers: auth,
+  });
+  assert.strictEqual(notFoundRes.statusCode, 404);
+  await app.close();
+});
 
 // T-525 blocker-created-hourly
 test("F-525 blocker-created-hourly", async () => {
@@ -14348,8 +18360,17 @@ test("F-525 blocker-created-hourly", async () => {
   runMigrations();
   const ws = "bch-" + Date.now().toString(36);
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/blocker-created-hourly`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/analytics/blocker-created-hourly`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   assert.ok(Array.isArray(res.json()));
   await app.close();
@@ -14361,12 +18382,20 @@ test("F-526 handoff-avg-context-size", async () => {
   runMigrations();
   const ws = "hacs-" + Date.now().toString(36);
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/handoff-avg-context-size`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/analytics/handoff-avg-context-size`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   const body = res.json();
   assert.ok("avg_size" in body);
   assert.ok("total" in body);
   await app.close();
 });
-

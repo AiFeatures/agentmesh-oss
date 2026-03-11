@@ -1167,6 +1167,116 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  /* ── F-525  update agent task status ────────────────────── */
+  app.patch(
+    "/api/v1/workspaces/:workspace/agents/:agentId/tasks/:taskId",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            status: { type: "string", enum: ["pending", "in_progress", "completed", "cancelled"] },
+            title: { type: "string", minLength: 1, maxLength: 256 },
+            description: { type: "string", maxLength: 2000 },
+            priority: { type: "string", enum: ["low", "normal", "high", "critical"] },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, agentId, taskId } = request.params as {
+        workspace: string;
+        agentId: string;
+        taskId: string;
+      };
+      const body = request.body as {
+        status?: string;
+        title?: string;
+        description?: string;
+        priority?: string;
+      };
+      const existing = db
+        .prepare(
+          "SELECT task_id FROM agent_tasks WHERE task_id = ? AND agent_id = ? AND workspace_id = ?",
+        )
+        .get(taskId, agentId, workspace);
+      if (!existing) return reply.code(404).send({ error: "Task not found" });
+
+      const sets: string[] = [];
+      const params: unknown[] = [];
+      if (body.status) {
+        sets.push("status = ?");
+        params.push(body.status);
+      }
+      if (body.title) {
+        sets.push("title = ?");
+        params.push(body.title);
+      }
+      if (body.description !== undefined) {
+        sets.push("description = ?");
+        params.push(body.description);
+      }
+      if (body.priority) {
+        sets.push("priority = ?");
+        params.push(body.priority);
+      }
+      if (sets.length === 0) return reply.code(400).send({ error: "No fields to update" });
+      sets.push("updated_at = CURRENT_TIMESTAMP");
+      params.push(taskId, agentId, workspace);
+      db.prepare(
+        `UPDATE agent_tasks SET ${sets.join(", ")} WHERE task_id = ? AND agent_id = ? AND workspace_id = ?`,
+      ).run(...params);
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        actorId: agentId,
+        action: "task.update",
+        entityType: "task",
+        entityId: taskId,
+        requestId: request.id,
+      });
+      broadcast("task.updated", { workspace, agentId, taskId, ...body });
+      return reply.send({ ok: true });
+    },
+  );
+
+  /* ── F-526  delete agent task ───────────────────────────── */
+  app.delete(
+    "/api/v1/workspaces/:workspace/agents/:agentId/tasks/:taskId",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, agentId, taskId } = request.params as {
+        workspace: string;
+        agentId: string;
+        taskId: string;
+      };
+      const existing = db
+        .prepare(
+          "SELECT task_id FROM agent_tasks WHERE task_id = ? AND agent_id = ? AND workspace_id = ?",
+        )
+        .get(taskId, agentId, workspace);
+      if (!existing) return reply.code(404).send({ error: "Task not found" });
+
+      db.prepare(
+        "DELETE FROM agent_tasks WHERE task_id = ? AND agent_id = ? AND workspace_id = ?",
+      ).run(taskId, agentId, workspace);
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        actorId: agentId,
+        action: "task.delete",
+        entityType: "task",
+        entityId: taskId,
+        requestId: request.id,
+      });
+      broadcast("task.deleted", { workspace, agentId, taskId });
+      return reply.send({ ok: true });
+    },
+  );
+
   /* ── F-108  agent dependency graph ──────────────────── */
   app.get(
     "/api/v1/workspaces/:workspace/agents/dependency-graph",
