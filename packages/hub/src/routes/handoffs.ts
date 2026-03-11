@@ -3484,4 +3484,26 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ total_handoffs_with_context: rows.length, keys: sorted });
     },
   );
+
+  // F-518 handoff-template-popularity
+  app.get<{ Params: { workspaceId: string } }>(
+    "/api/v1/workspaces/:workspaceId/analytics/handoff-template-popularity",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspaceId } = req.params;
+      const rows = db
+        .prepare(
+          `SELECT ht.template_id, ht.name,
+                  COUNT(h.handoff_id) AS usage_count
+           FROM handoff_templates ht
+           LEFT JOIN handoffs h ON h.workspace_id = ht.workspace_id
+             AND h.summary LIKE '%' || ht.name || '%'
+           WHERE ht.workspace_id = ?
+           GROUP BY ht.template_id
+           ORDER BY usage_count DESC`,
+        )
+        .all(workspaceId) as any[];
+      return reply.send(rows);
+    },
+  );
 };

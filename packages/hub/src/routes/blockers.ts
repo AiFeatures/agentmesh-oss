@@ -3200,4 +3200,25 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send(rows);
     },
   );
+
+  // F-517 blocker-severity-trend
+  app.get<{ Params: { workspaceId: string } }>(
+    "/api/v1/workspaces/:workspaceId/analytics/blocker-severity-trend",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspaceId } = req.params;
+      const rows = db
+        .prepare(
+          `SELECT DATE(created_at) AS day, severity,
+                  COUNT(*) AS count
+           FROM blockers
+           WHERE workspace_id = ?
+           GROUP BY day, severity
+           ORDER BY day DESC
+           LIMIT 100`,
+        )
+        .all(workspaceId) as any[];
+      return reply.send(rows);
+    },
+  );
 };

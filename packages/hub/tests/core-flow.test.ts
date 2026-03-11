@@ -14231,3 +14231,30 @@ test("F-516 claim-renewal-trend", async () => {
   await app.close();
 });
 
+
+// T-517 blocker-severity-trend
+test("F-517 blocker-severity-trend", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "bst-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/blocker-severity-trend`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json()));
+  await app.close();
+});
+
+// T-518 handoff-template-popularity
+test("F-518 handoff-template-popularity", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "htp-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/handoff-template-popularity`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json()));
+  await app.close();
+});
+
