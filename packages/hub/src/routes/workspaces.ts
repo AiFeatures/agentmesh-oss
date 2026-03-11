@@ -3379,4 +3379,23 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send(rows);
     },
   );
+
+  // F-515 workspace-agent-density
+  app.get(
+    "/api/v1/analytics/workspace-agent-density",
+    { preHandler: app.authGuard },
+    async (_req, reply) => {
+      const rows = db
+        .prepare(
+          `SELECT w.workspace_id, w.display_name,
+                  COUNT(a.agent_id) AS agent_count
+           FROM workspaces w
+           LEFT JOIN agents a ON a.workspace_id = w.workspace_id
+           GROUP BY w.workspace_id
+           ORDER BY agent_count DESC`,
+        )
+        .all() as any[];
+      return reply.send(rows);
+    },
+  );
 };

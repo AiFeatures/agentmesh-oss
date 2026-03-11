@@ -3446,4 +3446,26 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ total_scopes: rows.length, character_distribution: sorted });
     },
   );
+
+  // F-516 claim-renewal-trend
+  app.get<{ Params: { workspaceId: string } }>(
+    "/api/v1/workspaces/:workspaceId/analytics/claim-renewal-trend",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspaceId } = req.params;
+      const rows = db
+        .prepare(
+          `SELECT DATE(crh.new_expires_at) AS day,
+                  COUNT(*) AS renewal_count
+           FROM claim_renewal_history crh
+           JOIN claims c ON c.claim_id = crh.claim_id
+           WHERE c.workspace_id = ?
+           GROUP BY day
+           ORDER BY day DESC
+           LIMIT 30`,
+        )
+        .all(workspaceId) as any[];
+      return reply.send(rows);
+    },
+  );
 };
