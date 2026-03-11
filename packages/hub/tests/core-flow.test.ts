@@ -14287,3 +14287,30 @@ test("F-520 blocker-deadline-compliance", async () => {
   await app.close();
 });
 
+
+// T-521 workspace-creation-trend
+test("F-521 workspace-creation-trend", async () => {
+  const app = buildApp();
+  runMigrations();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const res = await app.inject({ method: "GET", url: "/api/v1/analytics/workspace-creation-trend", headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json()));
+  await app.close();
+});
+
+// T-522 claim-scope-word-frequency
+test("F-522 claim-scope-word-frequency", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "cswf-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/claim-scope-word-frequency`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = res.json();
+  assert.ok("words" in body);
+  assert.ok(Array.isArray(body.words));
+  await app.close();
+});
+

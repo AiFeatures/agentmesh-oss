@@ -3468,4 +3468,29 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send(rows);
     },
   );
+
+  // F-522 claim-scope-word-frequency
+  app.get<{ Params: { workspaceId: string } }>(
+    "/api/v1/workspaces/:workspaceId/analytics/claim-scope-word-frequency",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspaceId } = req.params;
+      const rows = db
+        .prepare("SELECT scope FROM claims WHERE workspace_id = ?")
+        .all(workspaceId) as any[];
+      const freq: Record<string, number> = {};
+      for (const r of rows) {
+        if (r.scope) {
+          const words = r.scope.split(/[._-]+/);
+          for (const w of words) {
+            if (w) freq[w] = (freq[w] || 0) + 1;
+          }
+        }
+      }
+      const sorted = Object.entries(freq)
+        .map(([word, count]) => ({ word, count }))
+        .sort((a, b) => b.count - a.count);
+      return reply.send({ total_scopes: rows.length, words: sorted });
+    },
+  );
 };
