@@ -3762,4 +3762,45 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-560  claims near expiry
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/near-expiry",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        querystring: {
+          type: "object",
+          properties: {
+            minutes: { type: "integer", minimum: 1, maximum: 10080, default: 30 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { minutes = 30 } = request.query as { minutes?: number };
+      const rows = db
+        .prepare(
+          `SELECT claim_id, agent_id, scope, expires_at, priority
+           FROM claims
+           WHERE workspace_id = ? AND status = 'active'
+           AND expires_at <= datetime('now', '+' || ? || ' minutes')
+           ORDER BY expires_at ASC`,
+        )
+        .all(workspace, minutes) as Array<{
+        claim_id: string;
+        agent_id: string;
+        scope: string;
+        expires_at: string;
+        priority: string;
+      }>;
+      return reply.send({
+        workspace,
+        expiry_window_minutes: minutes,
+        claims: rows,
+        count: rows.length,
+      });
+    },
+  );
 };

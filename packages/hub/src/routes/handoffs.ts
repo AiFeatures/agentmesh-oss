@@ -3920,7 +3920,7 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(409).send({ error: `Cannot cancel handoff in '${row.status}' status` });
 
       db.prepare(
-        "UPDATE handoffs SET status = 'cancelled', updated_at = datetime('now') WHERE handoff_id = ?",
+        "UPDATE handoffs SET status = 'rejected', updated_at = datetime('now') WHERE handoff_id = ?",
       ).run(handoffId);
 
       writeAuditLog({
@@ -3931,7 +3931,7 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
         entityType: "handoff",
         entityId: handoffId,
         requestId: request.id,
-        payload: { reason: reason || null },
+        payload: { reason: reason || null, cancel: true },
       });
       broadcast("handoff.cancelled", { workspace, handoff_id: handoffId, reason: reason || null });
       return reply.send({ handoff_id: handoffId, status: "cancelled", reason: reason || null });
@@ -3957,6 +3957,39 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
         workspace,
         queue: rows,
         total_pending: rows.reduce((sum, r) => sum + r.pending_count, 0),
+      });
+    },
+  );
+
+  // F-562  handoff accepted rate
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/accepted-rate",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const row = db
+        .prepare(
+          `SELECT
+            COUNT(*) as total,
+            SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted,
+            SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
+            SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
+           FROM handoffs WHERE workspace_id = ?`,
+        )
+        .get(workspace) as {
+        total: number;
+        accepted: number;
+        rejected: number;
+        pending: number;
+      };
+      const rate = row.total > 0 ? Math.round((row.accepted / row.total) * 10000) / 100 : 0;
+      return reply.send({
+        workspace,
+        total: row.total,
+        accepted: row.accepted,
+        rejected: row.rejected,
+        pending: row.pending,
+        acceptance_rate_percent: rate,
       });
     },
   );

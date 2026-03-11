@@ -3715,4 +3715,50 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-563  workspace bottleneck detection
+  app.get(
+    "/api/v1/workspaces/:workspace/bottleneck-detail",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      // Agents with most pending handoffs
+      const handoffLoad = db
+        .prepare(
+          `SELECT to_agent_id as agent_id, COUNT(*) as pending_handoffs
+           FROM handoffs
+           WHERE workspace_id = ? AND status = 'pending' AND to_agent_id IS NOT NULL
+           GROUP BY to_agent_id
+           ORDER BY pending_handoffs DESC
+           LIMIT 10`,
+        )
+        .all(workspace) as Array<{ agent_id: string; pending_handoffs: number }>;
+      // Agents with most active claims
+      const claimLoad = db
+        .prepare(
+          `SELECT agent_id, COUNT(*) as active_claims
+           FROM claims
+           WHERE workspace_id = ? AND status = 'active'
+           GROUP BY agent_id
+           ORDER BY active_claims DESC
+           LIMIT 10`,
+        )
+        .all(workspace) as Array<{ agent_id: string; active_claims: number }>;
+      // Open blockers by severity
+      const blockerLoad = db
+        .prepare(
+          `SELECT severity, COUNT(*) as count
+           FROM blockers
+           WHERE workspace_id = ? AND status = 'open'
+           GROUP BY severity`,
+        )
+        .all(workspace) as Array<{ severity: string; count: number }>;
+      return reply.send({
+        workspace,
+        handoff_bottlenecks: handoffLoad,
+        claim_heavy_agents: claimLoad,
+        open_blockers_by_severity: blockerLoad,
+      });
+    },
+  );
 };

@@ -3556,4 +3556,67 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-561  blocker reassign
+  app.post(
+    "/api/v1/workspaces/:workspace/blockers/:blockerId/reassign",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["target_agent_id"],
+          properties: {
+            target_agent_id: { type: "string", minLength: 1, maxLength: 128 },
+            reason: { type: "string", maxLength: 1024 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, blockerId } = request.params as { workspace: string; blockerId: string };
+      const { target_agent_id, reason } = request.body as {
+        target_agent_id: string;
+        reason?: string;
+      };
+      const blocker = db
+        .prepare(
+          "SELECT blocker_id, agent_id FROM blockers WHERE blocker_id = ? AND workspace_id = ? AND status = 'open'",
+        )
+        .get(blockerId, workspace) as { blocker_id: string; agent_id: string } | undefined;
+      if (!blocker) return reply.code(404).send({ error: "Open blocker not found" });
+      if (blocker.agent_id === target_agent_id)
+        return reply.code(400).send({ error: "Already assigned to this agent" });
+      const agent = db
+        .prepare("SELECT agent_id FROM agents WHERE agent_id = ? AND workspace_id = ?")
+        .get(target_agent_id, workspace) as { agent_id: string } | undefined;
+      if (!agent) return reply.code(404).send({ error: "Target agent not found" });
+      const prevAgent = blocker.agent_id;
+      db.prepare("UPDATE blockers SET agent_id = ? WHERE blocker_id = ?").run(
+        target_agent_id,
+        blockerId,
+      );
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "system",
+        actorId: "system",
+        action: "blocker.reassign",
+        entityType: "blocker",
+        entityId: blockerId,
+        requestId: request.id,
+        payload: { from: prevAgent, to: target_agent_id, reason: reason || null },
+      });
+      broadcast("blocker.reassigned", {
+        workspace,
+        blockerId,
+        from: prevAgent,
+        to: target_agent_id,
+      });
+      return reply.send({
+        blocker_id: blockerId,
+        previous_agent_id: prevAgent,
+        new_agent_id: target_agent_id,
+      });
+    },
+  );
 };

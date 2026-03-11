@@ -19753,3 +19753,218 @@ test("F-558 workspace data purge", async () => {
   assert.ok(res.json().cutoff_date);
   await app.close();
 });
+
+// T-559 batch update tasks
+test("F-559 batch update tasks", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "wbu-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: "bu-1",
+      display_name: "UpdateAgent",
+      capabilities: ["code"],
+      model: "gpt-4",
+    },
+  });
+  const t1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/bu-1/tasks`,
+    headers: auth,
+    payload: { title: "Task 1" },
+  });
+  const t2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/bu-1/tasks`,
+    headers: auth,
+    payload: { title: "Task 2" },
+  });
+  const res = await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/agents/bu-1/tasks/batch-update`,
+    headers: auth,
+    payload: {
+      updates: [
+        { task_id: t1.json().task_id, title: "Updated 1", status: "completed" },
+        { task_id: t2.json().task_id, status: "in_progress" },
+      ],
+    },
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().updated, 2);
+  await app.close();
+});
+
+// T-560 claims near expiry
+test("F-560 claims near expiry", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "wne-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: "ne-1",
+      display_name: "ExpiryAgent",
+      capabilities: ["code"],
+      model: "gpt-4",
+    },
+  });
+  // Create a claim with a short TTL (30s minimum)
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "ne-1", scope: "expiry-test", paths: ["src/x.ts"], ttl_seconds: 30 },
+  });
+  // Check near-expiry with a large window (should include our claim)
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/near-expiry?minutes=60`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().claims));
+  assert.strictEqual(res.json().claims.length, 1);
+  await app.close();
+});
+
+// T-561 blocker reassign
+test("F-561 blocker reassign", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "wbr-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "br-a1", display_name: "Agent1", capabilities: ["code"], model: "gpt-4" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "br-a2", display_name: "Agent2", capabilities: ["code"], model: "gpt-4" },
+  });
+  const b = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "br-a1", title: "Reassign me", severity: "high" },
+  });
+  assert.strictEqual(b.statusCode, 201);
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers/${b.json().blocker_id}/reassign`,
+    headers: auth,
+    payload: { target_agent_id: "br-a2", reason: "Better suited" },
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().previous_agent_id, "br-a1");
+  assert.strictEqual(res.json().new_agent_id, "br-a2");
+  await app.close();
+});
+
+// T-562 handoff accepted rate
+test("F-562 handoff accepted rate", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "war-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "ar-from", display_name: "From", capabilities: ["code"], model: "gpt-4" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "ar-to", display_name: "To", capabilities: ["review"], model: "gpt-4" },
+  });
+  // Create and accept a handoff
+  const h = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "ar-from", to_agent_id: "ar-to", summary: "Rate test" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs/${h.json().handoff_id}/accept`,
+    headers: auth,
+    payload: {},
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/accepted-rate`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().total, 1);
+  assert.strictEqual(res.json().accepted, 1);
+  assert.strictEqual(res.json().acceptance_rate_percent, 100);
+  await app.close();
+});
+
+// T-563 workspace bottleneck report
+test("F-563 workspace bottleneck report", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "wbn-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "bn-1", display_name: "BN Agent", capabilities: ["code"], model: "gpt-4" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/bottleneck-detail`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().handoff_bottlenecks));
+  assert.ok(Array.isArray(res.json().claim_heavy_agents));
+  assert.ok(Array.isArray(res.json().open_blockers_by_severity));
+  await app.close();
+});

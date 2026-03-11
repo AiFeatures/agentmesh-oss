@@ -4597,4 +4597,77 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-559  batch update task metadata
+  app.patch(
+    "/api/v1/workspaces/:workspace/agents/:agentId/tasks/batch-update",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["updates"],
+          properties: {
+            updates: {
+              type: "array",
+              minItems: 1,
+              maxItems: 50,
+              items: {
+                type: "object",
+                required: ["task_id"],
+                properties: {
+                  task_id: { type: "string", minLength: 1 },
+                  title: { type: "string", minLength: 1, maxLength: 512 },
+                  status: {
+                    type: "string",
+                    enum: ["pending", "in_progress", "completed", "cancelled"],
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as { workspace: string; agentId: string };
+      const { updates } = request.body as {
+        updates: Array<{ task_id: string; title?: string; status?: string }>;
+      };
+      let updated = 0;
+      for (const u of updates) {
+        const sets: string[] = [];
+        const vals: unknown[] = [];
+        if (u.title) {
+          sets.push("title = ?");
+          vals.push(u.title);
+        }
+        if (u.status) {
+          sets.push("status = ?");
+          vals.push(u.status);
+        }
+        if (sets.length === 0) continue;
+        sets.push("updated_at = datetime('now')");
+        vals.push(u.task_id, agentId, workspace);
+        const r = db
+          .prepare(
+            `UPDATE agent_tasks SET ${sets.join(", ")} WHERE task_id = ? AND agent_id = ? AND workspace_id = ?`,
+          )
+          .run(...vals);
+        updated += r.changes;
+      }
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        actorId: agentId,
+        action: "task.batch_update",
+        entityType: "task",
+        entityId: updates[0].task_id,
+        requestId: request.id,
+        payload: { count: updated },
+      });
+      broadcast("task.batch_updated", { workspace, agentId, updated });
+      return reply.send({ updated });
+    },
+  );
 };
