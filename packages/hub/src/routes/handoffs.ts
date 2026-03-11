@@ -3679,4 +3679,67 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-535  handoff batch reject ────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/handoffs/batch-reject",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["handoff_ids"],
+          properties: {
+            handoff_ids: { type: "array", items: { type: "string" }, maxItems: 50 },
+            reason: { type: "string", maxLength: 1000 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { handoff_ids, reason } = request.body as {
+        handoff_ids: string[];
+        reason?: string;
+      };
+
+      const results: Array<{ handoff_id: string; rejected: boolean }> = [];
+      for (const hid of handoff_ids) {
+        const row = db
+          .prepare(
+            "SELECT handoff_id, status FROM handoffs WHERE handoff_id = ? AND workspace_id = ?",
+          )
+          .get(hid, workspace) as { handoff_id: string; status: string } | undefined;
+
+        if (!row || row.status !== "pending") {
+          results.push({ handoff_id: hid, rejected: false });
+          continue;
+        }
+
+        const ok = updateHandoffStatus(hid, "rejected");
+        if (ok) {
+          writeAuditLog({
+            workspaceId: workspace,
+            actorType: "agent",
+            action: "handoff.reject",
+            entityType: "handoff",
+            entityId: hid,
+            requestId: request.id,
+            payload: { reason: reason ?? null },
+          });
+          broadcast("handoffs.updated", {
+            workspace,
+            handoff_id: hid,
+            status: "rejected",
+          });
+        }
+        results.push({ handoff_id: hid, rejected: ok });
+      }
+
+      return reply.send({
+        rejected: results.filter((r) => r.rejected).length,
+        results,
+      });
+    },
+  );
 };

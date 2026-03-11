@@ -77,6 +77,11 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
         priority: body.priority,
       });
 
+      if ("conflict" in claim) {
+        broadcast("claims.conflict", { workspace, ...claim.conflict, requestedBy: body.agent_id });
+        return reply.code(409).send({ error: "Claim conflict", ...claim.conflict });
+      }
+
       // F-527 circular dependency detection
       if (body.depends_on?.length) {
         const getDeps = db.prepare(
@@ -112,11 +117,6 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
         for (const depId of body.depends_on) {
           insertDep.run(claim.id, depId);
         }
-      }
-
-      if ("conflict" in claim) {
-        broadcast("claims.conflict", { workspace, ...claim.conflict, requestedBy: body.agent_id });
-        return reply.code(409).send({ error: "Claim conflict", ...claim.conflict });
       }
 
       writeAuditLog({

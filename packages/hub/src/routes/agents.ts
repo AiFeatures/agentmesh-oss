@@ -4185,4 +4185,126 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send(rows);
     },
   );
+
+  /* ── F-534  agent task batch create ─────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/agents/:agentId/tasks/batch",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["tasks"],
+          additionalProperties: false,
+          properties: {
+            tasks: {
+              type: "array",
+              minItems: 1,
+              maxItems: 50,
+              items: {
+                type: "object",
+                required: ["title"],
+                additionalProperties: false,
+                properties: {
+                  title: { type: "string", minLength: 1, maxLength: 256 },
+                  description: { type: "string", maxLength: 2000 },
+                  priority: { type: "string", enum: ["low", "normal", "high", "critical"] },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as { workspace: string; agentId: string };
+      const { tasks } = request.body as {
+        tasks: Array<{ title: string; description?: string; priority?: string }>;
+      };
+      const agent = db
+        .prepare("SELECT agent_id FROM agents WHERE agent_id = ? AND workspace_id = ?")
+        .get(agentId, workspace);
+      if (!agent) return reply.code(404).send({ error: "Agent not found" });
+
+      const insert = db.prepare(
+        "INSERT INTO agent_tasks (task_id, workspace_id, agent_id, title, description, priority) VALUES (?, ?, ?, ?, ?, ?)",
+      );
+      const created: string[] = [];
+      const run = db.transaction(() => {
+        for (const t of tasks) {
+          const id = taskId();
+          insert.run(
+            id,
+            workspace,
+            agentId,
+            t.title,
+            t.description ?? null,
+            t.priority ?? "normal",
+          );
+          created.push(id);
+        }
+      });
+      run();
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        actorId: agentId,
+        action: "task.batch_create",
+        entityType: "task",
+        entityId: created[0],
+        requestId: request.id,
+        payload: { count: created.length },
+      });
+      broadcast("task.batch_created", { workspace, agentId, task_ids: created });
+      return reply.code(201).send({ created: created.length, task_ids: created });
+    },
+  );
+
+  /* ── F-537  agent capability search ─────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/capability-search",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        querystring: {
+          type: "object",
+          required: ["q"],
+          properties: {
+            q: { type: "string", minLength: 1, maxLength: 128 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { q } = request.query as { q: string };
+      const rows = db
+        .prepare(
+          "SELECT agent_id, display_name, capabilities, status FROM agents WHERE workspace_id = ?",
+        )
+        .all(workspace) as Array<{
+        agent_id: string;
+        display_name: string;
+        capabilities: string;
+        status: string;
+      }>;
+      const needle = q.toLowerCase();
+      const matches = rows
+        .map((r) => {
+          const caps: string[] = JSON.parse(r.capabilities || "[]");
+          const matched = caps.filter((c) => c.toLowerCase().includes(needle));
+          return matched.length > 0
+            ? {
+                agent_id: r.agent_id,
+                display_name: r.display_name,
+                status: r.status,
+                matched_capabilities: matched,
+              }
+            : null;
+        })
+        .filter(Boolean);
+      return reply.send({ query: q, total: matches.length, agents: matches });
+    },
+  );
 };

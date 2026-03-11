@@ -3586,4 +3586,43 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace: ws, ...row });
     },
   );
+
+  /* ── F-538  workspace activity feed ─────────────────────── */
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/activity-timeline",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const ws = req.params.workspace;
+      const { limit: rawLimit } = req.query as { limit?: string };
+      const limit = Math.min(100, Math.max(1, Number(rawLimit) || 20));
+
+      const rows = db
+        .prepare(
+          `SELECT action, entity_type, entity_id, actor_id, actor_type, created_at, payload
+           FROM audit_log
+           WHERE workspace_id = ?
+           ORDER BY created_at DESC
+           LIMIT ?`,
+        )
+        .all(ws, limit) as Array<{
+        action: string;
+        entity_type: string;
+        entity_id: string | null;
+        actor_id: string | null;
+        actor_type: string;
+        created_at: string;
+        payload: string | null;
+      }>;
+
+      const feed = rows.map((r) => ({
+        action: r.action,
+        entity_type: r.entity_type,
+        entity_id: r.entity_id,
+        actor_id: r.actor_id,
+        actor_type: r.actor_type,
+        timestamp: r.created_at,
+      }));
+      return reply.send({ workspace: ws, total: feed.length, feed });
+    },
+  );
 };

@@ -3267,4 +3267,84 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send(rows);
     },
   );
+
+  /* ── F-536  blocker batch create ────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/blockers/batch",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["blockers"],
+          additionalProperties: false,
+          properties: {
+            blockers: {
+              type: "array",
+              minItems: 1,
+              maxItems: 25,
+              items: {
+                type: "object",
+                required: ["agent_id", "title", "severity"],
+                additionalProperties: false,
+                properties: {
+                  agent_id: { type: "string", minLength: 2, maxLength: 128 },
+                  title: { type: "string", minLength: 1, maxLength: 300 },
+                  details: { type: "string", maxLength: 5000 },
+                  severity: { type: "string", enum: ["low", "medium", "high", "critical"] },
+                  deadline_seconds: { type: "integer", minimum: 60, maximum: 604800 },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { blockers: items } = request.body as {
+        blockers: Array<{
+          agent_id: string;
+          title: string;
+          details?: string;
+          severity: "low" | "medium" | "high" | "critical";
+          deadline_seconds?: number;
+        }>;
+      };
+
+      // Validate all agents exist first
+      const agentIds = [...new Set(items.map((b) => b.agent_id))];
+      for (const aid of agentIds) {
+        const exists = db
+          .prepare("SELECT agent_id FROM agents WHERE agent_id = ? AND workspace_id = ?")
+          .get(aid, workspace);
+        if (!exists) return reply.code(404).send({ error: `Agent ${aid} not found` });
+      }
+
+      const created: string[] = [];
+      for (const b of items) {
+        const id = createBlocker({
+          workspaceId: workspace,
+          agentId: b.agent_id,
+          title: b.title,
+          details: b.details,
+          severity: b.severity,
+          deadlineSeconds: b.deadline_seconds,
+        });
+        created.push(id);
+      }
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        action: "blocker.batch_create",
+        entityType: "blocker",
+        entityId: created[0],
+        requestId: request.id,
+        payload: { count: created.length },
+      });
+      broadcast("blockers.batch_created", { workspace, blocker_ids: created });
+      return reply.code(201).send({ created: created.length, blocker_ids: created });
+    },
+  );
 };

@@ -18603,3 +18603,254 @@ test("F-533 workspace task summary", async () => {
   assert.ok("critical_count" in body);
   await app.close();
 });
+
+// T-534 agent task batch create
+test("F-534 agent task batch create", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "wbt-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: "bat-1",
+      display_name: "Batch Agent",
+      capabilities: ["code"],
+      model: "gpt-4",
+    },
+  });
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/bat-1/tasks/batch`,
+    headers: auth,
+    payload: {
+      tasks: [
+        { title: "Task A", priority: "high" },
+        { title: "Task B", description: "desc-b" },
+        { title: "Task C", priority: "critical" },
+      ],
+    },
+  });
+  assert.strictEqual(res.statusCode, 201);
+  const body = res.json();
+  assert.strictEqual(body.created, 3);
+  assert.strictEqual(body.task_ids.length, 3);
+  // Verify tasks exist
+  const list = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/bat-1/tasks`,
+    headers: auth,
+  });
+  assert.strictEqual(list.json().data.length, 3);
+  await app.close();
+});
+
+// T-535 handoff batch reject
+test("F-535 handoff batch reject", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "wbr-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: "rj-from",
+      display_name: "Rejector From",
+      capabilities: ["code"],
+      model: "gpt-4",
+    },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: "rj-to",
+      display_name: "Rejector To",
+      capabilities: ["review"],
+      model: "gpt-4",
+    },
+  });
+  // Create two handoffs
+  const h1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "rj-from", to_agent_id: "rj-to", summary: "reject test 1" },
+  });
+  const h2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "rj-from", to_agent_id: "rj-to", summary: "reject test 2" },
+  });
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs/batch-reject`,
+    headers: auth,
+    payload: {
+      handoff_ids: [h1.json().handoff_id, h2.json().handoff_id],
+      reason: "Not needed",
+    },
+  });
+  assert.strictEqual(res.statusCode, 200);
+  const body = res.json();
+  assert.strictEqual(body.rejected, 2);
+  assert.strictEqual(body.results.length, 2);
+  await app.close();
+});
+
+// T-536 blocker batch create
+test("F-536 blocker batch create", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "wbc-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: "bc-1",
+      display_name: "Blocker Agent",
+      capabilities: ["code"],
+      model: "gpt-4",
+    },
+  });
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers/batch`,
+    headers: auth,
+    payload: {
+      blockers: [
+        { agent_id: "bc-1", title: "Dep missing", severity: "high" },
+        {
+          agent_id: "bc-1",
+          title: "Config broken",
+          severity: "critical",
+          details: "env var missing",
+        },
+      ],
+    },
+  });
+  assert.strictEqual(res.statusCode, 201);
+  const body = res.json();
+  assert.strictEqual(body.created, 2);
+  assert.strictEqual(body.blocker_ids.length, 2);
+  await app.close();
+});
+
+// T-537 agent capability search
+test("F-537 agent capability search", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "wcs-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: "cs-1",
+      display_name: "Coder",
+      capabilities: ["code-review", "code-gen"],
+      model: "gpt-4",
+    },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: "cs-2",
+      display_name: "Tester",
+      capabilities: ["testing", "qa"],
+      model: "gpt-4",
+    },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/capability-search?q=code`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  const body = res.json();
+  assert.strictEqual(body.query, "code");
+  assert.strictEqual(body.total, 1);
+  assert.strictEqual(body.agents[0].agent_id, "cs-1");
+  assert.strictEqual(body.agents[0].matched_capabilities.length, 2);
+  await app.close();
+});
+
+// T-538 workspace activity feed
+test("F-538 workspace activity feed", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "waf-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: "af-1",
+      display_name: "Feed Agent",
+      capabilities: ["code"],
+      model: "gpt-4",
+    },
+  });
+  // Create a blocker to generate audit log entries
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "af-1", title: "Feed blocker", severity: "low" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/activity-timeline`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  const body = res.json();
+  assert.strictEqual(body.workspace, ws);
+  assert.ok(body.feed.length > 0);
+  assert.ok("action" in body.feed[0]);
+  assert.ok("entity_type" in body.feed[0]);
+  assert.ok("timestamp" in body.feed[0]);
+  await app.close();
+});
