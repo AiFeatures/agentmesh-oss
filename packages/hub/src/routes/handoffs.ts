@@ -3742,4 +3742,54 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  /* ── F-543  handoff timeout update ─────────────────────── */
+  app.patch(
+    "/api/v1/workspaces/:workspace/handoffs/:handoffId/timeout",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["timeout_seconds"],
+          additionalProperties: false,
+          properties: {
+            timeout_seconds: { type: "integer", minimum: 60, maximum: 604800 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, handoffId } = request.params as {
+        workspace: string;
+        handoffId: string;
+      };
+      const { timeout_seconds } = request.body as { timeout_seconds: number };
+
+      const handoff = db
+        .prepare(
+          "SELECT handoff_id, status FROM handoffs WHERE handoff_id = ? AND workspace_id = ?",
+        )
+        .get(handoffId, workspace) as { handoff_id: string; status: string } | undefined;
+      if (!handoff) return reply.code(404).send({ error: "Handoff not found" });
+      if (handoff.status !== "pending")
+        return reply.code(400).send({ error: "Can only update timeout on pending handoffs" });
+
+      db.prepare(
+        "UPDATE handoffs SET timeout_seconds = ?, expires_at = datetime(created_at, '+' || ? || ' seconds'), updated_at = CURRENT_TIMESTAMP WHERE handoff_id = ? AND workspace_id = ?",
+      ).run(timeout_seconds, timeout_seconds, handoffId, workspace);
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "system",
+        action: "handoff.timeout_update",
+        entityType: "handoff",
+        entityId: handoffId,
+        requestId: request.id,
+        payload: { timeout_seconds },
+      });
+      broadcast("handoff.timeout_updated", { workspace, handoffId, timeout_seconds });
+      return reply.send({ ok: true, handoff_id: handoffId, timeout_seconds });
+    },
+  );
 };

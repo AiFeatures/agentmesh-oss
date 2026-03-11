@@ -18854,3 +18854,198 @@ test("F-538 workspace activity feed", async () => {
   assert.ok("timestamp" in body.feed[0]);
   await app.close();
 });
+
+// T-539 task reassignment
+test("F-539 task reassignment", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "wtr-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a-src", display_name: "Source", capabilities: ["code"], model: "gpt-4" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a-tgt", display_name: "Target", capabilities: ["code"], model: "gpt-4" },
+  });
+  const task = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/a-src/tasks`,
+    headers: auth,
+    payload: { title: "Reassign me" },
+  });
+  const taskId = task.json().task_id;
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/a-src/tasks/${taskId}/reassign`,
+    headers: auth,
+    payload: { target_agent_id: "a-tgt" },
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().to, "a-tgt");
+  // Verify task is now under target agent
+  const tgtTasks = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/a-tgt/tasks`,
+    headers: auth,
+  });
+  assert.strictEqual(tgtTasks.json().data.length, 1);
+  assert.strictEqual(tgtTasks.json().data[0].task_id, taskId);
+  await app.close();
+});
+
+// T-540 task batch update priority
+test("F-540 task batch update priority", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "wbp-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: "bp-1",
+      display_name: "PrioAgent",
+      capabilities: ["code"],
+      model: "gpt-4",
+    },
+  });
+  const t1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/bp-1/tasks`,
+    headers: auth,
+    payload: { title: "T1" },
+  });
+  const t2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/bp-1/tasks`,
+    headers: auth,
+    payload: { title: "T2" },
+  });
+  const res = await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/agents/bp-1/tasks/batch-priority`,
+    headers: auth,
+    payload: { task_ids: [t1.json().task_id, t2.json().task_id], priority: "critical" },
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().updated, 2);
+  assert.strictEqual(res.json().priority, "critical");
+  await app.close();
+});
+
+// T-541 blocker stale check
+test("F-541 blocker stale check", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "wsc-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/stale-check`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  const body = res.json();
+  assert.strictEqual(body.workspace, ws);
+  assert.ok("stale_count" in body);
+  assert.ok(Array.isArray(body.blockers));
+  await app.close();
+});
+
+// T-542 claim duplicate detection
+test("F-542 claim duplicate detection", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "wdd-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/duplicate-detect`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  const body = res.json();
+  assert.strictEqual(body.workspace, ws);
+  assert.ok("duplicate_count" in body);
+  assert.ok(Array.isArray(body.duplicates));
+  await app.close();
+});
+
+// T-543 handoff timeout update
+test("F-543 handoff timeout update", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "wtu-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "tu-from", display_name: "From", capabilities: ["code"], model: "gpt-4" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "tu-to", display_name: "To", capabilities: ["review"], model: "gpt-4" },
+  });
+  const h = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: {
+      from_agent_id: "tu-from",
+      to_agent_id: "tu-to",
+      summary: "timeout test",
+      timeout_seconds: 300,
+    },
+  });
+  const hid = h.json().handoff_id;
+  const res = await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/handoffs/${hid}/timeout`,
+    headers: auth,
+    payload: { timeout_seconds: 7200 },
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().ok, true);
+  assert.strictEqual(res.json().timeout_seconds, 7200);
+  await app.close();
+});

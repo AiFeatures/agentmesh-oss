@@ -3522,4 +3522,26 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ total_scopes: rows.length, words: sorted });
     },
   );
+
+  /* ── F-542  claim duplicate detection ──────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/duplicate-detect",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT c1.claim_id AS claim_a, c2.claim_id AS claim_b,
+                  c1.scope, c1.agent_id AS agent_a, c2.agent_id AS agent_b
+           FROM claims c1
+           JOIN claims c2 ON c1.scope = c2.scope AND c1.claim_id < c2.claim_id
+           WHERE c1.workspace_id = ? AND c2.workspace_id = ?
+             AND c1.status = 'active' AND c2.status = 'active'
+           ORDER BY c1.scope
+           LIMIT 100`,
+        )
+        .all(workspace, workspace) as any[];
+      return reply.send({ workspace, duplicate_count: rows.length, duplicates: rows });
+    },
+  );
 };

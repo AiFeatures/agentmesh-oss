@@ -3347,4 +3347,24 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(201).send({ created: created.length, blocker_ids: created });
     },
   );
+
+  /* ── F-541  blocker stale check ──────────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/stale-check",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT blocker_id, agent_id, title, severity, deadline_at, created_at,
+                  ROUND((julianday('now') - julianday(deadline_at)) * 24, 2) AS hours_overdue
+           FROM blockers
+           WHERE workspace_id = ? AND status = 'open' AND deadline_at IS NOT NULL AND deadline_at < datetime('now')
+           ORDER BY deadline_at ASC
+           LIMIT 50`,
+        )
+        .all(workspace) as any[];
+      return reply.send({ workspace, stale_count: rows.length, blockers: rows });
+    },
+  );
 };

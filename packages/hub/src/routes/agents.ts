@@ -4307,4 +4307,111 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ query: q, total: matches.length, agents: matches });
     },
   );
+
+  /* ── F-539  task reassignment ──────────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/agents/:agentId/tasks/:taskId/reassign",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["target_agent_id"],
+          additionalProperties: false,
+          properties: {
+            target_agent_id: { type: "string", minLength: 2, maxLength: 128 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const {
+        workspace,
+        agentId,
+        taskId: tid,
+      } = request.params as {
+        workspace: string;
+        agentId: string;
+        taskId: string;
+      };
+      const { target_agent_id } = request.body as { target_agent_id: string };
+
+      const task = db
+        .prepare(
+          "SELECT task_id, status FROM agent_tasks WHERE task_id = ? AND agent_id = ? AND workspace_id = ?",
+        )
+        .get(tid, agentId, workspace) as { task_id: string; status: string } | undefined;
+      if (!task) return reply.code(404).send({ error: "Task not found" });
+
+      const targetAgent = db
+        .prepare("SELECT agent_id FROM agents WHERE agent_id = ? AND workspace_id = ?")
+        .get(target_agent_id, workspace);
+      if (!targetAgent) return reply.code(404).send({ error: "Target agent not found" });
+
+      if (target_agent_id === agentId)
+        return reply.code(400).send({ error: "Cannot reassign to the same agent" });
+
+      db.prepare(
+        "UPDATE agent_tasks SET agent_id = ?, updated_at = CURRENT_TIMESTAMP WHERE task_id = ? AND workspace_id = ?",
+      ).run(target_agent_id, tid, workspace);
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        actorId: agentId,
+        action: "task.reassign",
+        entityType: "task",
+        entityId: tid,
+        requestId: request.id,
+        payload: { from: agentId, to: target_agent_id },
+      });
+      broadcast("task.reassigned", { workspace, taskId: tid, from: agentId, to: target_agent_id });
+      return reply.send({ ok: true, task_id: tid, from: agentId, to: target_agent_id });
+    },
+  );
+
+  /* ── F-540  task batch update priority ─────────────────────── */
+  app.patch(
+    "/api/v1/workspaces/:workspace/agents/:agentId/tasks/batch-priority",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["task_ids", "priority"],
+          additionalProperties: false,
+          properties: {
+            task_ids: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 50 },
+            priority: { type: "string", enum: ["low", "normal", "high", "critical"] },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as { workspace: string; agentId: string };
+      const { task_ids, priority } = request.body as { task_ids: string[]; priority: string };
+
+      let updated = 0;
+      const stmt = db.prepare(
+        "UPDATE agent_tasks SET priority = ?, updated_at = CURRENT_TIMESTAMP WHERE task_id = ? AND agent_id = ? AND workspace_id = ?",
+      );
+      for (const tid of task_ids) {
+        const result = stmt.run(priority, tid, agentId, workspace);
+        if (result.changes > 0) updated++;
+      }
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        actorId: agentId,
+        action: "task.batch_priority",
+        entityType: "task",
+        entityId: task_ids[0],
+        requestId: request.id,
+        payload: { count: updated, priority },
+      });
+      broadcast("task.batch_priority_updated", { workspace, agentId, task_ids, priority });
+      return reply.send({ updated, priority });
+    },
+  );
 };
