@@ -3544,4 +3544,104 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, duplicate_count: rows.length, duplicates: rows });
     },
   );
+
+  /* ── F-545  claim scope merge ─────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/claims/merge",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["claim_ids"],
+          additionalProperties: false,
+          properties: {
+            claim_ids: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 10 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { claim_ids } = request.body as { claim_ids: string[] };
+
+      // Load all claims
+      const claims = claim_ids.map(
+        (cid) =>
+          db
+            .prepare(
+              "SELECT claim_id, agent_id, scope, status, ttl_seconds FROM claims WHERE claim_id = ? AND workspace_id = ?",
+            )
+            .get(cid, workspace) as
+            | {
+                claim_id: string;
+                agent_id: string;
+                scope: string;
+                status: string;
+                ttl_seconds: number;
+              }
+            | undefined,
+      );
+
+      // Validation
+      for (let i = 0; i < claims.length; i++) {
+        if (!claims[i]) return reply.code(404).send({ error: `Claim ${claim_ids[i]} not found` });
+        if (claims[i]!.status !== "active")
+          return reply.code(400).send({ error: `Claim ${claim_ids[i]} is not active` });
+      }
+
+      const agents = new Set(claims.map((c) => c!.agent_id));
+      if (agents.size > 1)
+        return reply.code(400).send({ error: "All claims must belong to the same agent" });
+
+      const agentId = claims[0]!.agent_id;
+      const mergedScope = [...new Set(claims.map((c) => c!.scope))].join("+");
+      const maxTtl = Math.max(...claims.map((c) => c!.ttl_seconds));
+
+      // Collect all paths
+      const allPaths: string[] = [];
+      for (const c of claims) {
+        const paths = db
+          .prepare("SELECT path_pattern FROM claim_paths WHERE claim_id = ?")
+          .all(c!.claim_id) as { path_pattern: string }[];
+        for (const p of paths) allPaths.push(p.path_pattern);
+      }
+      const uniquePaths = [...new Set(allPaths)];
+      if (uniquePaths.length === 0) uniquePaths.push(mergedScope);
+
+      // Create merged claim
+      const merged = createClaim({
+        workspaceId: workspace,
+        agentId,
+        scope: mergedScope,
+        paths: uniquePaths,
+        ttlSeconds: maxTtl,
+      });
+
+      if ("conflict" in merged)
+        return reply.code(409).send({ error: "Merge conflict", ...merged.conflict });
+
+      // Release old claims
+      for (const c of claims) {
+        db.prepare(
+          "UPDATE claims SET status = 'released', released_at = CURRENT_TIMESTAMP WHERE claim_id = ?",
+        ).run(c!.claim_id);
+      }
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        actorId: agentId,
+        action: "claim.merge",
+        entityType: "claim",
+        entityId: merged.id,
+        requestId: request.id,
+        payload: { merged_from: claim_ids },
+      });
+      broadcast("claim.merged", { workspace, new_claim_id: merged.id, merged_from: claim_ids });
+      return reply
+        .code(201)
+        .send({ claim_id: merged.id, merged_from: claim_ids, scope: mergedScope });
+    },
+  );
 };

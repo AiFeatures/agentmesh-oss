@@ -19049,3 +19049,253 @@ test("F-543 handoff timeout update", async () => {
   assert.strictEqual(res.json().timeout_seconds, 7200);
   await app.close();
 });
+
+// T-544 task batch cancel
+test("F-544 task batch cancel", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "wtc-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: "tc-1",
+      display_name: "CancelAgent",
+      capabilities: ["code"],
+      model: "gpt-4",
+    },
+  });
+  const t1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/tc-1/tasks`,
+    headers: auth,
+    payload: { title: "Cancel me 1" },
+  });
+  const t2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/tc-1/tasks`,
+    headers: auth,
+    payload: { title: "Cancel me 2" },
+  });
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/tc-1/tasks/batch-cancel`,
+    headers: auth,
+    payload: { task_ids: [t1.json().task_id, t2.json().task_id] },
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().cancelled, 2);
+  await app.close();
+});
+
+// T-545 claim scope merge
+test("F-545 claim scope merge", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "wcm-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: "cm-1",
+      display_name: "MergeAgent",
+      capabilities: ["code"],
+      model: "gpt-4",
+    },
+  });
+  const c1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "cm-1", scope: "scope-a", paths: ["src/a.ts"], ttl_seconds: 300 },
+  });
+  const c2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "cm-1", scope: "scope-b", paths: ["src/b.ts"], ttl_seconds: 600 },
+  });
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims/merge`,
+    headers: auth,
+    payload: { claim_ids: [c1.json().claim_id, c2.json().claim_id] },
+  });
+  assert.strictEqual(res.statusCode, 201);
+  const body = res.json();
+  assert.ok(body.claim_id);
+  assert.strictEqual(body.merged_from.length, 2);
+  assert.ok(body.scope.includes("scope-a"));
+  assert.ok(body.scope.includes("scope-b"));
+  await app.close();
+});
+
+// T-546 blocker comment batch
+test("F-546 blocker comment batch", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "wbcm-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: "bcm-1",
+      display_name: "CommentAgent",
+      capabilities: ["code"],
+      model: "gpt-4",
+    },
+  });
+  const b1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "bcm-1", title: "B1", severity: "high" },
+  });
+  const b2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "bcm-1", title: "B2", severity: "low" },
+  });
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers/batch-comment`,
+    headers: auth,
+    payload: {
+      blocker_ids: [b1.json().blocker_id, b2.json().blocker_id],
+      author_id: "bcm-1",
+      content: "Investigating",
+    },
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().commented, 2);
+  await app.close();
+});
+
+// T-547 handoff template apply
+test("F-547 handoff template apply", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "wta-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "ta-from", display_name: "From", capabilities: ["code"], model: "gpt-4" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "ta-to", display_name: "To", capabilities: ["review"], model: "gpt-4" },
+  });
+  // Create template
+  const tmpl = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoff-templates`,
+    headers: auth,
+    payload: {
+      name: "Code Review",
+      summary_template: "Review code changes",
+      default_priority: "high",
+      default_timeout_seconds: 3600,
+    },
+  });
+  assert.strictEqual(tmpl.statusCode, 201);
+  const tmplId = tmpl.json().template_id;
+  // Apply template
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoff-templates/${tmplId}/apply`,
+    headers: auth,
+    payload: { from_agent_id: "ta-from", to_agent_id: "ta-to" },
+  });
+  assert.strictEqual(res.statusCode, 201);
+  assert.ok(res.json().handoff_id);
+  assert.strictEqual(res.json().template_id, tmplId);
+  await app.close();
+});
+
+// T-548 task batch delete
+test("F-548 task batch delete", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "wtd-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: "td-1",
+      display_name: "DeleteAgent",
+      capabilities: ["code"],
+      model: "gpt-4",
+    },
+  });
+  const t1 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/td-1/tasks`,
+    headers: auth,
+    payload: { title: "Delete me 1" },
+  });
+  const t2 = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/td-1/tasks`,
+    headers: auth,
+    payload: { title: "Delete me 2" },
+  });
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/td-1/tasks/batch-delete`,
+    headers: auth,
+    payload: { task_ids: [t1.json().task_id, t2.json().task_id] },
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().deleted, 2);
+  // Verify tasks are gone
+  const list = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/td-1/tasks`,
+    headers: auth,
+  });
+  assert.strictEqual(list.json().data.length, 0);
+  await app.close();
+});

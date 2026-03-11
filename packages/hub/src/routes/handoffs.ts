@@ -3792,4 +3792,101 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ ok: true, handoff_id: handoffId, timeout_seconds });
     },
   );
+
+  /* ── F-547  handoff template apply ───────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/handoff-templates/:templateId/apply",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["from_agent_id"],
+          additionalProperties: false,
+          properties: {
+            from_agent_id: { type: "string", minLength: 2, maxLength: 128 },
+            to_agent_id: { type: "string", minLength: 2, maxLength: 128 },
+            context: { type: "object", additionalProperties: true },
+            summary_override: { type: "string", maxLength: 2000 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, templateId: tmplId } = request.params as {
+        workspace: string;
+        templateId: string;
+      };
+      const body = request.body as {
+        from_agent_id: string;
+        to_agent_id?: string;
+        context?: Record<string, unknown>;
+        summary_override?: string;
+      };
+
+      const tmpl = db
+        .prepare(
+          "SELECT template_id, name, summary_template, default_priority, default_timeout_seconds FROM handoff_templates WHERE template_id = ? AND workspace_id = ?",
+        )
+        .get(tmplId, workspace) as
+        | {
+            template_id: string;
+            name: string;
+            summary_template: string;
+            default_priority: string;
+            default_timeout_seconds: number | null;
+          }
+        | undefined;
+      if (!tmpl) return reply.code(404).send({ error: "Template not found" });
+
+      const fromExists = db
+        .prepare("SELECT agent_id FROM agents WHERE agent_id = ? AND workspace_id = ?")
+        .get(body.from_agent_id, workspace);
+      if (!fromExists) return reply.code(404).send({ error: "from_agent_id not found" });
+
+      if (body.to_agent_id) {
+        const toExists = db
+          .prepare("SELECT agent_id FROM agents WHERE agent_id = ? AND workspace_id = ?")
+          .get(body.to_agent_id, workspace);
+        if (!toExists) return reply.code(404).send({ error: "to_agent_id not found" });
+      }
+
+      const created = createHandoff({
+        workspaceId: workspace,
+        fromAgentId: body.from_agent_id,
+        toAgentId: body.to_agent_id,
+        summary: body.summary_override ?? tmpl.summary_template,
+        context: body.context,
+        timeoutSeconds: tmpl.default_timeout_seconds ?? undefined,
+      });
+
+      if (tmpl.default_priority && tmpl.default_priority !== "normal") {
+        db.prepare("UPDATE handoffs SET priority = ? WHERE handoff_id = ?").run(
+          tmpl.default_priority,
+          created.id,
+        );
+      }
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        actorId: body.from_agent_id,
+        action: "handoff.template_apply",
+        entityType: "handoff",
+        entityId: created.id,
+        requestId: request.id,
+        payload: { template_id: tmplId },
+      });
+      broadcast("handoff.created_from_template", {
+        workspace,
+        handoff_id: created.id,
+        template_id: tmplId,
+      });
+      return reply.code(201).send({
+        handoff_id: created.id,
+        template_id: tmplId,
+        to_agent_id: created.toAgentId,
+      });
+    },
+  );
 };

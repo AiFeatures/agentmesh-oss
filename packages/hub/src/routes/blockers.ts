@@ -3367,4 +3367,58 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, stale_count: rows.length, blockers: rows });
     },
   );
+
+  /* ── F-546  blocker comment batch ──────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/blockers/batch-comment",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["blocker_ids", "author_id", "content"],
+          additionalProperties: false,
+          properties: {
+            blocker_ids: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 25 },
+            author_id: { type: "string", minLength: 2, maxLength: 128 },
+            content: { type: "string", minLength: 1, maxLength: 5000 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { blocker_ids, author_id, content } = request.body as {
+        blocker_ids: string[];
+        author_id: string;
+        content: string;
+      };
+
+      let commented = 0;
+      const insert = db.prepare(
+        "INSERT INTO blocker_comments (blocker_id, workspace_id, author_id, content) VALUES (?, ?, ?, ?)",
+      );
+      for (const bid of blocker_ids) {
+        const exists = db
+          .prepare("SELECT blocker_id FROM blockers WHERE blocker_id = ? AND workspace_id = ?")
+          .get(bid, workspace);
+        if (exists) {
+          insert.run(bid, workspace, author_id, content);
+          commented++;
+        }
+      }
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        actorId: author_id,
+        action: "blocker.batch_comment",
+        entityType: "blocker",
+        entityId: blocker_ids[0],
+        requestId: request.id,
+        payload: { count: commented },
+      });
+      return reply.send({ commented });
+    },
+  );
 };

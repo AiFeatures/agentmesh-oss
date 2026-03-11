@@ -4414,4 +4414,92 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ updated, priority });
     },
   );
+
+  /* ── F-544  task batch cancel ─────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/agents/:agentId/tasks/batch-cancel",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["task_ids"],
+          additionalProperties: false,
+          properties: {
+            task_ids: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 50 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as { workspace: string; agentId: string };
+      const { task_ids } = request.body as { task_ids: string[] };
+
+      let cancelled = 0;
+      const stmt = db.prepare(
+        "UPDATE agent_tasks SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE task_id = ? AND agent_id = ? AND workspace_id = ? AND status IN ('pending', 'in_progress')",
+      );
+      for (const tid of task_ids) {
+        const result = stmt.run(tid, agentId, workspace);
+        if (result.changes > 0) cancelled++;
+      }
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        actorId: agentId,
+        action: "task.batch_cancel",
+        entityType: "task",
+        entityId: task_ids[0],
+        requestId: request.id,
+        payload: { count: cancelled },
+      });
+      broadcast("task.batch_cancelled", { workspace, agentId, task_ids, cancelled });
+      return reply.send({ cancelled });
+    },
+  );
+
+  /* ── F-548  task batch delete ─────────────────────────── */
+  app.post(
+    "/api/v1/workspaces/:workspace/agents/:agentId/tasks/batch-delete",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["task_ids"],
+          additionalProperties: false,
+          properties: {
+            task_ids: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 50 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as { workspace: string; agentId: string };
+      const { task_ids } = request.body as { task_ids: string[] };
+
+      let deleted = 0;
+      const stmt = db.prepare(
+        "DELETE FROM agent_tasks WHERE task_id = ? AND agent_id = ? AND workspace_id = ?",
+      );
+      for (const tid of task_ids) {
+        const result = stmt.run(tid, agentId, workspace);
+        if (result.changes > 0) deleted++;
+      }
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        actorId: agentId,
+        action: "task.batch_delete",
+        entityType: "task",
+        entityId: task_ids[0],
+        requestId: request.id,
+        payload: { count: deleted },
+      });
+      broadcast("task.batch_deleted", { workspace, agentId, deleted });
+      return reply.send({ deleted });
+    },
+  );
 };
