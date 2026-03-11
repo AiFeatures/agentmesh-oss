@@ -3619,4 +3619,35 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-566  blocker comment thread with author info
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/:blockerId/comment-thread",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, blockerId } = request.params as { workspace: string; blockerId: string };
+      const blocker = db
+        .prepare("SELECT blocker_id FROM blockers WHERE blocker_id = ? AND workspace_id = ?")
+        .get(blockerId, workspace);
+      if (!blocker) return reply.code(404).send({ error: "Blocker not found" });
+      const comments = db
+        .prepare(
+          `SELECT bc.id, bc.author_id, bc.content, bc.created_at,
+                  a.display_name AS author_display_name, a.status AS author_status
+           FROM blocker_comments bc
+           LEFT JOIN agents a ON a.agent_id = bc.author_id AND a.workspace_id = ?
+           WHERE bc.blocker_id = ? AND bc.workspace_id = ?
+           ORDER BY bc.created_at ASC`,
+        )
+        .all(workspace, blockerId, workspace) as Array<{
+        id: number;
+        author_id: string;
+        content: string;
+        created_at: string;
+        author_display_name: string | null;
+        author_status: string | null;
+      }>;
+      return reply.send({ blocker_id: blockerId, workspace, comments, count: comments.length });
+    },
+  );
 };

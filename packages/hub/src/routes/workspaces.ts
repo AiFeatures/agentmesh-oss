@@ -3761,4 +3761,26 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-568  entity count history (daily time-series)
+  app.get(
+    "/api/v1/workspaces/:workspace/entity-count-history",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const days = Math.min(Number((request.query as Record<string, string>).days) || 30, 365);
+      const rows = db
+        .prepare(
+          `SELECT DATE(created_at) AS date, entity_type, COUNT(*) AS count
+           FROM audit_log
+           WHERE workspace_id = ?
+             AND action IN ('agent.register', 'claim.create', 'blocker.create', 'handoff.create')
+             AND created_at >= DATE('now', '-' || ? || ' days')
+           GROUP BY DATE(created_at), entity_type
+           ORDER BY date ASC`,
+        )
+        .all(workspace, days) as Array<{ date: string; entity_type: string; count: number }>;
+      return reply.send({ workspace, days, series: rows });
+    },
+  );
 };

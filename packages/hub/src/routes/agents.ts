@@ -4670,4 +4670,35 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ updated });
     },
   );
+
+  // F-564  agent status timeline
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/:agentId/status-timeline",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as { workspace: string; agentId: string };
+      const limit = Math.min(Number((request.query as Record<string, string>).limit) || 50, 200);
+      const offset = Number((request.query as Record<string, string>).offset) || 0;
+      const rows = db
+        .prepare(
+          `SELECT id, old_status, new_status, created_at
+           FROM agent_status_history
+           WHERE agent_id = ? AND workspace_id = ?
+           ORDER BY created_at DESC
+           LIMIT ? OFFSET ?`,
+        )
+        .all(agentId, workspace, limit, offset) as Array<{
+        id: number;
+        old_status: string | null;
+        new_status: string;
+        created_at: string;
+      }>;
+      return reply.send({
+        agent_id: agentId,
+        workspace,
+        transitions: rows,
+        count: rows.length,
+      });
+    },
+  );
 };

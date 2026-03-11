@@ -3803,4 +3803,31 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-565  claim path overlap report
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/overlap-report",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const overlaps = db
+        .prepare(
+          `SELECT cp1.claim_id AS claim_a, cp2.claim_id AS claim_b, cp1.path_pattern,
+                  c1.agent_id AS agent_a, c2.agent_id AS agent_b
+           FROM claim_paths cp1
+           JOIN claim_paths cp2 ON cp1.path_pattern = cp2.path_pattern AND cp1.claim_id < cp2.claim_id
+           JOIN claims c1 ON c1.claim_id = cp1.claim_id AND c1.status = 'active' AND c1.workspace_id = ?
+           JOIN claims c2 ON c2.claim_id = cp2.claim_id AND c2.status = 'active' AND c2.workspace_id = ?
+           LIMIT 100`,
+        )
+        .all(workspace, workspace) as Array<{
+        claim_a: string;
+        claim_b: string;
+        path_pattern: string;
+        agent_a: string;
+        agent_b: string;
+      }>;
+      return reply.send({ workspace, overlaps, count: overlaps.length });
+    },
+  );
 };

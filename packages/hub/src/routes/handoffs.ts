@@ -3993,4 +3993,46 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-567  handoff chain trace
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/:handoffId/chain-trace",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, handoffId } = request.params as { workspace: string; handoffId: string };
+      const root = db
+        .prepare("SELECT handoff_id FROM handoffs WHERE handoff_id = ? AND workspace_id = ?")
+        .get(handoffId, workspace);
+      if (!root) return reply.code(404).send({ error: "Handoff not found" });
+      // Walk ancestors
+      const ancestors = db
+        .prepare(
+          `WITH RECURSIVE chain AS (
+            SELECT handoff_id, parent_handoff_id, from_agent_id, to_agent_id, status, summary, 0 AS depth
+            FROM handoffs WHERE handoff_id = ? AND workspace_id = ?
+            UNION ALL
+            SELECT h.handoff_id, h.parent_handoff_id, h.from_agent_id, h.to_agent_id, h.status, h.summary, c.depth + 1
+            FROM handoffs h JOIN chain c ON h.handoff_id = c.parent_handoff_id
+            WHERE h.workspace_id = ?
+          )
+          SELECT * FROM chain ORDER BY depth DESC`,
+        )
+        .all(handoffId, workspace, workspace) as Array<Record<string, unknown>>;
+      // Walk descendants
+      const descendants = db
+        .prepare(
+          `WITH RECURSIVE chain AS (
+            SELECT handoff_id, parent_handoff_id, from_agent_id, to_agent_id, status, summary, 0 AS depth
+            FROM handoffs WHERE parent_handoff_id = ? AND workspace_id = ?
+            UNION ALL
+            SELECT h.handoff_id, h.parent_handoff_id, h.from_agent_id, h.to_agent_id, h.status, h.summary, c.depth + 1
+            FROM handoffs h JOIN chain c ON h.parent_handoff_id = c.handoff_id
+            WHERE h.workspace_id = ?
+          )
+          SELECT * FROM chain ORDER BY depth ASC`,
+        )
+        .all(handoffId, workspace, workspace) as Array<Record<string, unknown>>;
+      return reply.send({ handoff_id: handoffId, workspace, ancestors, descendants });
+    },
+  );
 };
