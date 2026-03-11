@@ -14341,3 +14341,32 @@ test("F-524 agent-model-popularity", async () => {
   await app.close();
 });
 
+
+// T-525 blocker-created-hourly
+test("F-525 blocker-created-hourly", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "bch-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/blocker-created-hourly`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json()));
+  await app.close();
+});
+
+// T-526 handoff-avg-context-size
+test("F-526 handoff-avg-context-size", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "hacs-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/handoff-avg-context-size`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = res.json();
+  assert.ok("avg_size" in body);
+  assert.ok("total" in body);
+  await app.close();
+});
+

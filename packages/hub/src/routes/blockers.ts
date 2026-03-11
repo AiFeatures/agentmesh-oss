@@ -3248,4 +3248,23 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-525 blocker-created-hourly
+  app.get<{ Params: { workspaceId: string } }>(
+    "/api/v1/workspaces/:workspaceId/analytics/blocker-created-hourly",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspaceId } = req.params;
+      const rows = db
+        .prepare(
+          `SELECT CAST(strftime('%H', created_at) AS INTEGER) AS hour, COUNT(*) AS count
+           FROM blockers
+           WHERE workspace_id = ?
+           GROUP BY hour
+           ORDER BY hour`,
+        )
+        .all(workspaceId) as any[];
+      return reply.send(rows);
+    },
+  );
 };
