@@ -4502,4 +4502,50 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ deleted });
     },
   );
+
+  // F-549  agent idle check
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/idle-check",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        querystring: {
+          type: "object",
+          properties: {
+            minutes: { type: "integer", minimum: 1, maximum: 10080, default: 30 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { minutes = 30 } = request.query as { minutes?: number };
+      const cutoff = new Date(Date.now() - minutes * 60_000).toISOString();
+      const rows = db
+        .prepare(
+          `SELECT agent_id, display_name, status, last_heartbeat_at, updated_at
+           FROM agents WHERE workspace_id = ? AND status IN ('online', 'idle')
+           AND last_heartbeat_at < ?`,
+        )
+        .all(workspace, cutoff) as Array<{
+        agent_id: string;
+        display_name: string;
+        status: string;
+        last_heartbeat_at: string | null;
+        updated_at: string;
+      }>;
+      return reply.send({
+        workspace,
+        idle_threshold_minutes: minutes,
+        idle_agents: rows.map((r) => ({
+          agent_id: r.agent_id,
+          display_name: r.display_name,
+          status: r.status,
+          last_heartbeat_at: r.last_heartbeat_at,
+          idle_since: r.last_heartbeat_at || r.updated_at,
+        })),
+        count: rows.length,
+      });
+    },
+  );
 };

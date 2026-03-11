@@ -3421,4 +3421,91 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ commented });
     },
   );
+
+  // F-551  blocker link (dependency between blockers)
+  app.post(
+    "/api/v1/workspaces/:workspace/blockers/:blockerId/link",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["target_blocker_id", "link_type"],
+          properties: {
+            target_blocker_id: { type: "string", minLength: 1, maxLength: 128 },
+            link_type: { type: "string", enum: ["blocks", "blocked_by", "related"] },
+            note: { type: "string", maxLength: 1024 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, blockerId } = request.params as { workspace: string; blockerId: string };
+      const { target_blocker_id, link_type, note } = request.body as {
+        target_blocker_id: string;
+        link_type: string;
+        note?: string;
+      };
+
+      // Verify both blockers exist
+      const source = db
+        .prepare("SELECT blocker_id FROM blockers WHERE blocker_id = ? AND workspace_id = ?")
+        .get(blockerId, workspace) as { blocker_id: string } | undefined;
+      const target = db
+        .prepare("SELECT blocker_id FROM blockers WHERE blocker_id = ? AND workspace_id = ?")
+        .get(target_blocker_id, workspace) as { blocker_id: string } | undefined;
+      if (!source) return reply.code(404).send({ error: "Source blocker not found" });
+      if (!target) return reply.code(404).send({ error: "Target blocker not found" });
+      if (blockerId === target_blocker_id)
+        return reply.code(400).send({ error: "Cannot link blocker to itself" });
+
+      // Ensure link table exists
+      db.exec(
+        `CREATE TABLE IF NOT EXISTS blocker_links (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          workspace_id TEXT NOT NULL,
+          source_blocker_id TEXT NOT NULL,
+          target_blocker_id TEXT NOT NULL,
+          link_type TEXT NOT NULL,
+          note TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )`,
+      );
+
+      // Check for existing link
+      const existing = db
+        .prepare(
+          "SELECT 1 FROM blocker_links WHERE source_blocker_id = ? AND target_blocker_id = ? AND workspace_id = ?",
+        )
+        .get(blockerId, target_blocker_id, workspace);
+      if (existing) return reply.code(409).send({ error: "Link already exists" });
+
+      db.prepare(
+        "INSERT INTO blocker_links (workspace_id, source_blocker_id, target_blocker_id, link_type, note) VALUES (?, ?, ?, ?, ?)",
+      ).run(workspace, blockerId, target_blocker_id, link_type, note || null);
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "system",
+        actorId: "system",
+        action: "blocker.link",
+        entityType: "blocker",
+        entityId: blockerId,
+        requestId: request.id,
+        payload: { target_blocker_id, link_type },
+      });
+      broadcast("blocker.linked", {
+        workspace,
+        source: blockerId,
+        target: target_blocker_id,
+        link_type,
+      });
+      return reply.code(201).send({
+        source_blocker_id: blockerId,
+        target_blocker_id,
+        link_type,
+        note: note || null,
+      });
+    },
+  );
 };

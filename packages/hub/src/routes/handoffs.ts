@@ -3889,4 +3889,52 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-552  cancel pending handoff
+  app.post(
+    "/api/v1/workspaces/:workspace/handoffs/:handoffId/cancel",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          properties: {
+            reason: { type: "string", maxLength: 1024 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, handoffId } = request.params as { workspace: string; handoffId: string };
+      const { reason } = (request.body || {}) as { reason?: string };
+
+      const row = db
+        .prepare(
+          "SELECT handoff_id, status, from_agent_id FROM handoffs WHERE handoff_id = ? AND workspace_id = ?",
+        )
+        .get(handoffId, workspace) as
+        | { handoff_id: string; status: string; from_agent_id: string }
+        | undefined;
+      if (!row) return reply.code(404).send({ error: "Handoff not found" });
+      if (row.status !== "pending")
+        return reply.code(409).send({ error: `Cannot cancel handoff in '${row.status}' status` });
+
+      db.prepare(
+        "UPDATE handoffs SET status = 'cancelled', updated_at = datetime('now') WHERE handoff_id = ?",
+      ).run(handoffId);
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        actorId: row.from_agent_id,
+        action: "handoff.cancel",
+        entityType: "handoff",
+        entityId: handoffId,
+        requestId: request.id,
+        payload: { reason: reason || null },
+      });
+      broadcast("handoff.cancelled", { workspace, handoff_id: handoffId, reason: reason || null });
+      return reply.send({ handoff_id: handoffId, status: "cancelled", reason: reason || null });
+    },
+  );
 };

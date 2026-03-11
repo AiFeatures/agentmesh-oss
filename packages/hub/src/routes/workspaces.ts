@@ -3625,4 +3625,54 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace: ws, total: feed.length, feed });
     },
   );
+
+  // F-553  agent leaderboard
+  app.get(
+    "/api/v1/workspaces/:workspace/agent-leaderboard",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+
+      // Aggregate activity counts per agent from audit log
+      const rows = db
+        .prepare(
+          `SELECT actor_id,
+                  COUNT(*) as total_actions,
+                  SUM(CASE WHEN action LIKE 'task.%' THEN 1 ELSE 0 END) as task_actions,
+                  SUM(CASE WHEN action LIKE 'claim.%' THEN 1 ELSE 0 END) as claim_actions,
+                  SUM(CASE WHEN action LIKE 'handoff.%' THEN 1 ELSE 0 END) as handoff_actions,
+                  SUM(CASE WHEN action LIKE 'blocker.%' THEN 1 ELSE 0 END) as blocker_actions,
+                  MAX(created_at) as last_activity
+           FROM audit_log
+           WHERE workspace_id = ? AND actor_type = 'agent'
+           GROUP BY actor_id
+           ORDER BY total_actions DESC
+           LIMIT 50`,
+        )
+        .all(workspace) as Array<{
+        actor_id: string;
+        total_actions: number;
+        task_actions: number;
+        claim_actions: number;
+        handoff_actions: number;
+        blocker_actions: number;
+        last_activity: string;
+      }>;
+
+      return reply.send({
+        workspace,
+        leaderboard: rows.map((r, i) => ({
+          rank: i + 1,
+          agent_id: r.actor_id,
+          total_actions: r.total_actions,
+          task_actions: r.task_actions,
+          claim_actions: r.claim_actions,
+          handoff_actions: r.handoff_actions,
+          blocker_actions: r.blocker_actions,
+          last_activity: r.last_activity,
+        })),
+        count: rows.length,
+      });
+    },
+  );
 };

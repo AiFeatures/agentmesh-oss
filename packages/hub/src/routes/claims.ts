@@ -3,6 +3,7 @@ import { db } from "../db/index.js";
 import { writeAuditLog } from "../services/audit.js";
 import { createClaim, listClaims, releaseClaim, renewClaim } from "../services/claims.js";
 import { findConflictingPattern } from "../services/conflict.js";
+import { claimId as genClaimId } from "../services/ids.js";
 import { parseJsonSafe } from "../utils/json.js";
 import { broadcast } from "../ws/gateway.js";
 
@@ -3642,6 +3643,85 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply
         .code(201)
         .send({ claim_id: merged.id, merged_from: claim_ids, scope: mergedScope });
+    },
+  );
+
+  // F-550  claim scope split
+  app.post(
+    "/api/v1/workspaces/:workspace/claims/:claimId/split",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["scopes"],
+          properties: {
+            scopes: {
+              type: "array",
+              items: { type: "string", minLength: 1, maxLength: 256 },
+              minItems: 2,
+              maxItems: 10,
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, claimId } = request.params as { workspace: string; claimId: string };
+      const { scopes } = request.body as { scopes: string[] };
+      const original = db
+        .prepare(
+          "SELECT * FROM claims WHERE claim_id = ? AND workspace_id = ? AND status = 'active'",
+        )
+        .get(claimId, workspace) as
+        | {
+            claim_id: string;
+            agent_id: string;
+            scope: string;
+            ttl_seconds: number;
+            priority: string;
+          }
+        | undefined;
+      if (!original) return reply.code(404).send({ error: "Active claim not found" });
+
+      const newClaims: Array<{ claim_id: string; scope: string }> = [];
+      for (const scope of scopes) {
+        const newId = genClaimId();
+        db.prepare(
+          `INSERT INTO claims (claim_id, workspace_id, agent_id, scope, status, ttl_seconds, priority, expires_at, created_at)
+             VALUES (?, ?, ?, ?, 'active', ?, ?, datetime('now', '+' || ? || ' seconds'), CURRENT_TIMESTAMP)`,
+        ).run(
+          newId,
+          workspace,
+          original.agent_id,
+          scope,
+          original.ttl_seconds,
+          original.priority,
+          original.ttl_seconds,
+        );
+        newClaims.push({ claim_id: newId, scope });
+      }
+
+      // Release original
+      db.prepare(
+        "UPDATE claims SET status = 'released', released_at = CURRENT_TIMESTAMP WHERE claim_id = ?",
+      ).run(claimId);
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "agent",
+        actorId: original.agent_id,
+        action: "claim.split",
+        entityType: "claim",
+        entityId: claimId,
+        requestId: request.id,
+        payload: { new_claims: newClaims.length },
+      });
+      broadcast("claim.split", { workspace, original_claim_id: claimId, new_claims: newClaims });
+      return reply.code(201).send({
+        original_claim_id: claimId,
+        new_claims: newClaims,
+      });
     },
   );
 };
