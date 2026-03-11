@@ -4056,4 +4056,23 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send(rows);
     },
   );
+
+  // F-524 agent-model-popularity
+  app.get<{ Params: { workspaceId: string } }>(
+    "/api/v1/workspaces/:workspaceId/analytics/agent-model-popularity",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspaceId } = req.params;
+      const rows = db
+        .prepare(
+          `SELECT COALESCE(model, 'unknown') AS model, COUNT(*) AS agent_count
+           FROM agents
+           WHERE workspace_id = ?
+           GROUP BY model
+           ORDER BY agent_count DESC`,
+        )
+        .all(workspaceId) as any[];
+      return reply.send(rows);
+    },
+  );
 };

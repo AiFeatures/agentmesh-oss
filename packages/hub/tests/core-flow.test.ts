@@ -14314,3 +14314,30 @@ test("F-522 claim-scope-word-frequency", async () => {
   await app.close();
 });
 
+
+// T-523 handoff-status-daily
+test("F-523 handoff-status-daily", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "hsd-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/handoff-status-daily`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json()));
+  await app.close();
+});
+
+// T-524 agent-model-popularity
+test("F-524 agent-model-popularity", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "amp-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/agent-model-popularity`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json()));
+  await app.close();
+});
+
