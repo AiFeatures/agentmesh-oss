@@ -3507,4 +3507,83 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-532 workspace-level task list
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/tasks",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            status: { type: "string", enum: ["pending", "in_progress", "completed", "cancelled"] },
+            priority: { type: "string", enum: ["low", "normal", "high", "critical"] },
+            limit: { type: "string" },
+            offset: { type: "string" },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const ws = req.params.workspace;
+      const q = req.query as {
+        status?: string;
+        priority?: string;
+        limit?: string;
+        offset?: string;
+      };
+      let sql = "SELECT * FROM agent_tasks WHERE workspace_id = ?";
+      const params: unknown[] = [ws];
+      if (q.status) {
+        sql += " AND status = ?";
+        params.push(q.status);
+      }
+      if (q.priority) {
+        sql += " AND priority = ?";
+        params.push(q.priority);
+      }
+      const countSql = sql.replace(/^SELECT \* FROM/, "SELECT COUNT(*) as total FROM");
+      const total = (db.prepare(countSql).get(...params) as { total: number }).total;
+      sql += " ORDER BY created_at DESC";
+      const limit = Math.min(200, Math.max(1, Number(q.limit) || 50));
+      const offset = Math.max(0, Number(q.offset) || 0);
+      sql += " LIMIT ? OFFSET ?";
+      params.push(limit, offset);
+      const rows = db.prepare(sql).all(...params);
+      return reply.send({ data: rows, total });
+    },
+  );
+
+  // F-533 workspace task summary
+  app.get<{ Params: { workspace: string } }>(
+    "/api/v1/workspaces/:workspace/tasks/summary",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const ws = req.params.workspace;
+      const row = db
+        .prepare(
+          `SELECT
+             COUNT(*) AS total,
+             SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
+             SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress,
+             SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
+             SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled,
+             SUM(CASE WHEN priority = 'critical' THEN 1 ELSE 0 END) AS critical_count,
+             SUM(CASE WHEN priority = 'high' THEN 1 ELSE 0 END) AS high_count
+           FROM agent_tasks WHERE workspace_id = ?`,
+        )
+        .get(ws) as {
+        total: number;
+        pending: number;
+        in_progress: number;
+        completed: number;
+        cancelled: number;
+        critical_count: number;
+        high_count: number;
+      };
+      return reply.send({ workspace: ws, ...row });
+    },
+  );
 };

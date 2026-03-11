@@ -495,6 +495,134 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
+  /* ── F-529  get single handoff template ─────────────────────── */
+  app.get(
+    "/api/v1/workspaces/:workspace/handoff-templates/:templateId",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, templateId } = request.params as {
+        workspace: string;
+        templateId: string;
+      };
+      const row = db
+        .prepare(
+          "SELECT template_id, workspace_id, name, summary_template, default_priority, default_timeout_seconds, created_at FROM handoff_templates WHERE template_id = ? AND workspace_id = ?",
+        )
+        .get(templateId, workspace);
+      if (!row) return reply.code(404).send({ error: "Template not found" });
+      return reply.send(row);
+    },
+  );
+
+  /* ── F-530  update handoff template ─────────────────────────── */
+  app.patch(
+    "/api/v1/workspaces/:workspace/handoff-templates/:templateId",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            name: { type: "string", minLength: 1, maxLength: 200 },
+            summary_template: { type: "string", minLength: 1, maxLength: 2000 },
+            default_priority: {
+              type: "string",
+              enum: ["low", "normal", "high", "critical"],
+            },
+            default_timeout_seconds: { type: "integer", minimum: 60, maximum: 86400 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, templateId } = request.params as {
+        workspace: string;
+        templateId: string;
+      };
+      const body = request.body as {
+        name?: string;
+        summary_template?: string;
+        default_priority?: string;
+        default_timeout_seconds?: number;
+      };
+      const existing = db
+        .prepare(
+          "SELECT template_id FROM handoff_templates WHERE template_id = ? AND workspace_id = ?",
+        )
+        .get(templateId, workspace);
+      if (!existing) return reply.code(404).send({ error: "Template not found" });
+
+      const sets: string[] = [];
+      const params: unknown[] = [];
+      if (body.name) {
+        sets.push("name = ?");
+        params.push(body.name);
+      }
+      if (body.summary_template) {
+        sets.push("summary_template = ?");
+        params.push(body.summary_template);
+      }
+      if (body.default_priority) {
+        sets.push("default_priority = ?");
+        params.push(body.default_priority);
+      }
+      if (body.default_timeout_seconds !== undefined) {
+        sets.push("default_timeout_seconds = ?");
+        params.push(body.default_timeout_seconds);
+      }
+      if (sets.length === 0) return reply.code(400).send({ error: "No fields to update" });
+      params.push(templateId, workspace);
+      db.prepare(
+        `UPDATE handoff_templates SET ${sets.join(", ")} WHERE template_id = ? AND workspace_id = ?`,
+      ).run(...params);
+
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "system",
+        actorId: "system",
+        action: "handoff_template.update",
+        entityType: "handoff_template",
+        entityId: templateId,
+        requestId: request.id,
+      });
+      return reply.send({ ok: true });
+    },
+  );
+
+  /* ── F-531  delete handoff template ─────────────────────────── */
+  app.delete(
+    "/api/v1/workspaces/:workspace/handoff-templates/:templateId",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, templateId } = request.params as {
+        workspace: string;
+        templateId: string;
+      };
+      const existing = db
+        .prepare(
+          "SELECT template_id FROM handoff_templates WHERE template_id = ? AND workspace_id = ?",
+        )
+        .get(templateId, workspace);
+      if (!existing) return reply.code(404).send({ error: "Template not found" });
+
+      db.prepare("DELETE FROM handoff_templates WHERE template_id = ? AND workspace_id = ?").run(
+        templateId,
+        workspace,
+      );
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "system",
+        actorId: "system",
+        action: "handoff_template.delete",
+        entityType: "handoff_template",
+        entityId: templateId,
+        requestId: request.id,
+      });
+      return reply.send({ ok: true });
+    },
+  );
+
   /* ── F-96  handoff chain analytics ──────────────────────────── */
   app.get(
     "/api/v1/workspaces/:workspace/handoffs/chain-analytics",

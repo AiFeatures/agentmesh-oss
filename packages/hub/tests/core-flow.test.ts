@@ -18399,3 +18399,207 @@ test("F-526 handoff-avg-context-size", async () => {
   assert.ok("total" in body);
   await app.close();
 });
+
+// T-529 get single handoff template
+test("F-529 get single handoff template", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "gsht-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const cr = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoff-templates`,
+    headers: auth,
+    payload: { name: "Bug Fix", summary_template: "Fix: {{issue}}" },
+  });
+  assert.strictEqual(cr.statusCode, 201);
+  const tplId = cr.json().template_id;
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoff-templates/${tplId}`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().name, "Bug Fix");
+  assert.strictEqual(res.json().template_id, tplId);
+  const nf = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoff-templates/tpl_nonexist`,
+    headers: auth,
+  });
+  assert.strictEqual(nf.statusCode, 404);
+  await app.close();
+});
+
+// T-530 update handoff template
+test("F-530 update handoff template", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "uht-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const cr = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoff-templates`,
+    headers: auth,
+    payload: { name: "Original", summary_template: "Original template" },
+  });
+  const tplId = cr.json().template_id;
+  const patch = await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/handoff-templates/${tplId}`,
+    headers: auth,
+    payload: { name: "Updated", default_priority: "high" },
+  });
+  assert.strictEqual(patch.statusCode, 200);
+  assert.strictEqual(patch.json().ok, true);
+  const get = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoff-templates/${tplId}`,
+    headers: auth,
+  });
+  assert.strictEqual(get.json().name, "Updated");
+  assert.strictEqual(get.json().default_priority, "high");
+  const nf = await app.inject({
+    method: "PATCH",
+    url: `/api/v1/workspaces/${ws}/handoff-templates/tpl_nonexist`,
+    headers: auth,
+    payload: { name: "X" },
+  });
+  assert.strictEqual(nf.statusCode, 404);
+  await app.close();
+});
+
+// T-531 delete handoff template
+test("F-531 delete handoff template", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "dht-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const cr = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoff-templates`,
+    headers: auth,
+    payload: { name: "ToDelete", summary_template: "Delete me" },
+  });
+  const tplId = cr.json().template_id;
+  const del = await app.inject({
+    method: "DELETE",
+    url: `/api/v1/workspaces/${ws}/handoff-templates/${tplId}`,
+    headers: auth,
+  });
+  assert.strictEqual(del.statusCode, 200);
+  assert.strictEqual(del.json().ok, true);
+  const list = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoff-templates`,
+    headers: auth,
+  });
+  assert.strictEqual(list.json().data.length, 0);
+  const nf = await app.inject({
+    method: "DELETE",
+    url: `/api/v1/workspaces/${ws}/handoff-templates/tpl_nonexist`,
+    headers: auth,
+  });
+  assert.strictEqual(nf.statusCode, 404);
+  await app.close();
+});
+
+// T-532 workspace-level task list
+test("F-532 workspace-level task list", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "wlt-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a2", display_name: "A2", capabilities: ["test"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/a1/tasks`,
+    headers: auth,
+    payload: { title: "Task A1", priority: "high" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/a2/tasks`,
+    headers: auth,
+    payload: { title: "Task A2", priority: "low" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/tasks`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().total, 2);
+  assert.strictEqual(res.json().data.length, 2);
+  const filtered = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/tasks?priority=high`,
+    headers: auth,
+  });
+  assert.strictEqual(filtered.json().total, 1);
+  assert.strictEqual(filtered.json().data[0].priority, "high");
+  await app.close();
+});
+
+// T-533 workspace task summary
+test("F-533 workspace task summary", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "wts-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/tasks/summary`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  const body = res.json();
+  assert.strictEqual(body.workspace, ws);
+  assert.ok("total" in body);
+  assert.ok("pending" in body);
+  assert.ok("in_progress" in body);
+  assert.ok("completed" in body);
+  assert.ok("critical_count" in body);
+  await app.close();
+});
