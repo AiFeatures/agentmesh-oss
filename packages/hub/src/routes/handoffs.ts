@@ -4035,4 +4035,52 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ handoff_id: handoffId, workspace, ancestors, descendants });
     },
   );
+
+  // F-570  reassign pending handoff to a different agent
+  app.post(
+    "/api/v1/workspaces/:workspace/handoffs/:handoffId/reassign",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object" as const,
+          required: ["to_agent_id"],
+          properties: {
+            to_agent_id: { type: "string" as const },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, handoffId } = request.params as {
+        workspace: string;
+        handoffId: string;
+      };
+      const { to_agent_id } = request.body as { to_agent_id: string };
+      const row = db
+        .prepare(
+          "SELECT handoff_id, status, to_agent_id, from_agent_id FROM handoffs WHERE handoff_id = ? AND workspace_id = ?",
+        )
+        .get(handoffId, workspace) as
+        | { handoff_id: string; status: string; to_agent_id: string | null; from_agent_id: string }
+        | undefined;
+      if (!row) return reply.code(404).send({ error: "handoff not found" });
+      if (row.status !== "pending")
+        return reply.code(409).send({ error: "only pending handoffs can be reassigned" });
+      const agent = db
+        .prepare("SELECT agent_id FROM agents WHERE agent_id = ? AND workspace_id = ?")
+        .get(to_agent_id, workspace) as { agent_id: string } | undefined;
+      if (!agent) return reply.code(404).send({ error: "target agent not found" });
+      db.prepare(
+        "UPDATE handoffs SET to_agent_id = ?, updated_at = CURRENT_TIMESTAMP WHERE handoff_id = ? AND workspace_id = ?",
+      ).run(to_agent_id, handoffId, workspace);
+      return reply.send({
+        handoff_id: handoffId,
+        workspace,
+        previous_to_agent_id: row.to_agent_id,
+        new_to_agent_id: to_agent_id,
+        status: "reassigned",
+      });
+    },
+  );
 };

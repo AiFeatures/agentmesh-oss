@@ -3650,4 +3650,54 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ blocker_id: blockerId, workspace, comments, count: comments.length });
     },
   );
+
+  // F-571  blocker impact analysis — claims & agents affected
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/:blockerId/impact-analysis",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, blockerId } = request.params as {
+        workspace: string;
+        blockerId: string;
+      };
+      const blocker = db
+        .prepare(
+          "SELECT blocker_id, agent_id, title, severity, status FROM blockers WHERE blocker_id = ? AND workspace_id = ?",
+        )
+        .get(blockerId, workspace) as
+        | { blocker_id: string; agent_id: string; title: string; severity: string; status: string }
+        | undefined;
+      if (!blocker) return reply.code(404).send({ error: "blocker not found" });
+      // Claims held by the blocker's agent
+      const affected_claims = db
+        .prepare(
+          `SELECT claim_id, scope, status, priority
+           FROM claims
+           WHERE agent_id = ? AND workspace_id = ? AND status = 'active'`,
+        )
+        .all(blocker.agent_id, workspace) as Array<Record<string, unknown>>;
+      // Dependent blockers
+      const dependent_blockers = db
+        .prepare(
+          `SELECT b.blocker_id, b.title, b.severity, b.status
+           FROM blocker_dependencies bd
+           JOIN blockers b ON b.blocker_id = bd.blocker_id AND b.workspace_id = ?
+           WHERE bd.depends_on_blocker_id = ?`,
+        )
+        .all(workspace, blockerId) as Array<Record<string, unknown>>;
+      // Watchers
+      const watchers = db
+        .prepare("SELECT agent_id FROM blocker_watchers WHERE blocker_id = ? AND workspace_id = ?")
+        .all(blockerId, workspace) as Array<{ agent_id: string }>;
+      return reply.send({
+        blocker_id: blockerId,
+        workspace,
+        blocker,
+        affected_claims,
+        dependent_blockers,
+        watchers: watchers.map((w) => w.agent_id),
+        impact_score: affected_claims.length * 2 + dependent_blockers.length * 3 + watchers.length,
+      });
+    },
+  );
 };

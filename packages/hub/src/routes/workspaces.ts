@@ -3783,4 +3783,62 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, days, series: rows });
     },
   );
+
+  // F-573  stale entities report
+  app.get(
+    "/api/v1/workspaces/:workspace/stale-entities",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const hours = Math.max(
+        1,
+        Math.min(Number((request.query as Record<string, string>).hours) || 24, 720),
+      );
+      const stale_agents = db
+        .prepare(
+          `SELECT agent_id, display_name, status, last_heartbeat_at
+           FROM agents
+           WHERE workspace_id = ? AND status IN ('online', 'idle')
+             AND last_heartbeat_at < datetime('now', '-' || ? || ' hours')`,
+        )
+        .all(workspace, hours) as Array<Record<string, unknown>>;
+      const expired_claims = db
+        .prepare(
+          `SELECT claim_id, agent_id, scope, expires_at
+           FROM claims
+           WHERE workspace_id = ? AND status = 'active'
+             AND expires_at < datetime('now')`,
+        )
+        .all(workspace) as Array<Record<string, unknown>>;
+      const overdue_blockers = db
+        .prepare(
+          `SELECT blocker_id, agent_id, title, severity, deadline_at
+           FROM blockers
+           WHERE workspace_id = ? AND status = 'open'
+             AND deadline_at IS NOT NULL AND deadline_at < datetime('now')`,
+        )
+        .all(workspace) as Array<Record<string, unknown>>;
+      const stale_handoffs = db
+        .prepare(
+          `SELECT handoff_id, from_agent_id, to_agent_id, summary, created_at
+           FROM handoffs
+           WHERE workspace_id = ? AND status = 'pending'
+             AND created_at < datetime('now', '-' || ? || ' hours')`,
+        )
+        .all(workspace, hours) as Array<Record<string, unknown>>;
+      return reply.send({
+        workspace,
+        threshold_hours: hours,
+        stale_agents,
+        expired_claims,
+        overdue_blockers,
+        stale_handoffs,
+        total:
+          stale_agents.length +
+          expired_claims.length +
+          overdue_blockers.length +
+          stale_handoffs.length,
+      });
+    },
+  );
 };

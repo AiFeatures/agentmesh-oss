@@ -4701,4 +4701,66 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-572  agent workload summary (tasks + claims + handoffs combined)
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/:agentId/workload-summary",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as {
+        workspace: string;
+        agentId: string;
+      };
+      const agent = db
+        .prepare("SELECT agent_id, status FROM agents WHERE agent_id = ? AND workspace_id = ?")
+        .get(agentId, workspace) as { agent_id: string; status: string } | undefined;
+      if (!agent) return reply.code(404).send({ error: "agent not found" });
+      const tasks = db
+        .prepare(
+          `SELECT status, COUNT(*) AS cnt FROM agent_tasks
+           WHERE agent_id = ? AND workspace_id = ? GROUP BY status`,
+        )
+        .all(agentId, workspace) as Array<{ status: string; cnt: number }>;
+      const claims = db
+        .prepare(
+          `SELECT status, COUNT(*) AS cnt FROM claims
+           WHERE agent_id = ? AND workspace_id = ? GROUP BY status`,
+        )
+        .all(agentId, workspace) as Array<{ status: string; cnt: number }>;
+      const handoffs_from = db
+        .prepare(
+          `SELECT status, COUNT(*) AS cnt FROM handoffs
+           WHERE from_agent_id = ? AND workspace_id = ? GROUP BY status`,
+        )
+        .all(agentId, workspace) as Array<{ status: string; cnt: number }>;
+      const handoffs_to = db
+        .prepare(
+          `SELECT status, COUNT(*) AS cnt FROM handoffs
+           WHERE to_agent_id = ? AND workspace_id = ? GROUP BY status`,
+        )
+        .all(agentId, workspace) as Array<{ status: string; cnt: number }>;
+      const blockers = db
+        .prepare(
+          `SELECT status, COUNT(*) AS cnt FROM blockers
+           WHERE agent_id = ? AND workspace_id = ? GROUP BY status`,
+        )
+        .all(agentId, workspace) as Array<{ status: string; cnt: number }>;
+      const toMap = (arr: Array<{ status: string; cnt: number }>) =>
+        Object.fromEntries(arr.map((r) => [r.status, r.cnt]));
+      return reply.send({
+        agent_id: agentId,
+        workspace,
+        agent_status: agent.status,
+        tasks: toMap(tasks),
+        claims: toMap(claims),
+        handoffs_initiated: toMap(handoffs_from),
+        handoffs_received: toMap(handoffs_to),
+        blockers: toMap(blockers),
+        total_active_items:
+          (tasks.find((t) => t.status === "pending" || t.status === "in_progress")?.cnt ?? 0) +
+          (claims.find((c) => c.status === "active")?.cnt ?? 0) +
+          (handoffs_from.find((h) => h.status === "pending")?.cnt ?? 0),
+      });
+    },
+  );
 };

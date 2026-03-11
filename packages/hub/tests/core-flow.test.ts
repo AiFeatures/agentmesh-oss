@@ -20199,3 +20199,193 @@ test("F-568 entity count history", async () => {
   assert.ok(res.json().series.length >= 1);
   await app.close();
 });
+
+// F-569  claim dependency tree
+test("F-569 claim dependency tree returns root and empty tree", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const s = Date.now().toString(36);
+  const ws = `wdt-${s}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "DT" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-${s}`, display_name: "A", capabilities: ["ts"] },
+  });
+  const c = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-${s}`, scope: `scope-${s}`, paths: ["a.ts"], ttl_seconds: 300 },
+  });
+  assert.strictEqual(c.statusCode, 201);
+  const claimId = c.json().claim_id ?? c.json().id;
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/${claimId}/dependency-tree`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().claim_id, claimId);
+  assert.ok(Array.isArray(res.json().ancestors));
+  assert.ok(Array.isArray(res.json().dependents));
+  await app.close();
+});
+
+// F-570  handoff reassign
+test("F-570 handoff reassign moves pending handoff to new agent", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const s = Date.now().toString(36);
+  const ws = `whr-${s}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "HR" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `from-${s}`, display_name: "From", capabilities: ["ts"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `to1-${s}`, display_name: "To1", capabilities: ["ts"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `to2-${s}`, display_name: "To2", capabilities: ["py"] },
+  });
+  const h = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { from_agent_id: `from-${s}`, to_agent_id: `to1-${s}`, summary: "task" },
+  });
+  assert.strictEqual(h.statusCode, 201);
+  const handoffId = h.json().handoff_id;
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs/${handoffId}/reassign`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { to_agent_id: `to2-${s}` },
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().new_to_agent_id, `to2-${s}`);
+  assert.strictEqual(res.json().previous_to_agent_id, `to1-${s}`);
+  await app.close();
+});
+
+// F-571  blocker impact analysis
+test("F-571 blocker impact analysis returns structure", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const s = Date.now().toString(36);
+  const ws = `wbi-${s}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "BI" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-${s}`, display_name: "A", capabilities: ["ts"] },
+  });
+  const b = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-${s}`, title: "B1", severity: "high" },
+  });
+  assert.strictEqual(b.statusCode, 201);
+  const blockerId = b.json().blocker_id;
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/${blockerId}/impact-analysis`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().blocker_id, blockerId);
+  assert.ok(Array.isArray(res.json().affected_claims));
+  assert.ok(Array.isArray(res.json().dependent_blockers));
+  assert.ok(typeof res.json().impact_score === "number");
+  await app.close();
+});
+
+// F-572  agent workload summary
+test("F-572 agent workload summary returns combined view", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const s = Date.now().toString(36);
+  const ws = `waw-${s}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "AW" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-${s}`, display_name: "A", capabilities: ["ts"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/a-${s}/workload-summary`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().agent_id, `a-${s}`);
+  assert.ok(typeof res.json().tasks === "object");
+  assert.ok(typeof res.json().claims === "object");
+  assert.ok(typeof res.json().blockers === "object");
+  assert.ok(typeof res.json().total_active_items === "number");
+  await app.close();
+});
+
+// F-573  workspace stale entities
+test("F-573 workspace stale entities returns categorized results", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const s = Date.now().toString(36);
+  const ws = `wse-${s}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "SE" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/stale-entities?hours=1`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().stale_agents));
+  assert.ok(Array.isArray(res.json().expired_claims));
+  assert.ok(Array.isArray(res.json().overdue_blockers));
+  assert.ok(Array.isArray(res.json().stale_handoffs));
+  assert.ok(typeof res.json().total === "number");
+  await app.close();
+});

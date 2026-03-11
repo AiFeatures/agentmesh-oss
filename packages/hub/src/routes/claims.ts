@@ -3830,4 +3830,66 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, overlaps, count: overlaps.length });
     },
   );
+
+  // F-569  claim dependency tree (recursive)
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/:claimId/dependency-tree",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, claimId } = request.params as {
+        workspace: string;
+        claimId: string;
+      };
+      const claim = db
+        .prepare(
+          "SELECT claim_id, agent_id, scope, status FROM claims WHERE claim_id = ? AND workspace_id = ?",
+        )
+        .get(claimId, workspace) as
+        | { claim_id: string; agent_id: string; scope: string; status: string }
+        | undefined;
+      if (!claim) return reply.code(404).send({ error: "claim not found" });
+      // Walk up (dependencies)
+      const ancestors = db
+        .prepare(
+          `WITH RECURSIVE tree AS (
+            SELECT cd.depends_on_claim_id AS claim_id, 1 AS depth
+            FROM claim_dependencies cd WHERE cd.claim_id = ?
+            UNION ALL
+            SELECT cd2.depends_on_claim_id, t.depth + 1
+            FROM claim_dependencies cd2 JOIN tree t ON cd2.claim_id = t.claim_id
+            WHERE t.depth < 10
+          )
+          SELECT t.claim_id, t.depth, c.agent_id, c.scope, c.status
+          FROM tree t JOIN claims c ON c.claim_id = t.claim_id AND c.workspace_id = ?`,
+        )
+        .all(claimId, workspace) as Array<Record<string, unknown>>;
+      // Walk down (dependents)
+      const dependents = db
+        .prepare(
+          `WITH RECURSIVE tree AS (
+            SELECT cd.claim_id, 1 AS depth
+            FROM claim_dependencies cd WHERE cd.depends_on_claim_id = ?
+            UNION ALL
+            SELECT cd2.claim_id, t.depth + 1
+            FROM claim_dependencies cd2 JOIN tree t ON cd2.depends_on_claim_id = t.claim_id
+            WHERE t.depth < 10
+          )
+          SELECT t.claim_id, t.depth, c.agent_id, c.scope, c.status
+          FROM tree t JOIN claims c ON c.claim_id = t.claim_id AND c.workspace_id = ?`,
+        )
+        .all(claimId, workspace) as Array<Record<string, unknown>>;
+      return reply.send({
+        claim_id: claimId,
+        workspace,
+        root: claim,
+        ancestors,
+        dependents,
+        total_depth: Math.max(
+          0,
+          ...ancestors.map((a) => a.depth as number),
+          ...dependents.map((d) => d.depth as number),
+        ),
+      });
+    },
+  );
 };
