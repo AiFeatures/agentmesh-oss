@@ -3221,4 +3221,31 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send(rows);
     },
   );
+
+  // F-520 blocker-deadline-compliance
+  app.get<{ Params: { workspaceId: string } }>(
+    "/api/v1/workspaces/:workspaceId/analytics/blocker-deadline-compliance",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspaceId } = req.params;
+      const row = db
+        .prepare(
+          `SELECT
+             COUNT(*) AS total_with_deadline,
+             SUM(CASE WHEN status = 'resolved' AND resolved_at <= deadline_at THEN 1 ELSE 0 END) AS compliant,
+             SUM(CASE WHEN status = 'resolved' AND resolved_at > deadline_at THEN 1 ELSE 0 END) AS missed
+           FROM blockers
+           WHERE workspace_id = ? AND deadline_at IS NOT NULL`,
+        )
+        .get(workspaceId) as any;
+      const total = row?.total_with_deadline ?? 0;
+      const compliant = row?.compliant ?? 0;
+      return reply.send({
+        total_with_deadline: total,
+        compliant,
+        missed: row?.missed ?? 0,
+        compliance_rate: total > 0 ? +(compliant / total).toFixed(4) : 0,
+      });
+    },
+  );
 };

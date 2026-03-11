@@ -14258,3 +14258,32 @@ test("F-518 handoff-template-popularity", async () => {
   await app.close();
 });
 
+
+// T-519 agent-registration-daily
+test("F-519 agent-registration-daily", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "ard-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/agent-registration-daily`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json()));
+  await app.close();
+});
+
+// T-520 blocker-deadline-compliance
+test("F-520 blocker-deadline-compliance", async () => {
+  const app = buildApp();
+  runMigrations();
+  const ws = "bdc-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/analytics/blocker-deadline-compliance`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  const body = res.json();
+  assert.ok("compliance_rate" in body);
+  assert.ok("total_with_deadline" in body);
+  await app.close();
+});
+

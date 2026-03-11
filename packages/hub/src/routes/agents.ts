@@ -4036,4 +4036,24 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ total_pairs: pairs.length, overlaps: pairs });
     },
   );
+
+  // F-519 agent-registration-daily
+  app.get<{ Params: { workspaceId: string } }>(
+    "/api/v1/workspaces/:workspaceId/analytics/agent-registration-daily",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspaceId } = req.params;
+      const rows = db
+        .prepare(
+          `SELECT DATE(created_at) AS day, COUNT(*) AS registrations
+           FROM agents
+           WHERE workspace_id = ?
+           GROUP BY day
+           ORDER BY day DESC
+           LIMIT 30`,
+        )
+        .all(workspaceId) as any[];
+      return reply.send(rows);
+    },
+  );
 };
