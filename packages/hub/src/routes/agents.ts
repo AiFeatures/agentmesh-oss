@@ -4810,4 +4810,40 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-579  agent groups membership
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/:agentId/agent-groups",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as {
+        workspace: string;
+        agentId: string;
+      };
+      const agent = db
+        .prepare(
+          `SELECT agent_id, "group" FROM agents WHERE agent_id = ? AND workspace_id = ?`,
+        )
+        .get(agentId, workspace) as
+        | { agent_id: string; group: string | null }
+        | undefined;
+      if (!agent)
+        return reply.code(404).send({ error: "agent not found" });
+      const group_name = agent.group || "(none)";
+      const peers = db
+        .prepare(
+          `SELECT agent_id, display_name FROM agents WHERE workspace_id = ? AND "group" = ? AND agent_id != ?`,
+        )
+        .all(workspace, agent.group, agentId) as Array<{
+        agent_id: string;
+        display_name: string;
+      }>;
+      return reply.send({
+        agent_id: agentId,
+        workspace,
+        group: group_name,
+        peers,
+      });
+    },
+  );
 };

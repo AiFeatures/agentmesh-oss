@@ -3743,4 +3743,56 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-581  batch blocker severity update
+  app.post(
+    "/api/v1/workspaces/:workspace/blockers/batch-severity",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object" as const,
+          required: ["updates"],
+          properties: {
+            updates: {
+              type: "array" as const,
+              minItems: 1,
+              maxItems: 50,
+              items: {
+                type: "object" as const,
+                required: ["blocker_id", "severity"],
+                properties: {
+                  blocker_id: { type: "string" as const },
+                  severity: {
+                    type: "string" as const,
+                    enum: ["low", "medium", "high", "critical"],
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { updates } = request.body as {
+        updates: Array<{ blocker_id: string; severity: string }>;
+      };
+      const stmt = db.prepare(
+        "UPDATE blockers SET severity = ? WHERE blocker_id = ? AND workspace_id = ?",
+      );
+      const results: Array<{ blocker_id: string; updated: boolean }> = [];
+      for (const u of updates) {
+        const r = stmt.run(u.severity, u.blocker_id, workspace);
+        results.push({ blocker_id: u.blocker_id, updated: r.changes > 0 });
+      }
+      return reply.send({
+        workspace,
+        updated: results.filter((r) => r.updated).length,
+        skipped: results.filter((r) => !r.updated).length,
+        results,
+      });
+    },
+  );
 };

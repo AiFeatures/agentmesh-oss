@@ -3880,4 +3880,45 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-583  workspace state snapshot
+  app.get(
+    "/api/v1/workspaces/:workspace/full-snapshot",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const ws = db.prepare("SELECT * FROM workspaces WHERE workspace_id = ?").get(workspace) as
+        | Record<string, unknown>
+        | undefined;
+      if (!ws) return reply.code(404).send({ error: "workspace not found" });
+      const agents = db
+        .prepare("SELECT agent_id, display_name, status FROM agents WHERE workspace_id = ?")
+        .all(workspace) as Array<Record<string, unknown>>;
+      const claims = db
+        .prepare("SELECT claim_id, agent_id, scope, status FROM claims WHERE workspace_id = ?")
+        .all(workspace) as Array<Record<string, unknown>>;
+      const blockers = db
+        .prepare("SELECT blocker_id, title, status, severity FROM blockers WHERE workspace_id = ?")
+        .all(workspace) as Array<Record<string, unknown>>;
+      const handoffs = db
+        .prepare(
+          "SELECT handoff_id, from_agent_id, to_agent_id, status FROM handoffs WHERE workspace_id = ?",
+        )
+        .all(workspace) as Array<Record<string, unknown>>;
+      return reply.send({
+        workspace,
+        snapshot_at: new Date().toISOString(),
+        counts: {
+          agents: agents.length,
+          claims: claims.length,
+          blockers: blockers.length,
+          handoffs: handoffs.length,
+        },
+        agents,
+        claims,
+        blockers,
+        handoffs,
+      });
+    },
+  );
 };

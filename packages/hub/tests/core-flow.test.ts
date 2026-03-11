@@ -20569,3 +20569,190 @@ test("F-578 workspace bulk settings merges settings", async () => {
   assert.strictEqual(res2.json().settings.language, "en");
   await app.close();
 });
+
+// F-579  agent groups membership
+test("F-579 agent groups returns group list", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const s = Date.now().toString(36);
+  const ws = `wag-${s}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "AG" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-${s}`, display_name: "A", capabilities: ["ts"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/a-${s}/agent-groups`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(typeof res.json().group === "string");
+  assert.ok(Array.isArray(res.json().peers));
+  await app.close();
+});
+
+// F-580  batch claim renewal
+test("F-580 batch claim renewal extends active claims", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const s = Date.now().toString(36);
+  const ws = `wbr-${s}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "BR" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-${s}`, display_name: "A", capabilities: ["ts"] },
+  });
+  const c = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-${s}`, scope: `sc${s}`, paths: ["x.ts"], ttl_seconds: 300 },
+  });
+  assert.strictEqual(c.statusCode, 201);
+  const cid = c.json().claim_id ?? c.json().id;
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims/batch-renew-multi`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { claim_ids: [cid], extend_seconds: 120 },
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().renewed, 1);
+  await app.close();
+});
+
+// F-581  batch blocker severity update
+test("F-581 batch blocker severity update modifies severities", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const s = Date.now().toString(36);
+  const ws = `wbs2-${s}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "BS2" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-${s}`, display_name: "A", capabilities: ["ts"] },
+  });
+  const b = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-${s}`, title: "B1", severity: "low" },
+  });
+  assert.strictEqual(b.statusCode, 201);
+  const bid = b.json().blocker_id ?? b.json().id;
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers/batch-severity`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { updates: [{ blocker_id: bid, severity: "critical" }] },
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().updated, 1);
+  await app.close();
+});
+
+// F-582  manual handoff retry
+test("F-582 manual handoff retry requeues rejected handoff", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const s = Date.now().toString(36);
+  const ws = `wmr-${s}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "MR" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-${s}`, display_name: "A", capabilities: ["ts"] },
+  });
+  const h = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { from_agent_id: `a-${s}`, summary: "test retry" },
+  });
+  assert.strictEqual(h.statusCode, 201);
+  const hid = h.json().handoff_id ?? h.json().id;
+  // Reject it first
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs/${hid}/reject`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-${s}`, reason: "not ready" },
+  });
+  // Now retry
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs/${hid}/retry-manual`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: {},
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().status, "pending");
+  assert.ok(res.json().retry_count >= 1);
+  await app.close();
+});
+
+// F-583  workspace snapshot
+test("F-583 workspace snapshot returns full state", async () => {
+  runMigrations();
+  const app = buildApp();
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const s = Date.now().toString(36);
+  const ws = `wss-${s}`;
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: "SS" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-${s}`, display_name: "A", capabilities: ["ts"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/full-snapshot`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().snapshot_at);
+  assert.strictEqual(res.json().counts.agents, 1);
+  assert.ok(Array.isArray(res.json().agents));
+  assert.ok(Array.isArray(res.json().claims));
+  assert.ok(Array.isArray(res.json().blockers));
+  assert.ok(Array.isArray(res.json().handoffs));
+  await app.close();
+});

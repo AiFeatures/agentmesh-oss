@@ -3944,4 +3944,50 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-580  batch claim renewal (multi)
+  app.post(
+    "/api/v1/workspaces/:workspace/claims/batch-renew-multi",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object" as const,
+          required: ["claim_ids"],
+          properties: {
+            claim_ids: {
+              type: "array" as const,
+              minItems: 1,
+              maxItems: 50,
+              items: { type: "string" as const },
+            },
+            extend_seconds: { type: "number" as const, minimum: 30, maximum: 86400 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { claim_ids, extend_seconds = 300 } = request.body as {
+        claim_ids: string[];
+        extend_seconds?: number;
+      };
+      const stmt = db.prepare(
+        `UPDATE claims SET expires_at = datetime(expires_at, '+' || ? || ' seconds'),
+         renewal_count = renewal_count + 1
+         WHERE claim_id = ? AND workspace_id = ? AND status = 'active'`,
+      );
+      const results: Array<{ claim_id: string; renewed: boolean }> = [];
+      for (const cid of claim_ids) {
+        const r = stmt.run(extend_seconds, cid, workspace);
+        results.push({ claim_id: cid, renewed: r.changes > 0 });
+      }
+      return reply.send({
+        workspace,
+        renewed: results.filter((r) => r.renewed).length,
+        skipped: results.filter((r) => !r.renewed).length,
+        results,
+      });
+    },
+  );
 };

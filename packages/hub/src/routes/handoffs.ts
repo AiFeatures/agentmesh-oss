@@ -4110,4 +4110,47 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, buckets, total_pending: total });
     },
   );
+
+  // F-582  manual handoff retry
+  app.post(
+    "/api/v1/workspaces/:workspace/handoffs/:handoffId/retry-manual",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        params: {
+          type: "object" as const,
+          required: ["workspace", "handoffId"],
+          properties: {
+            workspace: { type: "string" as const },
+            handoffId: { type: "string" as const },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace, handoffId } = request.params as {
+        workspace: string;
+        handoffId: string;
+      };
+      const row = db
+        .prepare(
+          "SELECT handoff_id, status, retry_count, max_retries FROM handoffs WHERE handoff_id = ? AND workspace_id = ?",
+        )
+        .get(handoffId, workspace) as
+        | { handoff_id: string; status: string; retry_count: number; max_retries: number }
+        | undefined;
+      if (!row) return reply.code(404).send({ error: "handoff not found" });
+      if (row.status !== "rejected")
+        return reply.code(409).send({ error: "only rejected handoffs can be retried" });
+      db.prepare(
+        "UPDATE handoffs SET status = 'pending', retry_count = retry_count + 1 WHERE handoff_id = ?",
+      ).run(handoffId);
+      return reply.send({
+        handoff_id: handoffId,
+        status: "pending",
+        retry_count: row.retry_count + 1,
+        max_retries: row.max_retries,
+      });
+    },
+  );
 };
