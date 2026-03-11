@@ -4548,4 +4548,53 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-554  capability diff between two agents
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/capability-diff",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        querystring: {
+          type: "object",
+          required: ["agent1", "agent2"],
+          properties: {
+            agent1: { type: "string", minLength: 1 },
+            agent2: { type: "string", minLength: 1 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { agent1, agent2 } = request.query as { agent1: string; agent2: string };
+      const a1 = db
+        .prepare("SELECT capabilities FROM agents WHERE agent_id = ? AND workspace_id = ?")
+        .get(agent1, workspace) as { capabilities: string } | undefined;
+      const a2 = db
+        .prepare("SELECT capabilities FROM agents WHERE agent_id = ? AND workspace_id = ?")
+        .get(agent2, workspace) as { capabilities: string } | undefined;
+      if (!a1) return reply.code(404).send({ error: `Agent '${agent1}' not found` });
+      if (!a2) return reply.code(404).send({ error: `Agent '${agent2}' not found` });
+      const caps1 = new Set<string>(parseJsonSafe(a1.capabilities) || []);
+      const caps2 = new Set<string>(parseJsonSafe(a2.capabilities) || []);
+      const only1: string[] = [];
+      const only2: string[] = [];
+      const shared: string[] = [];
+      for (const c of caps1) {
+        if (caps2.has(c)) shared.push(c);
+        else only1.push(c);
+      }
+      for (const c of caps2) {
+        if (!caps1.has(c)) only2.push(c);
+      }
+      return reply.send({
+        agent1,
+        agent2,
+        shared,
+        only_in_agent1: only1,
+        only_in_agent2: only2,
+      });
+    },
+  );
 };

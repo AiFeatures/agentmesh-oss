@@ -3937,4 +3937,27 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ handoff_id: handoffId, status: "cancelled", reason: reason || null });
     },
   );
+
+  // F-557  handoff queue depth per agent
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/queue-depth",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT to_agent_id, COUNT(*) as pending_count
+           FROM handoffs
+           WHERE workspace_id = ? AND status = 'pending' AND to_agent_id IS NOT NULL
+           GROUP BY to_agent_id
+           ORDER BY pending_count DESC`,
+        )
+        .all(workspace) as Array<{ to_agent_id: string; pending_count: number }>;
+      return reply.send({
+        workspace,
+        queue: rows,
+        total_pending: rows.reduce((sum, r) => sum + r.pending_count, 0),
+      });
+    },
+  );
 };

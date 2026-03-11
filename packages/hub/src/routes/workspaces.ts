@@ -3675,4 +3675,44 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-558  workspace data purge (old audit log entries)
+  app.post(
+    "/api/v1/workspaces/:workspace/data-purge",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        body: {
+          type: "object",
+          required: ["older_than_days"],
+          properties: {
+            older_than_days: { type: "integer", minimum: 7, maximum: 3650 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { older_than_days } = request.body as { older_than_days: number };
+      const cutoff = new Date(Date.now() - older_than_days * 86400_000).toISOString();
+      const result = db
+        .prepare("DELETE FROM audit_log WHERE workspace_id = ? AND created_at < ?")
+        .run(workspace, cutoff);
+      writeAuditLog({
+        workspaceId: workspace,
+        actorType: "system",
+        actorId: "system",
+        action: "workspace.data_purge",
+        entityType: "workspace",
+        entityId: workspace,
+        requestId: request.id,
+        payload: { older_than_days, purged_count: result.changes },
+      });
+      return reply.send({
+        workspace,
+        purged_audit_entries: result.changes,
+        cutoff_date: cutoff,
+      });
+    },
+  );
 };

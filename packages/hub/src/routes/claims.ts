@@ -3724,4 +3724,42 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-555  claim audit trail
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/:claimId/audit-trail",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, claimId } = request.params as { workspace: string; claimId: string };
+      const claim = db
+        .prepare("SELECT claim_id FROM claims WHERE claim_id = ? AND workspace_id = ?")
+        .get(claimId, workspace) as { claim_id: string } | undefined;
+      if (!claim) return reply.code(404).send({ error: "Claim not found" });
+      const rows = db
+        .prepare(
+          `SELECT action, actor_id, actor_type, payload, created_at
+           FROM audit_log
+           WHERE workspace_id = ? AND entity_type = 'claim' AND entity_id = ?
+           ORDER BY created_at DESC`,
+        )
+        .all(workspace, claimId) as Array<{
+        action: string;
+        actor_id: string;
+        actor_type: string;
+        payload: string | null;
+        created_at: string;
+      }>;
+      return reply.send({
+        claim_id: claimId,
+        trail: rows.map((r) => ({
+          action: r.action,
+          actor_id: r.actor_id,
+          actor_type: r.actor_type,
+          payload: parseJsonSafe(r.payload),
+          timestamp: r.created_at,
+        })),
+        count: rows.length,
+      });
+    },
+  );
 };

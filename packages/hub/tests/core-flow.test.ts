@@ -19533,3 +19533,223 @@ test("F-553 agent leaderboard", async () => {
   assert.strictEqual(res.json().leaderboard[0].rank, 1);
   await app.close();
 });
+
+// T-554 capability diff
+test("F-554 capability diff", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "wcd-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: "cd-1",
+      display_name: "AgentA",
+      capabilities: ["code", "test", "review"],
+      model: "gpt-4",
+    },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: "cd-2",
+      display_name: "AgentB",
+      capabilities: ["code", "deploy", "monitor"],
+      model: "gpt-4",
+    },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/capability-diff?agent1=cd-1&agent2=cd-2`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  const body = res.json();
+  assert.ok(body.shared.includes("code"));
+  assert.ok(body.only_in_agent1.includes("test"));
+  assert.ok(body.only_in_agent1.includes("review"));
+  assert.ok(body.only_in_agent2.includes("deploy"));
+  assert.ok(body.only_in_agent2.includes("monitor"));
+  await app.close();
+});
+
+// T-555 claim audit trail
+test("F-555 claim audit trail", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "wcat-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: "cat-1",
+      display_name: "AuditAgent",
+      capabilities: ["code"],
+      model: "gpt-4",
+    },
+  });
+  const claim = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: auth,
+    payload: { agent_id: "cat-1", scope: "audit-scope", paths: ["src/a.ts"], ttl_seconds: 300 },
+  });
+  assert.strictEqual(claim.statusCode, 201);
+  const claimId = claim.json().claim_id;
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/${claimId}/audit-trail`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().trail));
+  assert.ok(res.json().trail.length >= 1);
+  assert.strictEqual(res.json().claim_id, claimId);
+  await app.close();
+});
+
+// T-556 blocker auto-resolve check
+test("F-556 blocker auto-resolve check", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "warc-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: "arc-1",
+      display_name: "ResolveAgent",
+      capabilities: ["code"],
+      model: "gpt-4",
+    },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/blockers`,
+    headers: auth,
+    payload: { agent_id: "arc-1", title: "Old blocker", severity: "low" },
+  });
+  // Check with a threshold that will include the just-created blocker (1 hour threshold)
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/auto-resolve-check?stale_hours=1`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().candidates));
+  // blocker was just created so won't be stale yet (threshold is 1hr)
+  assert.strictEqual(res.json().count, 0);
+  await app.close();
+});
+
+// T-557 handoff queue depth
+test("F-557 handoff queue depth", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "whqd-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "qd-from", display_name: "From", capabilities: ["code"], model: "gpt-4" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "qd-to", display_name: "To", capabilities: ["review"], model: "gpt-4" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "qd-from", to_agent_id: "qd-to", summary: "QD Test 1" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/handoffs`,
+    headers: auth,
+    payload: { from_agent_id: "qd-from", to_agent_id: "qd-to", summary: "QD Test 2" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/queue-depth`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().queue));
+  assert.strictEqual(res.json().total_pending, 2);
+  assert.strictEqual(res.json().queue[0].to_agent_id, "qd-to");
+  assert.strictEqual(res.json().queue[0].pending_count, 2);
+  await app.close();
+});
+
+// T-558 workspace data purge
+test("F-558 workspace data purge", async () => {
+  runMigrations();
+  const app = buildApp();
+  const ws = "wdp-" + Date.now().toString(36);
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  // Create some activity
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: {
+      agent_id: "dp-1",
+      display_name: "PurgeAgent",
+      capabilities: ["code"],
+      model: "gpt-4",
+    },
+  });
+  // Purge with a future cutoff (0 days = nothing old enough, min is 7)
+  const res = await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/data-purge`,
+    headers: auth,
+    payload: { older_than_days: 7 },
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.strictEqual(res.json().purged_audit_entries, 0); // nothing is 7 days old yet
+  assert.ok(res.json().cutoff_date);
+  await app.close();
+});

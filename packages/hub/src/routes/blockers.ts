@@ -3508,4 +3508,52 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-556  blocker auto-resolve check
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/auto-resolve-check",
+    {
+      preHandler: app.authGuard,
+      schema: {
+        querystring: {
+          type: "object",
+          properties: {
+            stale_hours: { type: "integer", minimum: 1, maximum: 8760, default: 72 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const { stale_hours = 72 } = request.query as { stale_hours?: number };
+      const cutoff = new Date(Date.now() - stale_hours * 3600_000).toISOString();
+      const rows = db
+        .prepare(
+          `SELECT blocker_id, title, severity, agent_id, created_at
+           FROM blockers
+           WHERE workspace_id = ? AND status = 'open'
+           AND created_at < datetime('now', '-' || ? || ' hours')`,
+        )
+        .all(workspace, stale_hours) as Array<{
+        blocker_id: string;
+        title: string;
+        severity: string;
+        agent_id: string;
+        created_at: string;
+      }>;
+      return reply.send({
+        workspace,
+        stale_threshold_hours: stale_hours,
+        candidates: rows.map((r) => ({
+          blocker_id: r.blocker_id,
+          title: r.title,
+          severity: r.severity,
+          agent_id: r.agent_id,
+          created_at: r.created_at,
+          hours_open: Math.round((Date.now() - new Date(r.created_at).getTime()) / 3600_000),
+        })),
+        count: rows.length,
+      });
+    },
+  );
 };
