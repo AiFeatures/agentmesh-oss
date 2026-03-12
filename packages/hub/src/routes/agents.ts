@@ -4821,14 +4821,9 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
         agentId: string;
       };
       const agent = db
-        .prepare(
-          `SELECT agent_id, "group" FROM agents WHERE agent_id = ? AND workspace_id = ?`,
-        )
-        .get(agentId, workspace) as
-        | { agent_id: string; group: string | null }
-        | undefined;
-      if (!agent)
-        return reply.code(404).send({ error: "agent not found" });
+        .prepare(`SELECT agent_id, "group" FROM agents WHERE agent_id = ? AND workspace_id = ?`)
+        .get(agentId, workspace) as { agent_id: string; group: string | null } | undefined;
+      if (!agent) return reply.code(404).send({ error: "agent not found" });
       const group_name = agent.group || "(none)";
       const peers = db
         .prepare(
@@ -4874,6 +4869,38 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
         tasks: Object.fromEntries(tasks.map((t) => [t.status, t.cnt])),
         handoffs: Object.fromEntries(handoffs.map((h) => [h.status, h.cnt])),
         claims: Object.fromEntries(claims.map((c) => [c.status, c.cnt])),
+      });
+    },
+  );
+
+  // F-589  agent utilization rate
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/:agentId/agent-utilization",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as { workspace: string; agentId: string };
+      const active = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM agent_tasks WHERE workspace_id = ? AND agent_id = ? AND status IN ('pending','in_progress')`,
+          )
+          .get(workspace, agentId) as { c: number }
+      ).c;
+      const completed = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM agent_tasks WHERE workspace_id = ? AND agent_id = ? AND status = 'completed'`,
+          )
+          .get(workspace, agentId) as { c: number }
+      ).c;
+      const total = active + completed;
+      const utilization = total > 0 ? Math.round((active / Math.max(total, 1)) * 100) : 0;
+      return reply.send({
+        agent_id: agentId,
+        workspace,
+        active_tasks: active,
+        completed_tasks: completed,
+        utilization_pct: utilization,
       });
     },
   );

@@ -20764,9 +20764,23 @@ test("GET /agents/:agentId/agent-metrics returns aggregated metrics", async () =
   const s = `am${Date.now()}`;
   const ws = `ws-${s}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: { ...auth, "content-type": "application/json" }, payload: { workspace_id: ws, display_name: ws } });
-  await app.inject({ method: "POST", url: `/api/v1/workspaces/${ws}/agents/register`, headers: { ...auth, "content-type": "application/json" }, payload: { agent_id: `a-${s}`, display_name: `a-${s}`, capabilities: ["code"] } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/a-${s}/agent-metrics`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-${s}`, display_name: `a-${s}`, capabilities: ["code"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/a-${s}/agent-metrics`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   assert.ok(res.json().tasks !== undefined);
   assert.ok(res.json().claims !== undefined);
@@ -20780,8 +20794,17 @@ test("GET /claims/claim-histogram returns distribution", async () => {
   const s = `ch${Date.now()}`;
   const ws = `ws-${s}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: { ...auth, "content-type": "application/json" }, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-histogram`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-histogram`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   assert.ok(Array.isArray(res.json().buckets));
   await app.close();
@@ -20794,8 +20817,17 @@ test("GET /blockers/blocker-heatmap returns severity×time data", async () => {
   const s = `bh${Date.now()}`;
   const ws = `ws-${s}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: { ...auth, "content-type": "application/json" }, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-heatmap`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-heatmap`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   assert.ok(Array.isArray(res.json().heatmap));
   await app.close();
@@ -20808,8 +20840,17 @@ test("GET /handoffs/handoff-routing-stats returns mode distribution", async () =
   const s = `rs${Date.now()}`;
   const ws = `ws-${s}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: { ...auth, "content-type": "application/json" }, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-routing-stats`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-routing-stats`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   assert.ok(res.json().routing_stats !== undefined);
   await app.close();
@@ -20822,10 +20863,142 @@ test("GET /workspaces/:workspace/workspace-digest returns summary", async () => 
   const s = `wd${Date.now()}`;
   const ws = `ws-${s}`;
   const auth = { authorization: `Bearer ${getSharedSecret()}` };
-  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: { ...auth, "content-type": "application/json" }, payload: { workspace_id: ws, display_name: ws } });
-  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/workspace-digest`, headers: auth });
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/workspace-digest`,
+    headers: auth,
+  });
   assert.strictEqual(res.statusCode, 200);
   assert.ok(res.json().agents_online !== undefined);
   assert.ok(res.json().date !== undefined);
+  await app.close();
+});
+
+// F-589  agent utilization rate
+test("F-589 agent utilization", async () => {
+  await runMigrations();
+  const app = buildApp();
+  const s = `ut${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-${s}`, display_name: `A ${s}`, capabilities: ["code"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/a-${s}/agent-utilization`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().utilization_pct !== undefined);
+  await app.close();
+});
+
+// F-590  claim TTL analysis
+test("F-590 claim TTL analysis", async () => {
+  await runMigrations();
+  const app = buildApp();
+  const s = `ta${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-ttl-analysis`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().ttl_analysis));
+  await app.close();
+});
+
+// F-591  blocker correlation
+test("F-591 blocker correlation", async () => {
+  await runMigrations();
+  const app = buildApp();
+  const s = `bc${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-correlation`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().correlations));
+  await app.close();
+});
+
+// F-592  handoff latency percentiles
+test("F-592 handoff latency percentiles", async () => {
+  await runMigrations();
+  const app = buildApp();
+  const s = `lp${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-latency-percentiles`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().p50 !== undefined);
+  assert.ok(res.json().p90 !== undefined);
+  await app.close();
+});
+
+// F-593  workspace risk score
+test("F-593 workspace risk score", async () => {
+  await runMigrations();
+  const app = buildApp();
+  const s = `rs${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/workspace-risk-score`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().risk_score !== undefined);
+  assert.ok(res.json().factors !== undefined);
   await app.close();
 });

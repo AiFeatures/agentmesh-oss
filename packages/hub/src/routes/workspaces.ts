@@ -3929,18 +3929,28 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const { workspace } = request.params as { workspace: string };
       const today = new Date().toISOString().slice(0, 10);
-      const agents_online = (db
-        .prepare(`SELECT COUNT(*) as c FROM agents WHERE workspace_id = ? AND status = 'online'`)
-        .get(workspace) as { c: number }).c;
-      const claims_active = (db
-        .prepare(`SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND status = 'active'`)
-        .get(workspace) as { c: number }).c;
-      const blockers_open = (db
-        .prepare(`SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status = 'open'`)
-        .get(workspace) as { c: number }).c;
-      const handoffs_pending = (db
-        .prepare(`SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND status = 'pending'`)
-        .get(workspace) as { c: number }).c;
+      const agents_online = (
+        db
+          .prepare(`SELECT COUNT(*) as c FROM agents WHERE workspace_id = ? AND status = 'online'`)
+          .get(workspace) as { c: number }
+      ).c;
+      const claims_active = (
+        db
+          .prepare(`SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND status = 'active'`)
+          .get(workspace) as { c: number }
+      ).c;
+      const blockers_open = (
+        db
+          .prepare(`SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status = 'open'`)
+          .get(workspace) as { c: number }
+      ).c;
+      const handoffs_pending = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND status = 'pending'`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
       const recent_audit = db
         .prepare(
           `SELECT action, COUNT(*) as cnt FROM audit_log
@@ -3956,6 +3966,67 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
         blockers_open,
         handoffs_pending,
         recent_activity: recent_audit,
+      });
+    },
+  );
+
+  // F-593  workspace risk score
+  app.get(
+    "/api/v1/workspaces/:workspace/workspace-risk-score",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const openBlockers = (
+        db
+          .prepare(`SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status = 'open'`)
+          .get(workspace) as { c: number }
+      ).c;
+      const critBlockers = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status = 'open' AND severity IN ('critical','high')`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const pendingHandoffs = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND status = 'pending'`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const staleAgents = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM agents WHERE workspace_id = ? AND status IN ('stale','evicted')`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const expiredClaims = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND status = 'active' AND expires_at < datetime('now')`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const score = Math.min(
+        100,
+        openBlockers * 5 +
+          critBlockers * 15 +
+          pendingHandoffs * 3 +
+          staleAgents * 10 +
+          expiredClaims * 8,
+      );
+      return reply.send({
+        workspace,
+        risk_score: score,
+        factors: {
+          open_blockers: openBlockers,
+          critical_blockers: critBlockers,
+          pending_handoffs: pendingHandoffs,
+          stale_agents: staleAgents,
+          expired_claims: expiredClaims,
+        },
       });
     },
   );

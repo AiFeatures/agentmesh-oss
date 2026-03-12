@@ -4013,4 +4013,29 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, buckets: rows });
     },
   );
+
+  // F-590  claim TTL analysis
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/claim-ttl-analysis",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT
+           CASE
+             WHEN ttl_seconds <= 300 THEN '0-5m'
+             WHEN ttl_seconds <= 1800 THEN '5-30m'
+             WHEN ttl_seconds <= 3600 THEN '30-60m'
+             ELSE '60m+'
+           END as ttl_bucket,
+           AVG(renewal_count) as avg_renewals,
+           COUNT(*) as cnt
+           FROM claims WHERE workspace_id = ?
+           GROUP BY ttl_bucket`,
+        )
+        .all(workspace) as Array<{ ttl_bucket: string; avg_renewals: number; cnt: number }>;
+      return reply.send({ workspace, ttl_analysis: rows });
+    },
+  );
 };

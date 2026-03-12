@@ -3814,4 +3814,30 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, heatmap: rows });
     },
   );
+
+  // F-591  blocker correlation (agents with multiple concurrent blockers)
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/blocker-correlation",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT agent_id, COUNT(*) as blocker_count,
+           GROUP_CONCAT(blocker_id) as blocker_ids
+           FROM blockers WHERE workspace_id = ? AND status = 'open'
+           GROUP BY agent_id HAVING blocker_count > 1
+           ORDER BY blocker_count DESC LIMIT 20`,
+        )
+        .all(workspace) as Array<{ agent_id: string; blocker_count: number; blocker_ids: string }>;
+      return reply.send({
+        workspace,
+        correlations: rows.map((r) => ({
+          agent_id: r.agent_id,
+          blocker_count: r.blocker_count,
+          blocker_ids: r.blocker_ids ? r.blocker_ids.split(",") : [],
+        })),
+      });
+    },
+  );
 };

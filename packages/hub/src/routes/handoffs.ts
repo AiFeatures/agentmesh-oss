@@ -4177,4 +4177,31 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, routing_stats: modes });
     },
   );
+
+  // F-592  handoff latency percentiles
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-latency-percentiles",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT
+           CAST((julianday(updated_at) - julianday(created_at)) * 86400 AS INTEGER) as latency_seconds
+           FROM handoffs WHERE workspace_id = ? AND status IN ('accepted','rejected')
+           ORDER BY latency_seconds`,
+        )
+        .all(workspace) as Array<{ latency_seconds: number }>;
+      const n = rows.length;
+      const p = (pct: number) =>
+        n > 0 ? rows[Math.min(Math.floor(n * pct), n - 1)].latency_seconds : 0;
+      return reply.send({
+        workspace,
+        count: n,
+        p50: p(0.5),
+        p90: p(0.9),
+        p99: p(0.99),
+      });
+    },
+  );
 };
