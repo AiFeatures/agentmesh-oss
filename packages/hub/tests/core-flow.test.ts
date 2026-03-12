@@ -21125,3 +21125,125 @@ test("F-598 workspace capacity plan", async () => {
   assert.ok(res.json().tasks_per_agent !== undefined);
   await app.close();
 });
+
+// F-599  agent drift score
+test("F-599 agent drift score", async () => {
+  await runMigrations();
+  const app = buildApp();
+  const s = `ds${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-${s}`, display_name: `A ${s}`, capabilities: ["code"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/a-${s}/agent-drift-score`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().drift_score !== undefined);
+  await app.close();
+});
+
+// F-600  claim conflict matrix
+test("F-600 claim conflict matrix", async () => {
+  await runMigrations();
+  const app = buildApp();
+  const s = `cm${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-conflict-matrix`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().conflict_matrix));
+  await app.close();
+});
+
+// F-601  blocker priority matrix
+test("F-601 blocker priority matrix", async () => {
+  await runMigrations();
+  const app = buildApp();
+  const s = `pm${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-priority-matrix`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().matrix));
+  await app.close();
+});
+
+// F-602  handoff capacity bottleneck
+test("F-602 handoff capacity bottleneck", async () => {
+  await runMigrations();
+  const app = buildApp();
+  const s = `cb${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-capacity-bottleneck`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().bottlenecks));
+  await app.close();
+});
+
+// F-603  workspace governance report
+test("F-603 workspace governance report", async () => {
+  await runMigrations();
+  const app = buildApp();
+  const s = `gr${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/workspace-governance-report`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().agent_compliance_pct !== undefined);
+  assert.ok(res.json().critical_blockers !== undefined);
+  await app.close();
+});

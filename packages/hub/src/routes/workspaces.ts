@@ -4081,4 +4081,68 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-603  workspace governance report
+  app.get(
+    "/api/v1/workspaces/:workspace/workspace-governance-report",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const totalAgents = (
+        db.prepare(`SELECT COUNT(*) as c FROM agents WHERE workspace_id = ?`).get(workspace) as {
+          c: number;
+        }
+      ).c;
+      const staleAgents = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM agents WHERE workspace_id = ? AND status IN ('stale','evicted')`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const activeClaims = (
+        db
+          .prepare(`SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND status = 'active'`)
+          .get(workspace) as { c: number }
+      ).c;
+      const expiredClaims = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND status = 'active' AND expires_at < datetime('now')`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const openBlockers = (
+        db
+          .prepare(`SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status = 'open'`)
+          .get(workspace) as { c: number }
+      ).c;
+      const critBlockers = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status = 'open' AND severity IN ('critical','high')`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const pendingHandoffs = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND status = 'pending'`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const compliance =
+        totalAgents > 0 ? Math.round(((totalAgents - staleAgents) / totalAgents) * 100) : 100;
+      return reply.send({
+        workspace,
+        agent_compliance_pct: compliance,
+        expired_claims: expiredClaims,
+        critical_blockers: critBlockers,
+        pending_handoffs: pendingHandoffs,
+        total_agents: totalAgents,
+        active_claims: activeClaims,
+        open_blockers: openBlockers,
+      });
+    },
+  );
 };

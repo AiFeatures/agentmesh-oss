@@ -3864,4 +3864,21 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, age_distribution: rows });
     },
   );
+
+  // F-601  blocker priority matrix (severity × status)
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/blocker-priority-matrix",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT severity, status, COUNT(*) as cnt
+           FROM blockers WHERE workspace_id = ?
+           GROUP BY severity, status ORDER BY severity, status`,
+        )
+        .all(workspace) as Array<{ severity: string; status: string; cnt: number }>;
+      return reply.send({ workspace, matrix: rows });
+    },
+  );
 };

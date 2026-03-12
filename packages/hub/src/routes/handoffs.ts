@@ -4229,4 +4229,21 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-602  handoff capacity bottleneck (agents with most pending)
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-capacity-bottleneck",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT to_agent_id as agent_id, COUNT(*) as pending_count
+           FROM handoffs WHERE workspace_id = ? AND status = 'pending'
+           GROUP BY to_agent_id ORDER BY pending_count DESC LIMIT 10`,
+        )
+        .all(workspace) as Array<{ agent_id: string; pending_count: number }>;
+      return reply.send({ workspace, bottlenecks: rows });
+    },
+  );
 };

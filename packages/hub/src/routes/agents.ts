@@ -4931,4 +4931,47 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-599  agent drift score (behavioral deviation)
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/:agentId/agent-drift-score",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as { workspace: string; agentId: string };
+      const taskFail = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM agent_tasks WHERE workspace_id = ? AND agent_id = ? AND status = 'cancelled'`,
+          )
+          .get(workspace, agentId) as { c: number }
+      ).c;
+      const taskTotal = (
+        db
+          .prepare(`SELECT COUNT(*) as c FROM agent_tasks WHERE workspace_id = ? AND agent_id = ?`)
+          .get(workspace, agentId) as { c: number }
+      ).c;
+      const handoffReject = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND to_agent_id = ? AND status = 'rejected'`,
+          )
+          .get(workspace, agentId) as { c: number }
+      ).c;
+      const handoffTotal = (
+        db
+          .prepare(`SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND to_agent_id = ?`)
+          .get(workspace, agentId) as { c: number }
+      ).c;
+      const failRate = taskTotal > 0 ? taskFail / taskTotal : 0;
+      const rejectRate = handoffTotal > 0 ? handoffReject / handoffTotal : 0;
+      const drift = Math.min(10, Math.round((failRate * 5 + rejectRate * 5) * 10) / 10);
+      return reply.send({
+        agent_id: agentId,
+        workspace,
+        drift_score: drift,
+        task_fail_rate: Math.round(failRate * 100),
+        handoff_reject_rate: Math.round(rejectRate * 100),
+      });
+    },
+  );
 };

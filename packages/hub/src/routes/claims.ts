@@ -4064,4 +4064,28 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, at_risk_claims: rows });
     },
   );
+
+  // F-600  claim conflict matrix (scope overlap heatmap)
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/claim-conflict-matrix",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT ca.agent_id as agent_a, cb.agent_id as agent_b, COUNT(*) as overlap_count
+           FROM claim_paths a JOIN claim_paths b ON a.path_pattern = b.path_pattern AND a.claim_id != b.claim_id
+           JOIN claims ca ON a.claim_id = ca.claim_id AND ca.workspace_id = ? AND ca.status = 'active'
+           JOIN claims cb ON b.claim_id = cb.claim_id AND cb.workspace_id = ? AND cb.status = 'active'
+           WHERE ca.agent_id < cb.agent_id
+           GROUP BY agent_a, agent_b ORDER BY overlap_count DESC LIMIT 20`,
+        )
+        .all(workspace, workspace) as Array<{
+        agent_a: string;
+        agent_b: string;
+        overlap_count: number;
+      }>;
+      return reply.send({ workspace, conflict_matrix: rows });
+    },
+  );
 };
