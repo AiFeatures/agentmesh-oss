@@ -4298,4 +4298,40 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, count: n, p50, p90, p99 });
     },
   );
+
+  // F-617  handoff completion chain
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-completion-chain",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT from_agent_id, to_agent_id, status, created_at
+           FROM handoffs WHERE workspace_id = ?
+           ORDER BY created_at DESC LIMIT 50`,
+        )
+        .all(workspace) as Array<{
+        from_agent_id: string;
+        to_agent_id: string;
+        status: string;
+        created_at: string;
+      }>;
+      let maxChain = 0;
+      let currentChain = 0;
+      for (const r of rows) {
+        if (r.status === "accepted") {
+          currentChain++;
+          maxChain = Math.max(maxChain, currentChain);
+        } else {
+          currentChain = 0;
+        }
+      }
+      return reply.send({
+        workspace,
+        recent_handoffs: rows.length,
+        longest_accepted_chain: maxChain,
+      });
+    },
+  );
 };

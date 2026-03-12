@@ -5054,4 +5054,34 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-614  agent capability gap
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/agent-capability-gap",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const allCaps = db
+        .prepare(
+          `SELECT DISTINCT json_each.value as cap FROM agents, json_each(agents.capabilities) WHERE agents.workspace_id = ?`,
+        )
+        .all(workspace) as Array<{ cap: string }>;
+      const agentCaps = db
+        .prepare(
+          `SELECT agent_id, capabilities FROM agents WHERE workspace_id = ? AND status IN ('online','idle')`,
+        )
+        .all(workspace) as Array<{ agent_id: string; capabilities: string }>;
+      const capSet = new Set(allCaps.map((c) => c.cap));
+      const gaps = agentCaps.map((a) => {
+        const has = new Set(JSON.parse(a.capabilities) as string[]);
+        const missing = [...capSet].filter((c) => !has.has(c));
+        return {
+          agent_id: a.agent_id,
+          missing_capabilities: missing,
+          missing_count: missing.length,
+        };
+      });
+      return reply.send({ workspace, agents: gaps, total_capabilities: capSet.size });
+    },
+  );
 };

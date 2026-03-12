@@ -3931,4 +3931,26 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-616  blocker open duration stats
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/blocker-open-duration-stats",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT blocker_id, severity,
+           CAST((julianday('now') - julianday(created_at)) * 86400 AS INTEGER) as open_seconds
+           FROM blockers WHERE workspace_id = ? AND status = 'open'
+           ORDER BY open_seconds DESC LIMIT 20`,
+        )
+        .all(workspace) as Array<{ blocker_id: string; severity: string; open_seconds: number }>;
+      const avg =
+        rows.length > 0
+          ? Math.round(rows.reduce((s, r) => s + r.open_seconds, 0) / rows.length)
+          : 0;
+      return reply.send({ workspace, open_blockers: rows, avg_open_seconds: avg });
+    },
+  );
 };

@@ -4256,4 +4256,25 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-618  workspace hourly activity
+  app.get(
+    "/api/v1/workspaces/:workspace/workspace-hourly-activity",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT strftime('%H', created_at) as hour, COUNT(*) as event_count
+           FROM audit_log WHERE workspace_id = ?
+           GROUP BY hour ORDER BY hour`,
+        )
+        .all(workspace) as Array<{ hour: string; event_count: number }>;
+      const peakHour =
+        rows.length > 0
+          ? rows.reduce((a, b) => (b.event_count > a.event_count ? b : a)).hour
+          : null;
+      return reply.send({ workspace, hourly: rows, peak_hour: peakHour });
+    },
+  );
 };

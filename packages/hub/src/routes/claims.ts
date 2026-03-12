@@ -4123,4 +4123,22 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, overlaps: rows, overlap_count: rows.length });
     },
   );
+
+  // F-615  claim renewal cadence
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/claim-renewal-cadence",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT renewal_count, COUNT(*) as claim_count,
+           AVG(ttl_seconds) as avg_ttl
+           FROM claims WHERE workspace_id = ?
+           GROUP BY renewal_count ORDER BY renewal_count`,
+        )
+        .all(workspace) as Array<{ renewal_count: number; claim_count: number; avg_ttl: number }>;
+      return reply.send({ workspace, cadence: rows });
+    },
+  );
 };
