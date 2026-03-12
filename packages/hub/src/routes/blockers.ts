@@ -3840,4 +3840,28 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-596  blocker age distribution
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/blocker-age-distribution",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT
+           CASE
+             WHEN julianday('now') - julianday(created_at) < 1 THEN '<1d'
+             WHEN julianday('now') - julianday(created_at) < 3 THEN '1-3d'
+             WHEN julianday('now') - julianday(created_at) < 7 THEN '3-7d'
+             ELSE '7d+'
+           END as age_bucket,
+           COUNT(*) as cnt
+           FROM blockers WHERE workspace_id = ? AND status = 'open'
+           GROUP BY age_bucket`,
+        )
+        .all(workspace) as Array<{ age_bucket: string; cnt: number }>;
+      return reply.send({ workspace, age_distribution: rows });
+    },
+  );
 };

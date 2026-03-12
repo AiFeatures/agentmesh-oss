@@ -4904,4 +4904,31 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-594  agent efficiency (completion rate + avg duration)
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/:agentId/agent-efficiency",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as { workspace: string; agentId: string };
+      const stats = db
+        .prepare(
+          `SELECT status, COUNT(*) as cnt,
+           AVG(CAST((julianday(updated_at) - julianday(created_at)) * 86400 AS INTEGER)) as avg_sec
+           FROM agent_tasks WHERE workspace_id = ? AND agent_id = ?
+           GROUP BY status`,
+        )
+        .all(workspace, agentId) as Array<{ status: string; cnt: number; avg_sec: number | null }>;
+      const completed = stats.find((s) => s.status === "completed");
+      const total = stats.reduce((a, s) => a + s.cnt, 0);
+      return reply.send({
+        agent_id: agentId,
+        workspace,
+        total_tasks: total,
+        completion_rate: total > 0 ? Math.round(((completed?.cnt ?? 0) / total) * 100) : 0,
+        avg_completion_seconds: completed?.avg_sec ?? 0,
+        breakdown: stats,
+      });
+    },
+  );
 };

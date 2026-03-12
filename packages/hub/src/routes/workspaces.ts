@@ -4030,4 +4030,55 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-598  workspace capacity plan
+  app.get(
+    "/api/v1/workspaces/:workspace/workspace-capacity-plan",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const agents = (
+        db
+          .prepare(`SELECT COUNT(*) as c FROM agents WHERE workspace_id = ? AND status = 'online'`)
+          .get(workspace) as { c: number }
+      ).c;
+      const activeTasks = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM agent_tasks WHERE workspace_id = ? AND status IN ('pending','in_progress')`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const activeClaims = (
+        db
+          .prepare(`SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND status = 'active'`)
+          .get(workspace) as { c: number }
+      ).c;
+      const openBlockers = (
+        db
+          .prepare(`SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status = 'open'`)
+          .get(workspace) as { c: number }
+      ).c;
+      const pendingHandoffs = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND status = 'pending'`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const taskPerAgent = agents > 0 ? Math.round((activeTasks / agents) * 10) / 10 : 0;
+      const recommendation =
+        taskPerAgent > 5 ? "scale-up" : taskPerAgent < 1 ? "scale-down" : "stable";
+      return reply.send({
+        workspace,
+        online_agents: agents,
+        active_tasks: activeTasks,
+        active_claims: activeClaims,
+        open_blockers: openBlockers,
+        pending_handoffs: pendingHandoffs,
+        tasks_per_agent: taskPerAgent,
+        recommendation,
+      });
+    },
+  );
 };

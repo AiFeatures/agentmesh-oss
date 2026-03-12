@@ -4038,4 +4038,30 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, ttl_analysis: rows });
     },
   );
+
+  // F-595  claim renewal forecast (claims likely to expire soon)
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/claim-renewal-forecast",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT claim_id, agent_id, scope, ttl_seconds, renewal_count, expires_at,
+           CAST((julianday(expires_at) - julianday('now')) * 86400 AS INTEGER) as seconds_remaining
+           FROM claims WHERE workspace_id = ? AND status = 'active' AND expires_at > datetime('now')
+           ORDER BY seconds_remaining ASC LIMIT 20`,
+        )
+        .all(workspace) as Array<{
+        claim_id: string;
+        agent_id: string;
+        scope: string;
+        ttl_seconds: number;
+        renewal_count: number;
+        expires_at: string;
+        seconds_remaining: number;
+      }>;
+      return reply.send({ workspace, at_risk_claims: rows });
+    },
+  );
 };

@@ -21002,3 +21002,126 @@ test("F-593 workspace risk score", async () => {
   assert.ok(res.json().factors !== undefined);
   await app.close();
 });
+
+// F-594  agent efficiency
+test("F-594 agent efficiency", async () => {
+  await runMigrations();
+  const app = buildApp();
+  const s = `ef${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { agent_id: `a-${s}`, display_name: `A ${s}`, capabilities: ["code"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/a-${s}/agent-efficiency`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().completion_rate !== undefined);
+  assert.ok(Array.isArray(res.json().breakdown));
+  await app.close();
+});
+
+// F-595  claim renewal forecast
+test("F-595 claim renewal forecast", async () => {
+  await runMigrations();
+  const app = buildApp();
+  const s = `rf${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-renewal-forecast`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().at_risk_claims));
+  await app.close();
+});
+
+// F-596  blocker age distribution
+test("F-596 blocker age distribution", async () => {
+  await runMigrations();
+  const app = buildApp();
+  const s = `ad${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-age-distribution`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().age_distribution));
+  await app.close();
+});
+
+// F-597  handoff success trend
+test("F-597 handoff success trend", async () => {
+  await runMigrations();
+  const app = buildApp();
+  const s = `st${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-success-trend`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().trend));
+  await app.close();
+});
+
+// F-598  workspace capacity plan
+test("F-598 workspace capacity plan", async () => {
+  await runMigrations();
+  const app = buildApp();
+  const s = `cp${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, "content-type": "application/json" },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/workspace-capacity-plan`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().recommendation !== undefined);
+  assert.ok(res.json().tasks_per_agent !== undefined);
+  await app.close();
+});

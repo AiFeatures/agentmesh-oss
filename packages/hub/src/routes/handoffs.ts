@@ -4204,4 +4204,29 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-597  handoff success trend (daily accept/reject/pending)
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-success-trend",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT date(created_at) as day, status, COUNT(*) as cnt
+           FROM handoffs WHERE workspace_id = ?
+           GROUP BY day, status ORDER BY day DESC LIMIT 90`,
+        )
+        .all(workspace) as Array<{ day: string; status: string; cnt: number }>;
+      const grouped: Record<string, Record<string, number>> = {};
+      for (const r of rows) {
+        if (!grouped[r.day]) grouped[r.day] = {};
+        grouped[r.day][r.status] = r.cnt;
+      }
+      return reply.send({
+        workspace,
+        trend: Object.entries(grouped).map(([day, statuses]) => ({ day, ...statuses })),
+      });
+    },
+  );
 };
