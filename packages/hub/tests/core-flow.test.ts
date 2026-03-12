@@ -22162,3 +22162,125 @@ test("F-638 workspace agent spread", async () => {
   assert.ok(Array.isArray(res.json().by_group));
   await app.close();
 });
+
+// ---- Cycle 24 ----
+
+test("F-639 agent heartbeat drift", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `xx${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ct = { "content-type": "application/json" };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, ...ct },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/agent-heartbeat-drift`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().agents));
+  await app.close();
+});
+
+test("F-640 claim expiry window", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `xx${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ct = { "content-type": "application/json" };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, ...ct },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-expiry-window`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().expiring_soon !== undefined);
+  assert.ok(Array.isArray(res.json().claims));
+  await app.close();
+});
+
+test("F-641 blocker watcher load", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `xx${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ct = { "content-type": "application/json" };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, ...ct },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-watcher-load`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().total_watches !== undefined);
+  assert.ok(Array.isArray(res.json().watchers));
+  await app.close();
+});
+
+test("F-642 handoff roundtrip", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `xx${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ct = { "content-type": "application/json" };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, ...ct },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-roundtrip`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().avg_roundtrip_seconds !== undefined);
+  assert.ok(Array.isArray(res.json().handoffs));
+  await app.close();
+});
+
+test("F-643 workspace claim spread", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `xx${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ct = { "content-type": "application/json" };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, ...ct },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/workspace-claim-spread`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().total_claims !== undefined);
+  assert.ok(Array.isArray(res.json().by_status));
+  assert.ok(Array.isArray(res.json().top_scopes));
+  await app.close();
+});

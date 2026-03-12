@@ -4384,4 +4384,34 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total_agents: total, by_status: byStatus, by_group: byGroup });
     },
   );
+
+  // F-643  workspace claim spread
+  app.get(
+    "/api/v1/workspaces/:workspace/workspace-claim-spread",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const byStatus = db
+        .prepare(
+          `SELECT status, COUNT(*) as claim_count
+           FROM claims WHERE workspace_id = ?
+           GROUP BY status ORDER BY claim_count DESC`,
+        )
+        .all(workspace) as Array<{ status: string; claim_count: number }>;
+      const byScope = db
+        .prepare(
+          `SELECT scope, COUNT(*) as claim_count
+           FROM claims WHERE workspace_id = ?
+           GROUP BY scope ORDER BY claim_count DESC LIMIT 10`,
+        )
+        .all(workspace) as Array<{ scope: string; claim_count: number }>;
+      const total = byStatus.reduce((s, r) => s + r.claim_count, 0);
+      return reply.send({
+        workspace,
+        total_claims: total,
+        by_status: byStatus,
+        top_scopes: byScope,
+      });
+    },
+  );
 };

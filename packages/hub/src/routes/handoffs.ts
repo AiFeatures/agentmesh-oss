@@ -4428,4 +4428,32 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total_pending: total, aging: rows });
     },
   );
+
+  // F-642  handoff roundtrip
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-roundtrip",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT handoff_id, from_agent_id, to_agent_id, status,
+                  CAST((julianday(updated_at) - julianday(created_at)) * 86400 AS INTEGER) as roundtrip_seconds
+           FROM handoffs WHERE workspace_id = ? AND status IN ('accepted','rejected')
+           ORDER BY roundtrip_seconds DESC LIMIT 20`,
+        )
+        .all(workspace) as Array<{
+        handoff_id: string;
+        from_agent_id: string;
+        to_agent_id: string;
+        status: string;
+        roundtrip_seconds: number;
+      }>;
+      const avg =
+        rows.length > 0
+          ? Math.round(rows.reduce((s, r) => s + r.roundtrip_seconds, 0) / rows.length)
+          : 0;
+      return reply.send({ workspace, avg_roundtrip_seconds: avg, handoffs: rows });
+    },
+  );
 };

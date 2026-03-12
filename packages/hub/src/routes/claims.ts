@@ -4231,4 +4231,36 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total_scopes: total, active_scopes: active, fragments: rows });
     },
   );
+
+  // F-640  claim expiry window
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/claim-expiry-window",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const expiringSoon = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND status = 'active'
+           AND expires_at <= datetime('now', '+1 hour')`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const rows = db
+        .prepare(
+          `SELECT claim_id, scope, agent_id, expires_at,
+                  CAST((julianday(expires_at) - julianday('now')) * 24 AS INTEGER) as hours_remaining
+           FROM claims WHERE workspace_id = ? AND status = 'active'
+           ORDER BY expires_at ASC LIMIT 20`,
+        )
+        .all(workspace) as Array<{
+        claim_id: string;
+        scope: string;
+        agent_id: string;
+        expires_at: string;
+        hours_remaining: number;
+      }>;
+      return reply.send({ workspace, expiring_soon: expiringSoon, claims: rows });
+    },
+  );
 };

@@ -5167,4 +5167,27 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, idle_agents: rows });
     },
   );
+
+  // F-639  agent heartbeat drift
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/agent-heartbeat-drift",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT agent_id, display_name, status,
+                  CAST((julianday('now') - julianday(last_heartbeat_at)) * 86400 AS INTEGER) as seconds_since_heartbeat
+           FROM agents WHERE workspace_id = ?
+           ORDER BY seconds_since_heartbeat DESC LIMIT 20`,
+        )
+        .all(workspace) as Array<{
+        agent_id: string;
+        display_name: string;
+        status: string;
+        seconds_since_heartbeat: number;
+      }>;
+      return reply.send({ workspace, agents: rows });
+    },
+  );
 };

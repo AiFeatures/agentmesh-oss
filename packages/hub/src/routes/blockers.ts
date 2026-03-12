@@ -4053,4 +4053,24 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, max_depth: maxDepth, blockers: rows });
     },
   );
+
+  // F-641  blocker watcher load
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/blocker-watcher-load",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT bw.agent_id, COUNT(*) as watched_count
+           FROM blocker_watchers bw
+           JOIN blockers b ON b.blocker_id = bw.blocker_id
+           WHERE b.workspace_id = ?
+           GROUP BY bw.agent_id ORDER BY watched_count DESC LIMIT 20`,
+        )
+        .all(workspace) as Array<{ agent_id: string; watched_count: number }>;
+      const total = rows.reduce((s, r) => s + r.watched_count, 0);
+      return reply.send({ workspace, total_watches: total, watchers: rows });
+    },
+  );
 };
