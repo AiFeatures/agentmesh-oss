@@ -4003,7 +4003,9 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       const { workspace } = request.params as { workspace: string };
       const escalated = (
         db
-          .prepare(`SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND escalation_level > 0`)
+          .prepare(
+            `SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND escalation_level > 0`,
+          )
           .get(workspace) as { c: number }
       ).c;
       const total = (
@@ -4025,6 +4027,30 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
         escalation_rate_pct: total > 0 ? Math.round((escalated / total) * 100) : 0,
         by_severity: bySeverity,
       });
+    },
+  );
+
+  // F-636  blocker cascade depth
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/blocker-cascade-depth",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT b.blocker_id, b.severity, b.status,
+                  (SELECT COUNT(*) FROM blocker_dependencies bd WHERE bd.blocker_id = b.blocker_id) as dep_count
+           FROM blockers b WHERE b.workspace_id = ?
+           ORDER BY dep_count DESC LIMIT 20`,
+        )
+        .all(workspace) as Array<{
+        blocker_id: string;
+        severity: string;
+        status: string;
+        dep_count: number;
+      }>;
+      const maxDepth = rows.length > 0 ? rows[0].dep_count : 0;
+      return reply.send({ workspace, max_depth: maxDepth, blockers: rows });
     },
   );
 };

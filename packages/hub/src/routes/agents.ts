@@ -5144,4 +5144,27 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, daily: rows, total_registrations: total });
     },
   );
+
+  // F-634  agent idle streak
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/agent-idle-streak",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT agent_id, display_name, status,
+                  CAST((julianday('now') - julianday(last_heartbeat_at)) * 24 AS INTEGER) as idle_hours
+           FROM agents WHERE workspace_id = ? AND status IN ('idle','stale')
+           ORDER BY idle_hours DESC LIMIT 20`,
+        )
+        .all(workspace) as Array<{
+        agent_id: string;
+        display_name: string;
+        status: string;
+        idle_hours: number;
+      }>;
+      return reply.send({ workspace, idle_agents: rows });
+    },
+  );
 };

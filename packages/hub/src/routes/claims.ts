@@ -4201,4 +4201,34 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, hotspots: rows });
     },
   );
+
+  // F-635  claim scope fragmentation
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/claim-scope-fragmentation",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const total = (
+        db
+          .prepare(`SELECT COUNT(DISTINCT scope) as c FROM claims WHERE workspace_id = ?`)
+          .get(workspace) as { c: number }
+      ).c;
+      const active = (
+        db
+          .prepare(
+            `SELECT COUNT(DISTINCT scope) as c FROM claims WHERE workspace_id = ? AND status = 'active'`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const rows = db
+        .prepare(
+          `SELECT scope, COUNT(*) as claim_count,
+                  COUNT(DISTINCT agent_id) as agent_count
+           FROM claims WHERE workspace_id = ?
+           GROUP BY scope ORDER BY claim_count DESC LIMIT 20`,
+        )
+        .all(workspace) as Array<{ scope: string; claim_count: number; agent_count: number }>;
+      return reply.send({ workspace, total_scopes: total, active_scopes: active, fragments: rows });
+    },
+  );
 };

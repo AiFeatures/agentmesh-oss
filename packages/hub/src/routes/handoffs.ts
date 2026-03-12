@@ -4397,4 +4397,35 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, agent_latency: rows });
     },
   );
+
+  // F-637  handoff pending aging
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-pending-aging",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT handoff_id, from_agent_id, to_agent_id, summary,
+                  CAST((julianday('now') - julianday(created_at)) * 24 AS INTEGER) as pending_hours
+           FROM handoffs WHERE workspace_id = ? AND status = 'pending'
+           ORDER BY pending_hours DESC LIMIT 20`,
+        )
+        .all(workspace) as Array<{
+        handoff_id: string;
+        from_agent_id: string;
+        to_agent_id: string;
+        summary: string;
+        pending_hours: number;
+      }>;
+      const total = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND status = 'pending'`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      return reply.send({ workspace, total_pending: total, aging: rows });
+    },
+  );
 };

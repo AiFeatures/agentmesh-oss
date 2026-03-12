@@ -4359,4 +4359,29 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-638  workspace agent spread
+  app.get(
+    "/api/v1/workspaces/:workspace/workspace-agent-spread",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const byStatus = db
+        .prepare(
+          `SELECT status, COUNT(*) as agent_count
+           FROM agents WHERE workspace_id = ?
+           GROUP BY status ORDER BY agent_count DESC`,
+        )
+        .all(workspace) as Array<{ status: string; agent_count: number }>;
+      const byGroup = db
+        .prepare(
+          `SELECT COALESCE("group", 'ungrouped') as grp, COUNT(*) as agent_count
+           FROM agents WHERE workspace_id = ?
+           GROUP BY grp ORDER BY agent_count DESC`,
+        )
+        .all(workspace) as Array<{ grp: string; agent_count: number }>;
+      const total = byStatus.reduce((s, r) => s + r.agent_count, 0);
+      return reply.send({ workspace, total_agents: total, by_status: byStatus, by_group: byGroup });
+    },
+  );
 };
