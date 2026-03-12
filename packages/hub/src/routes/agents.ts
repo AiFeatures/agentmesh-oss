@@ -5102,4 +5102,28 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, idle_agents: rows, count: rows.length });
     },
   );
+
+  // F-624  agent task queue depth
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/agent-task-queue-depth",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT a.agent_id, a.status,
+           (SELECT COUNT(*) FROM agent_tasks t WHERE t.agent_id = a.agent_id AND t.workspace_id = a.workspace_id AND t.status = 'pending') as pending_tasks,
+           (SELECT COUNT(*) FROM agent_tasks t WHERE t.agent_id = a.agent_id AND t.workspace_id = a.workspace_id AND t.status = 'in_progress') as active_tasks
+           FROM agents a WHERE a.workspace_id = ?
+           ORDER BY pending_tasks DESC`,
+        )
+        .all(workspace) as Array<{
+        agent_id: string;
+        status: string;
+        pending_tasks: number;
+        active_tasks: number;
+      }>;
+      return reply.send({ workspace, agents: rows });
+    },
+  );
 };

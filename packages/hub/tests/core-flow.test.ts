@@ -21791,3 +21791,129 @@ test("F-623 workspace growth trend", async () => {
   assert.ok(Array.isArray(res.json().claims_by_day));
   await app.close();
 });
+
+// ---------- F-624  agent task queue depth ----------
+test("F-624 agent task queue depth", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `xx${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ct = { "content-type": "application/json" };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, ...ct },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, ...ct },
+    payload: { agent_id: `ag-${s}`, display_name: `ag-${s}`, capabilities: ["code"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/agent-task-queue-depth`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().agents));
+  await app.close();
+});
+
+// ---------- F-625  claim TTL distribution ----------
+test("F-625 claim TTL distribution", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `xx${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ct = { "content-type": "application/json" };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, ...ct },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-ttl-distribution`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().ttl_distribution));
+  await app.close();
+});
+
+// ---------- F-626  blocker creation weekly ----------
+test("F-626 blocker creation weekly", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `xx${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ct = { "content-type": "application/json" };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, ...ct },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-creation-weekly`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().weekly));
+  await app.close();
+});
+
+// ---------- F-627  handoff acceptance rate daily ----------
+test("F-627 handoff acceptance rate daily", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `xx${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ct = { "content-type": "application/json" };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, ...ct },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-acceptance-rate-daily`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().daily_rates));
+  await app.close();
+});
+
+// ---------- F-628  workspace agent efficiency score ----------
+test("F-628 workspace agent efficiency score", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `xx${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ct = { "content-type": "application/json" };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, ...ct },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/workspace-agent-efficiency-score`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().agents));
+  await app.close();
+});

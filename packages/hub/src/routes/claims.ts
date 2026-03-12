@@ -4159,4 +4159,28 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, diversity: rows });
     },
   );
+
+  // F-625  claim TTL distribution
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/claim-ttl-distribution",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT
+           CASE
+             WHEN ttl_seconds <= 60 THEN '0-60s'
+             WHEN ttl_seconds <= 300 THEN '1-5m'
+             WHEN ttl_seconds <= 900 THEN '5-15m'
+             ELSE '15m+'
+           END as bucket,
+           COUNT(*) as count
+           FROM claims WHERE workspace_id = ?
+           GROUP BY bucket ORDER BY MIN(ttl_seconds)`,
+        )
+        .all(workspace) as Array<{ bucket: string; count: number }>;
+      return reply.send({ workspace, ttl_distribution: rows });
+    },
+  );
 };

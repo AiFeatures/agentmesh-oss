@@ -3977,4 +3977,21 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, blockers: rows, total_watchers: totalWatchers });
     },
   );
+
+  // F-626  blocker creation weekly
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/blocker-creation-weekly",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT strftime('%Y-W%W', created_at) as week, severity, COUNT(*) as count
+           FROM blockers WHERE workspace_id = ?
+           GROUP BY week, severity ORDER BY week DESC LIMIT 50`,
+        )
+        .all(workspace) as Array<{ week: string; severity: string; count: number }>;
+      return reply.send({ workspace, weekly: rows });
+    },
+  );
 };

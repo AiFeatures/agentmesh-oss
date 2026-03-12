@@ -4301,4 +4301,28 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, agents_by_day: agentsByDay, claims_by_day: claimsByDay });
     },
   );
+
+  // F-628  workspace agent efficiency score
+  app.get(
+    "/api/v1/workspaces/:workspace/workspace-agent-efficiency-score",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const agents = db
+        .prepare(
+          `SELECT a.agent_id,
+           (SELECT COUNT(*) FROM agent_tasks t WHERE t.agent_id = a.agent_id AND t.workspace_id = a.workspace_id AND t.status = 'completed') as completed,
+           (SELECT COUNT(*) FROM agent_tasks t WHERE t.agent_id = a.agent_id AND t.workspace_id = a.workspace_id) as total
+           FROM agents a WHERE a.workspace_id = ?`,
+        )
+        .all(workspace) as Array<{ agent_id: string; completed: number; total: number }>;
+      const scored = agents.map((a) => ({
+        agent_id: a.agent_id,
+        completed: a.completed,
+        total: a.total,
+        efficiency_pct: a.total > 0 ? Math.round((a.completed / a.total) * 100) : 100,
+      }));
+      return reply.send({ workspace, agents: scored });
+    },
+  );
 };

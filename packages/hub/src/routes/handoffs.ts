@@ -4351,4 +4351,27 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, rejection_reasons: rows });
     },
   );
+
+  // F-627  handoff acceptance rate daily
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-acceptance-rate-daily",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT date(created_at) as day,
+           COUNT(*) as total,
+           SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted
+           FROM handoffs WHERE workspace_id = ?
+           GROUP BY day ORDER BY day DESC LIMIT 14`,
+        )
+        .all(workspace) as Array<{ day: string; total: number; accepted: number }>;
+      const mapped = rows.map((r) => ({
+        ...r,
+        rate_pct: r.total > 0 ? Math.round((r.accepted / r.total) * 100) : 0,
+      }));
+      return reply.send({ workspace, daily_rates: mapped });
+    },
+  );
 };
