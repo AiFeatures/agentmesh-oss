@@ -5030,4 +5030,28 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-609  agent heartbeat gap analysis
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/agent-heartbeat-gap-analysis",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const agents = db
+        .prepare(
+          `SELECT agent_id, last_heartbeat_at, status FROM agents WHERE workspace_id = ? AND last_heartbeat_at IS NOT NULL ORDER BY last_heartbeat_at ASC`,
+        )
+        .all(workspace) as Array<{ agent_id: string; last_heartbeat_at: string; status: string }>;
+      const now = Date.now();
+      const gaps = agents.map((a) => {
+        const gap = Math.round((now - new Date(a.last_heartbeat_at + "Z").getTime()) / 1000);
+        return { agent_id: a.agent_id, status: a.status, gap_seconds: gap, stale: gap > 300 };
+      });
+      return reply.send({
+        workspace,
+        agents: gaps,
+        stale_count: gaps.filter((g) => g.stale).length,
+      });
+    },
+  );
 };

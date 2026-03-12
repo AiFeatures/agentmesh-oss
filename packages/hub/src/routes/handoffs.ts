@@ -4277,4 +4277,25 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-612  handoff turnaround percentile
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-turnaround-percentile",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT CAST((julianday(updated_at) - julianday(created_at)) * 86400 AS INTEGER) as turnaround_sec
+           FROM handoffs WHERE workspace_id = ? AND status IN ('accepted','rejected') AND updated_at IS NOT NULL
+           ORDER BY turnaround_sec`,
+        )
+        .all(workspace) as Array<{ turnaround_sec: number }>;
+      const n = rows.length;
+      const p50 = n > 0 ? (rows[Math.floor(n * 0.5)]?.turnaround_sec ?? 0) : 0;
+      const p90 = n > 0 ? (rows[Math.floor(n * 0.9)]?.turnaround_sec ?? 0) : 0;
+      const p99 = n > 0 ? (rows[Math.floor(n * 0.99)]?.turnaround_sec ?? 0) : 0;
+      return reply.send({ workspace, count: n, p50, p90, p99 });
+    },
+  );
 };

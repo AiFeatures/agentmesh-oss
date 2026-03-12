@@ -4201,4 +4201,59 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-613  workspace resource utilization
+  app.get(
+    "/api/v1/workspaces/:workspace/workspace-resource-utilization",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const agents = (
+        db.prepare(`SELECT COUNT(*) as c FROM agents WHERE workspace_id = ?`).get(workspace) as {
+          c: number;
+        }
+      ).c;
+      const onlineAgents = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM agents WHERE workspace_id = ? AND status IN ('online','idle')`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const activeClaims = (
+        db
+          .prepare(`SELECT COUNT(*) as c FROM claims WHERE workspace_id = ? AND status = 'active'`)
+          .get(workspace) as { c: number }
+      ).c;
+      const totalClaims = (
+        db.prepare(`SELECT COUNT(*) as c FROM claims WHERE workspace_id = ?`).get(workspace) as {
+          c: number;
+        }
+      ).c;
+      const pendingTasks = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM agent_tasks WHERE workspace_id = ? AND status = 'pending'`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const inProgressTasks = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM agent_tasks WHERE workspace_id = ? AND status = 'in_progress'`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      return reply.send({
+        workspace,
+        total_agents: agents,
+        online_agents: onlineAgents,
+        agent_utilization_pct: agents > 0 ? Math.round((onlineAgents / agents) * 100) : 0,
+        active_claims: activeClaims,
+        total_claims: totalClaims,
+        pending_tasks: pendingTasks,
+        in_progress_tasks: inProgressTasks,
+      });
+    },
+  );
 };

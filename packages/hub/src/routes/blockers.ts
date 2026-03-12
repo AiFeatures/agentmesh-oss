@@ -3904,4 +3904,31 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, velocity: rows });
     },
   );
+
+  // F-611  blocker dependency depth
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/blocker-dependency-depth",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const blockers = db
+        .prepare(
+          `SELECT b.blocker_id, b.severity, b.status,
+           (SELECT COUNT(*) FROM blocker_dependencies bd WHERE bd.blocker_id = b.blocker_id) as dep_count
+           FROM blockers b WHERE b.workspace_id = ?
+           ORDER BY dep_count DESC LIMIT 20`,
+        )
+        .all(workspace) as Array<{
+        blocker_id: string;
+        severity: string;
+        status: string;
+        dep_count: number;
+      }>;
+      return reply.send({
+        workspace,
+        blockers,
+        max_depth: blockers.length > 0 ? blockers[0].dep_count : 0,
+      });
+    },
+  );
 };

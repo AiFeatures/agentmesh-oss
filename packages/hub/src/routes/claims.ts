@@ -4105,4 +4105,22 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, scope_frequency: rows });
     },
   );
+
+  // F-610  claim overlap detection
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/claim-overlap-detection",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT a.claim_id as claim_a, b.claim_id as claim_b, a.scope
+           FROM claims a JOIN claims b ON a.scope = b.scope AND a.claim_id < b.claim_id
+           WHERE a.workspace_id = ? AND b.workspace_id = ? AND a.status = 'active' AND b.status = 'active'
+           LIMIT 50`,
+        )
+        .all(workspace, workspace) as Array<{ claim_a: string; claim_b: string; scope: string }>;
+      return reply.send({ workspace, overlaps: rows, overlap_count: rows.length });
+    },
+  );
 };
