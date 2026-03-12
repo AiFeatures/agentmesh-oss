@@ -5190,4 +5190,27 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, agents: rows });
     },
   );
+
+  // F-644  agent capability utilization
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/agent-capability-utilization",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT a.agent_id, a.display_name, a.capabilities,
+                  (SELECT COUNT(*) FROM handoffs h WHERE h.to_agent_id = a.agent_id AND h.workspace_id = ?) as received_handoffs
+           FROM agents a WHERE a.workspace_id = ?
+           ORDER BY received_handoffs DESC LIMIT 20`,
+        )
+        .all(workspace, workspace) as Array<{
+        agent_id: string;
+        display_name: string;
+        capabilities: string;
+        received_handoffs: number;
+      }>;
+      return reply.send({ workspace, agents: rows });
+    },
+  );
 };

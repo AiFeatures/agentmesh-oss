@@ -4456,4 +4456,31 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, avg_roundtrip_seconds: avg, handoffs: rows });
     },
   );
+
+  // F-647  handoff acceptance window
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-acceptance-window",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT handoff_id, from_agent_id, to_agent_id,
+                  CAST((julianday(updated_at) - julianday(created_at)) * 86400 AS INTEGER) as accept_seconds
+           FROM handoffs WHERE workspace_id = ? AND status = 'accepted'
+           ORDER BY accept_seconds ASC LIMIT 20`,
+        )
+        .all(workspace) as Array<{
+        handoff_id: string;
+        from_agent_id: string;
+        to_agent_id: string;
+        accept_seconds: number;
+      }>;
+      const avg =
+        rows.length > 0
+          ? Math.round(rows.reduce((s, r) => s + r.accept_seconds, 0) / rows.length)
+          : 0;
+      return reply.send({ workspace, avg_accept_seconds: avg, fastest: rows });
+    },
+  );
 };

@@ -4263,4 +4263,31 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, expiring_soon: expiringSoon, claims: rows });
     },
   );
+
+  // F-645  claim ttl variance
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/claim-ttl-variance",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const stats = db
+        .prepare(
+          `SELECT AVG(ttl_seconds) as avg_ttl, MIN(ttl_seconds) as min_ttl, MAX(ttl_seconds) as max_ttl, COUNT(*) as total
+           FROM claims WHERE workspace_id = ?`,
+        )
+        .get(workspace) as {
+        avg_ttl: number | null;
+        min_ttl: number | null;
+        max_ttl: number | null;
+        total: number;
+      };
+      return reply.send({
+        workspace,
+        avg_ttl: Math.round(stats.avg_ttl || 0),
+        min_ttl: stats.min_ttl || 0,
+        max_ttl: stats.max_ttl || 0,
+        total: stats.total,
+      });
+    },
+  );
 };

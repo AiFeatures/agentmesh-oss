@@ -4414,4 +4414,35 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-648  workspace handoff flow
+  app.get(
+    "/api/v1/workspaces/:workspace/workspace-handoff-flow",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const byStatus = db
+        .prepare(
+          `SELECT status, COUNT(*) as handoff_count
+           FROM handoffs WHERE workspace_id = ?
+           GROUP BY status ORDER BY handoff_count DESC`,
+        )
+        .all(workspace) as Array<{ status: string; handoff_count: number }>;
+      const total = byStatus.reduce((s, r) => s + r.handoff_count, 0);
+      const recent = db
+        .prepare(
+          `SELECT handoff_id, from_agent_id, to_agent_id, status, created_at
+           FROM handoffs WHERE workspace_id = ?
+           ORDER BY created_at DESC LIMIT 10`,
+        )
+        .all(workspace) as Array<{
+        handoff_id: string;
+        from_agent_id: string;
+        to_agent_id: string;
+        status: string;
+        created_at: string;
+      }>;
+      return reply.send({ workspace, total_handoffs: total, by_status: byStatus, recent: recent });
+    },
+  );
 };

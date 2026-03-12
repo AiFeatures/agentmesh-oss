@@ -4073,4 +4073,22 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total_watches: total, watchers: rows });
     },
   );
+
+  // F-646  blocker resolution pace
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/blocker-resolution-pace",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT date(resolved_at) as day, COUNT(*) as resolved_count
+           FROM blockers WHERE workspace_id = ? AND status = 'resolved' AND resolved_at IS NOT NULL
+           GROUP BY day ORDER BY day DESC LIMIT 30`,
+        )
+        .all(workspace) as Array<{ day: string; resolved_count: number }>;
+      const total = rows.reduce((s, r) => s + r.resolved_count, 0);
+      return reply.send({ workspace, total_resolved: total, daily: rows });
+    },
+  );
 };
