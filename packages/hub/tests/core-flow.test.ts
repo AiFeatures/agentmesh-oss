@@ -21917,3 +21917,126 @@ test("F-628 workspace agent efficiency score", async () => {
   assert.ok(Array.isArray(res.json().agents));
   await app.close();
 });
+
+// ---------- F-629  agent registration rate ----------
+test("F-629 agent registration rate", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `xx${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ct = { "content-type": "application/json" };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, ...ct },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/agent-registration-rate`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().daily));
+  assert.ok(res.json().total_registrations !== undefined);
+  await app.close();
+});
+
+// ---------- F-630  claim conflict hotspot ----------
+test("F-630 claim conflict hotspot", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `xx${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ct = { "content-type": "application/json" };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, ...ct },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-conflict-hotspot`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().hotspots));
+  await app.close();
+});
+
+// ---------- F-631  blocker escalation stats ----------
+test("F-631 blocker escalation stats", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `xx${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ct = { "content-type": "application/json" };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, ...ct },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-escalation-stats`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().escalation_rate_pct !== undefined);
+  assert.ok(Array.isArray(res.json().by_severity));
+  await app.close();
+});
+
+// ---------- F-632  handoff latency by agent ----------
+test("F-632 handoff latency by agent", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `xx${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ct = { "content-type": "application/json" };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, ...ct },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-latency-by-agent`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().agent_latency));
+  await app.close();
+});
+
+// ---------- F-633  workspace audit summary ----------
+test("F-633 workspace audit summary", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `xx${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ct = { "content-type": "application/json" };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, ...ct },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/workspace-audit-summary`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().total_events !== undefined);
+  assert.ok(Array.isArray(res.json().by_action));
+  await app.close();
+});

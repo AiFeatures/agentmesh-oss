@@ -4325,4 +4325,38 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, agents: scored });
     },
   );
+
+  // F-633  workspace audit summary
+  app.get(
+    "/api/v1/workspaces/:workspace/workspace-audit-summary",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const total = (
+        db.prepare(`SELECT COUNT(*) as c FROM audit_log WHERE workspace_id = ?`).get(workspace) as {
+          c: number;
+        }
+      ).c;
+      const byAction = db
+        .prepare(
+          `SELECT action, COUNT(*) as count
+           FROM audit_log WHERE workspace_id = ?
+           GROUP BY action ORDER BY count DESC LIMIT 20`,
+        )
+        .all(workspace) as Array<{ action: string; count: number }>;
+      const recent = db
+        .prepare(
+          `SELECT action, actor_id, created_at
+           FROM audit_log WHERE workspace_id = ?
+           ORDER BY created_at DESC LIMIT 5`,
+        )
+        .all(workspace) as Array<{ action: string; actor_id: string; created_at: string }>;
+      return reply.send({
+        workspace,
+        total_events: total,
+        by_action: byAction,
+        recent_events: recent,
+      });
+    },
+  );
 };

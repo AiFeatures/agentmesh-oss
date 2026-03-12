@@ -5126,4 +5126,22 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, agents: rows });
     },
   );
+
+  // F-629  agent registration rate
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/agent-registration-rate",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT date(created_at) as day, COUNT(*) as registrations
+           FROM agents WHERE workspace_id = ?
+           GROUP BY day ORDER BY day DESC LIMIT 14`,
+        )
+        .all(workspace) as Array<{ day: string; registrations: number }>;
+      const total = rows.reduce((s, r) => s + r.registrations, 0);
+      return reply.send({ workspace, daily: rows, total_registrations: total });
+    },
+  );
 };

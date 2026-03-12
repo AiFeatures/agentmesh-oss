@@ -4374,4 +4374,27 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, daily_rates: mapped });
     },
   );
+
+  // F-632  handoff latency by agent
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-latency-by-agent",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT to_agent_id,
+           AVG(CAST((julianday(updated_at) - julianday(created_at)) * 86400 AS INTEGER)) as avg_latency_sec,
+           COUNT(*) as handoff_count
+           FROM handoffs WHERE workspace_id = ? AND status IN ('accepted','rejected') AND updated_at IS NOT NULL
+           GROUP BY to_agent_id ORDER BY avg_latency_sec DESC LIMIT 20`,
+        )
+        .all(workspace) as Array<{
+        to_agent_id: string;
+        avg_latency_sec: number | null;
+        handoff_count: number;
+      }>;
+      return reply.send({ workspace, agent_latency: rows });
+    },
+  );
 };

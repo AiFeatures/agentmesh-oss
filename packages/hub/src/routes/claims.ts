@@ -4183,4 +4183,22 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, ttl_distribution: rows });
     },
   );
+
+  // F-630  claim conflict hotspot
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/claim-conflict-hotspot",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT scope, COUNT(*) as claim_count, COUNT(DISTINCT agent_id) as agent_count
+           FROM claims WHERE workspace_id = ? AND status = 'active'
+           GROUP BY scope HAVING claim_count > 1
+           ORDER BY claim_count DESC LIMIT 20`,
+        )
+        .all(workspace) as Array<{ scope: string; claim_count: number; agent_count: number }>;
+      return reply.send({ workspace, hotspots: rows });
+    },
+  );
 };
