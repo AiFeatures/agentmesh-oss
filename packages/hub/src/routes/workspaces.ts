@@ -4277,4 +4277,28 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, hourly: rows, peak_hour: peakHour });
     },
   );
+
+  // F-623  workspace growth trend
+  app.get(
+    "/api/v1/workspaces/:workspace/workspace-growth-trend",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const agentsByDay = db
+        .prepare(
+          `SELECT date(created_at) as day, COUNT(*) as count
+           FROM agents WHERE workspace_id = ?
+           GROUP BY day ORDER BY day DESC LIMIT 14`,
+        )
+        .all(workspace) as Array<{ day: string; count: number }>;
+      const claimsByDay = db
+        .prepare(
+          `SELECT date(created_at) as day, COUNT(*) as count
+           FROM claims WHERE workspace_id = ?
+           GROUP BY day ORDER BY day DESC LIMIT 14`,
+        )
+        .all(workspace) as Array<{ day: string; count: number }>;
+      return reply.send({ workspace, agents_by_day: agentsByDay, claims_by_day: claimsByDay });
+    },
+  );
 };

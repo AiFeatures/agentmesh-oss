@@ -3953,4 +3953,28 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, open_blockers: rows, avg_open_seconds: avg });
     },
   );
+
+  // F-621  blocker watcher stats
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/blocker-watcher-stats",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT b.blocker_id, b.severity, b.status,
+           (SELECT COUNT(*) FROM blocker_watchers bw WHERE bw.blocker_id = b.blocker_id) as watcher_count
+           FROM blockers b WHERE b.workspace_id = ?
+           ORDER BY watcher_count DESC LIMIT 20`,
+        )
+        .all(workspace) as Array<{
+        blocker_id: string;
+        severity: string;
+        status: string;
+        watcher_count: number;
+      }>;
+      const totalWatchers = rows.reduce((s, r) => s + r.watcher_count, 0);
+      return reply.send({ workspace, blockers: rows, total_watchers: totalWatchers });
+    },
+  );
 };

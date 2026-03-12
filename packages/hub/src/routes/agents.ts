@@ -5084,4 +5084,22 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, agents: gaps, total_capabilities: capSet.size });
     },
   );
+
+  // F-619  agent idle time ranking
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/agent-idle-time-ranking",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT agent_id, status, last_heartbeat_at,
+           CAST((julianday('now') - julianday(COALESCE(last_heartbeat_at, created_at))) * 86400 AS INTEGER) as idle_seconds
+           FROM agents WHERE workspace_id = ? AND status = 'idle'
+           ORDER BY idle_seconds DESC LIMIT 20`,
+        )
+        .all(workspace) as Array<{ agent_id: string; status: string; idle_seconds: number }>;
+      return reply.send({ workspace, idle_agents: rows, count: rows.length });
+    },
+  );
 };

@@ -4334,4 +4334,21 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-622  handoff rejection reason frequency
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-rejection-reason-frequency",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT to_agent_id, COUNT(*) as rejection_count
+           FROM handoffs WHERE workspace_id = ? AND status = 'rejected'
+           GROUP BY to_agent_id ORDER BY rejection_count DESC LIMIT 20`,
+        )
+        .all(workspace) as Array<{ to_agent_id: string; rejection_count: number }>;
+      return reply.send({ workspace, rejection_reasons: rows });
+    },
+  );
 };

@@ -4141,4 +4141,22 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, cadence: rows });
     },
   );
+
+  // F-620  claim agent diversity
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/claim-agent-diversity",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT scope, COUNT(DISTINCT agent_id) as unique_agents, COUNT(*) as total_claims
+           FROM claims WHERE workspace_id = ?
+           GROUP BY scope HAVING total_claims > 1
+           ORDER BY unique_agents DESC LIMIT 20`,
+        )
+        .all(workspace) as Array<{ scope: string; unique_agents: number; total_claims: number }>;
+      return reply.send({ workspace, diversity: rows });
+    },
+  );
 };
