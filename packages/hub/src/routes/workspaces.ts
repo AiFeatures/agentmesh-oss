@@ -4145,4 +4145,60 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-608  workspace SLA compliance
+  app.get(
+    "/api/v1/workspaces/:workspace/workspace-sla-compliance",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const blockersMet = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status = 'resolved' AND deadline_at IS NOT NULL AND resolved_at <= deadline_at`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const blockersMissed = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status = 'resolved' AND deadline_at IS NOT NULL AND resolved_at > deadline_at`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const blockersOverdue = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM blockers WHERE workspace_id = ? AND status = 'open' AND deadline_at IS NOT NULL AND deadline_at < datetime('now')`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const handoffsMet = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND status = 'accepted' AND sla_deadline IS NOT NULL AND updated_at <= sla_deadline`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const handoffsMissed = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND status IN ('accepted','rejected') AND sla_deadline IS NOT NULL AND updated_at > sla_deadline`,
+          )
+          .get(workspace) as { c: number }
+      ).c;
+      const totalSla = blockersMet + blockersMissed + handoffsMet + handoffsMissed;
+      const compliance =
+        totalSla > 0 ? Math.round(((blockersMet + handoffsMet) / totalSla) * 100) : 100;
+      return reply.send({
+        workspace,
+        sla_compliance_pct: compliance,
+        blockers_met: blockersMet,
+        blockers_missed: blockersMissed,
+        blockers_overdue: blockersOverdue,
+        handoffs_met: handoffsMet,
+        handoffs_missed: handoffsMissed,
+      });
+    },
+  );
 };

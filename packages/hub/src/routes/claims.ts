@@ -4088,4 +4088,21 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, conflict_matrix: rows });
     },
   );
+
+  // F-605  claim scope frequency
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/claim-scope-frequency",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT scope, COUNT(*) as claim_count, COUNT(DISTINCT agent_id) as agent_count
+           FROM claims WHERE workspace_id = ?
+           GROUP BY scope ORDER BY claim_count DESC LIMIT 20`,
+        )
+        .all(workspace) as Array<{ scope: string; claim_count: number; agent_count: number }>;
+      return reply.send({ workspace, scope_frequency: rows });
+    },
+  );
 };

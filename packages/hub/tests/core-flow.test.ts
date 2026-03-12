@@ -21247,3 +21247,165 @@ test("F-603 workspace governance report", async () => {
   assert.ok(res.json().critical_blockers !== undefined);
   await app.close();
 });
+
+// ---------- F-604  agent anomaly detect ----------
+test("F-604 agent anomaly detect returns anomaly list", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `xx${Date.now()}`;
+  const ws = `ws-${s}`;
+  const ag = `ag-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ct = { "content-type": "application/json" };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, ...ct },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, ...ct },
+    payload: { agent_id: ag, display_name: ag, capabilities: ["code"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/${ag}/agent-anomaly-detect`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().anomalies));
+  assert.ok(res.json().anomaly_count !== undefined);
+  await app.close();
+});
+
+// ---------- F-605  claim scope frequency ----------
+test("F-605 claim scope frequency returns list", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `xx${Date.now()}`;
+  const ws = `ws-${s}`;
+  const ag = `ag-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ct = { "content-type": "application/json" };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, ...ct },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, ...ct },
+    payload: { agent_id: ag, display_name: ag, capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/claims`,
+    headers: { ...auth, ...ct },
+    payload: { agent_id: ag, scope: `file-${s}`, ttl_seconds: 60 },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-scope-frequency`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().scope_frequency));
+  await app.close();
+});
+
+// ---------- F-606  blocker resolution velocity ----------
+test("F-606 blocker resolution velocity returns list", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `xx${Date.now()}`;
+  const ws = `ws-${s}`;
+  const ag = `ag-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ct = { "content-type": "application/json" };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, ...ct },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, ...ct },
+    payload: { agent_id: ag, display_name: ag, capabilities: ["code"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-resolution-velocity`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().velocity));
+  await app.close();
+});
+
+// ---------- F-607  handoff agent preference ----------
+test("F-607 handoff agent preference returns pairings", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `xx${Date.now()}`;
+  const ws = `ws-${s}`;
+  const ag1 = `ag1-${s}`;
+  const ag2 = `ag2-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ct = { "content-type": "application/json" };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, ...ct },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, ...ct },
+    payload: { agent_id: ag1, display_name: ag1, capabilities: ["code"] },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: { ...auth, ...ct },
+    payload: { agent_id: ag2, display_name: ag2, capabilities: ["code"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-agent-preference`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().pairings));
+  await app.close();
+});
+
+// ---------- F-608  workspace SLA compliance ----------
+test("F-608 workspace SLA compliance returns stats", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const s = `xx${Date.now()}`;
+  const ws = `ws-${s}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  const ct = { "content-type": "application/json" };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: { ...auth, ...ct },
+    payload: { workspace_id: ws, display_name: ws },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/workspace-sla-compliance`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().sla_compliance_pct !== undefined);
+  await app.close();
+});

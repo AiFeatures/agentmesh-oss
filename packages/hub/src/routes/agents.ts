@@ -4974,4 +4974,60 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-604  agent anomaly detection
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/:agentId/agent-anomaly-detect",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace, agentId } = request.params as { workspace: string; agentId: string };
+      const agent = db
+        .prepare(
+          `SELECT status, last_heartbeat_at FROM agents WHERE workspace_id = ? AND agent_id = ?`,
+        )
+        .get(workspace, agentId) as
+        | { status: string; last_heartbeat_at: string | null }
+        | undefined;
+      if (!agent) return reply.code(404).send({ error: "agent not found" });
+      const anomalies: string[] = [];
+      if (agent.status === "online" && agent.last_heartbeat_at) {
+        const secSince = (Date.now() - new Date(agent.last_heartbeat_at + "Z").getTime()) / 1000;
+        if (secSince > 300) anomalies.push("online_but_no_heartbeat_5m");
+      }
+      const cancelledTasks = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM agent_tasks WHERE workspace_id = ? AND agent_id = ? AND status = 'cancelled'`,
+          )
+          .get(workspace, agentId) as { c: number }
+      ).c;
+      const totalTasks = (
+        db
+          .prepare(`SELECT COUNT(*) as c FROM agent_tasks WHERE workspace_id = ? AND agent_id = ?`)
+          .get(workspace, agentId) as { c: number }
+      ).c;
+      if (totalTasks > 5 && cancelledTasks / totalTasks > 0.5)
+        anomalies.push("high_cancellation_rate");
+      const rejectedHandoffs = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND to_agent_id = ? AND status = 'rejected'`,
+          )
+          .get(workspace, agentId) as { c: number }
+      ).c;
+      const totalHandoffs = (
+        db
+          .prepare(`SELECT COUNT(*) as c FROM handoffs WHERE workspace_id = ? AND to_agent_id = ?`)
+          .get(workspace, agentId) as { c: number }
+      ).c;
+      if (totalHandoffs > 3 && rejectedHandoffs / totalHandoffs > 0.7)
+        anomalies.push("high_handoff_rejection");
+      return reply.send({
+        agent_id: agentId,
+        workspace,
+        anomalies,
+        anomaly_count: anomalies.length,
+      });
+    },
+  );
 };

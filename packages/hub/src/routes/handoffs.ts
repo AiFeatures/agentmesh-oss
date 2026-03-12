@@ -4246,4 +4246,35 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, bottlenecks: rows });
     },
   );
+
+  // F-607  handoff agent preference (best pairings)
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-agent-preference",
+    { preHandler: app.authGuard },
+    async (request, reply) => {
+      const { workspace } = request.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT from_agent_id, to_agent_id, COUNT(*) as total,
+           SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted
+           FROM handoffs WHERE workspace_id = ?
+           GROUP BY from_agent_id, to_agent_id
+           HAVING total >= 2
+           ORDER BY accepted DESC LIMIT 20`,
+        )
+        .all(workspace) as Array<{
+        from_agent_id: string;
+        to_agent_id: string;
+        total: number;
+        accepted: number;
+      }>;
+      return reply.send({
+        workspace,
+        pairings: rows.map((r) => ({
+          ...r,
+          success_rate: Math.round((r.accepted / r.total) * 100),
+        })),
+      });
+    },
+  );
 };
