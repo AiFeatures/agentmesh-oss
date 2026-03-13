@@ -4128,4 +4128,37 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-656 blocker-response-time
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/blocker-response-time",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspace } = req.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT blocker_id, severity, created_at, resolved_at,
+             CASE WHEN resolved_at IS NOT NULL
+               THEN CAST((julianday(resolved_at) - julianday(created_at)) * 24 * 60 AS INTEGER)
+               ELSE NULL END as response_minutes
+           FROM blockers WHERE workspace_id = ? AND resolved_at IS NOT NULL
+           ORDER BY response_minutes ASC LIMIT 50`,
+        )
+        .all(workspace) as Array<{
+        blocker_id: string;
+        severity: string;
+        response_minutes: number;
+      }>;
+      const avg =
+        rows.length > 0
+          ? Math.round(rows.reduce((s, r) => s + r.response_minutes, 0) / rows.length)
+          : 0;
+      return reply.send({
+        workspace,
+        avg_response_minutes: avg,
+        count: rows.length,
+        fastest: rows.slice(0, 10),
+      });
+    },
+  );
 };

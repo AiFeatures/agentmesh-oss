@@ -22529,3 +22529,124 @@ test("F-653: workspace entity lifecycle", async () => {
   assert.ok(res.json().handoffs !== undefined);
   await app.close();
 });
+
+// F-654 agent-session-timeline
+test("F-654: agent session timeline", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const ws = "ws-f654-" + Math.random().toString(36).slice(2, 8);
+  const secret = getSharedSecret();
+  const auth = { authorization: `Bearer ${secret}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: "F654" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/a1/agent-session-timeline`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().timeline));
+  await app.close();
+});
+
+// F-655 claim-priority-distribution
+test("F-655: claim priority distribution", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const ws = "ws-f655-" + Math.random().toString(36).slice(2, 8);
+  const secret = getSharedSecret();
+  const auth = { authorization: `Bearer ${secret}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: "F655" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-priority-distribution`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().distribution));
+  await app.close();
+});
+
+// F-656 blocker-response-time
+test("F-656: blocker response time", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const ws = "ws-f656-" + Math.random().toString(36).slice(2, 8);
+  const secret = getSharedSecret();
+  const auth = { authorization: `Bearer ${secret}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: "F656" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-response-time`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().avg_response_minutes !== undefined);
+  await app.close();
+});
+
+// F-657 handoff-queue-backlog
+test("F-657: handoff queue backlog", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const ws = "ws-f657-" + Math.random().toString(36).slice(2, 8);
+  const secret = getSharedSecret();
+  const auth = { authorization: `Bearer ${secret}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: "F657" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-queue-backlog`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().total_pending !== undefined);
+  await app.close();
+});
+
+// F-658 workspace-compliance-score
+test("F-658: workspace compliance score", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const ws = "ws-f658-" + Math.random().toString(36).slice(2, 8);
+  const secret = getSharedSecret();
+  const auth = { authorization: `Bearer ${secret}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: "F658" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/workspace-compliance-score`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().compliance_score !== undefined);
+  await app.close();
+});

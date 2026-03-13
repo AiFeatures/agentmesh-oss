@@ -4318,4 +4318,22 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total_scopes, contested_scopes: contested, scopes: rows });
     },
   );
+
+  // F-655 claim-priority-distribution
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/claim-priority-distribution",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspace } = req.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT priority, status, COUNT(*) as count
+           FROM claims WHERE workspace_id = ?
+           GROUP BY priority, status ORDER BY priority, status`,
+        )
+        .all(workspace) as Array<{ priority: number; status: string; count: number }>;
+      const total = rows.reduce((s, r) => s + r.count, 0);
+      return reply.send({ workspace, total, distribution: rows });
+    },
+  );
 };

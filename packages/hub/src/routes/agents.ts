@@ -5241,4 +5241,26 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, agent_id: agentId, completion_rate_pct: rate, ...stats });
     },
   );
+
+  // F-654 agent-session-timeline
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/:agentId/agent-session-timeline",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspace, agentId } = req.params as { workspace: string; agentId: string };
+      const rows = db
+        .prepare(
+          `SELECT old_status, new_status, created_at
+           FROM agent_status_history
+           WHERE workspace_id = ? AND agent_id = ?
+           ORDER BY created_at DESC LIMIT 100`,
+        )
+        .all(workspace, agentId) as Array<{
+        old_status: string;
+        new_status: string;
+        created_at: string;
+      }>;
+      return reply.send({ workspace, agent_id: agentId, transitions: rows.length, timeline: rows });
+    },
+  );
 };

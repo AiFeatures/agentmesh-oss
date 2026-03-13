@@ -4483,4 +4483,44 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, agents: agents.c, claims, blockers, handoffs });
     },
   );
+
+  // F-658 workspace-compliance-score
+  app.get(
+    "/api/v1/workspaces/:workspace/workspace-compliance-score",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspace } = req.params as { workspace: string };
+      const agents = db
+        .prepare(
+          `SELECT COUNT(*) as total, SUM(CASE WHEN status IN ('online','idle') THEN 1 ELSE 0 END) as healthy FROM agents WHERE workspace_id = ?`,
+        )
+        .get(workspace) as { total: number; healthy: number };
+      const claims = db
+        .prepare(
+          `SELECT COUNT(*) as total, SUM(CASE WHEN status = 'active' AND expires_at IS NOT NULL AND datetime('now') > expires_at THEN 1 ELSE 0 END) as expired FROM claims WHERE workspace_id = ?`,
+        )
+        .get(workspace) as { total: number; expired: number };
+      const blockers = db
+        .prepare(
+          `SELECT COUNT(*) as total, SUM(CASE WHEN status = 'open' AND deadline_at IS NOT NULL AND datetime('now') > deadline_at THEN 1 ELSE 0 END) as overdue FROM blockers WHERE workspace_id = ?`,
+        )
+        .get(workspace) as { total: number; overdue: number };
+      const handoffs = db
+        .prepare(
+          `SELECT COUNT(*) as total, SUM(CASE WHEN status = 'pending' AND expires_at IS NOT NULL AND datetime('now') > expires_at THEN 1 ELSE 0 END) as stale FROM handoffs WHERE workspace_id = ?`,
+        )
+        .get(workspace) as { total: number; stale: number };
+      const issues = (claims.expired || 0) + (blockers.overdue || 0) + (handoffs.stale || 0);
+      const entities = claims.total + blockers.total + handoffs.total;
+      const score = entities > 0 ? Math.round(((entities - issues) / entities) * 100) : 100;
+      return reply.send({
+        workspace,
+        compliance_score: score,
+        agents,
+        claims_expired: claims.expired || 0,
+        blockers_overdue: blockers.overdue || 0,
+        handoffs_stale: handoffs.stale || 0,
+      });
+    },
+  );
 };
