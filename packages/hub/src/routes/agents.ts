@@ -5213,4 +5213,32 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, agents: rows });
     },
   );
+
+  // F-649 agent-task-completion-rate
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/:agentId/agent-task-completion-rate",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspace, agentId } = req.params as { workspace: string; agentId: string };
+      const stats = db
+        .prepare(
+          `SELECT
+             COUNT(*) as total,
+             SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+             SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
+             SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress,
+             SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
+           FROM agent_tasks WHERE workspace_id = ? AND agent_id = ?`,
+        )
+        .get(workspace, agentId) as {
+        total: number;
+        completed: number;
+        cancelled: number;
+        in_progress: number;
+        pending: number;
+      };
+      const rate = stats.total > 0 ? Math.round((stats.completed / stats.total) * 10000) / 100 : 0;
+      return reply.send({ workspace, agent_id: agentId, completion_rate_pct: rate, ...stats });
+    },
+  );
 };

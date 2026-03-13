@@ -4445,4 +4445,42 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total_handoffs: total, by_status: byStatus, recent: recent });
     },
   );
+
+  // F-653 workspace-entity-lifecycle
+  app.get(
+    "/api/v1/workspaces/:workspace/workspace-entity-lifecycle",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspace } = req.params as { workspace: string };
+      const agents = db
+        .prepare(`SELECT COUNT(*) as c FROM agents WHERE workspace_id = ?`)
+        .get(workspace) as { c: number };
+      const claims = db
+        .prepare(
+          `SELECT COUNT(*) as total,
+             SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
+             SUM(CASE WHEN status = 'released' THEN 1 ELSE 0 END) as released
+           FROM claims WHERE workspace_id = ?`,
+        )
+        .get(workspace) as { total: number; active: number; released: number };
+      const blockers = db
+        .prepare(
+          `SELECT COUNT(*) as total,
+             SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) as open_count,
+             SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved
+           FROM blockers WHERE workspace_id = ?`,
+        )
+        .get(workspace) as { total: number; open_count: number; resolved: number };
+      const handoffs = db
+        .prepare(
+          `SELECT COUNT(*) as total,
+             SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+             SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted,
+             SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected
+           FROM handoffs WHERE workspace_id = ?`,
+        )
+        .get(workspace) as { total: number; pending: number; accepted: number; rejected: number };
+      return reply.send({ workspace, agents: agents.c, claims, blockers, handoffs });
+    },
+  );
 };

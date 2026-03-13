@@ -4091,4 +4091,41 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total_resolved: total, daily: rows });
     },
   );
+
+  // F-651 blocker-resolution-sla
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/blocker-resolution-sla",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspace } = req.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT blocker_id, severity, status, created_at, resolved_at, deadline_at,
+             CASE WHEN resolved_at IS NOT NULL AND deadline_at IS NOT NULL
+               THEN CASE WHEN resolved_at <= deadline_at THEN 'met' ELSE 'breached' END
+               WHEN deadline_at IS NOT NULL AND datetime('now') > deadline_at AND status = 'open' THEN 'overdue'
+               ELSE 'no_sla'
+             END as sla_status
+           FROM blockers WHERE workspace_id = ?`,
+        )
+        .all(workspace) as Array<{
+        blocker_id: string;
+        severity: string;
+        status: string;
+        sla_status: string;
+      }>;
+      const met = rows.filter((r) => r.sla_status === "met").length;
+      const breached = rows.filter((r) => r.sla_status === "breached").length;
+      const overdue = rows.filter((r) => r.sla_status === "overdue").length;
+      const compliance = met + breached > 0 ? Math.round((met / (met + breached)) * 100) : 100;
+      return reply.send({
+        workspace,
+        sla_compliance_pct: compliance,
+        met,
+        breached,
+        overdue,
+        total: rows.length,
+      });
+    },
+  );
 };

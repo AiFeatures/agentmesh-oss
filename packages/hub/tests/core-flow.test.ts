@@ -22406,3 +22406,126 @@ test("F-648 workspace handoff flow", async () => {
   assert.ok(Array.isArray(res.json().recent));
   await app.close();
 });
+
+// F-649 agent-task-completion-rate
+test("F-649: agent task completion rate", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const ws = "ws-f649-" + Math.random().toString(36).slice(2, 8);
+  const secret = getSharedSecret();
+  const auth = { authorization: `Bearer ${secret}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: "F649" },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/workspaces/${ws}/agents/register`,
+    headers: auth,
+    payload: { agent_id: "a1", display_name: "A1", capabilities: ["code"] },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/agents/a1/agent-task-completion-rate`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().completion_rate_pct !== undefined);
+  await app.close();
+});
+
+// F-650 claim-scope-coverage
+test("F-650: claim scope coverage", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const ws = "ws-f650-" + Math.random().toString(36).slice(2, 8);
+  const secret = getSharedSecret();
+  const auth = { authorization: `Bearer ${secret}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: "F650" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/claims/claim-scope-coverage`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().scopes));
+  await app.close();
+});
+
+// F-651 blocker-resolution-sla
+test("F-651: blocker resolution SLA", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const ws = "ws-f651-" + Math.random().toString(36).slice(2, 8);
+  const secret = getSharedSecret();
+  const auth = { authorization: `Bearer ${secret}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: "F651" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/blockers/blocker-resolution-sla`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().sla_compliance_pct !== undefined);
+  await app.close();
+});
+
+// F-652 handoff-timeout-analysis
+test("F-652: handoff timeout analysis", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const ws = "ws-f652-" + Math.random().toString(36).slice(2, 8);
+  const secret = getSharedSecret();
+  const auth = { authorization: `Bearer ${secret}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: "F652" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/handoffs/handoff-timeout-analysis`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().timeout_rate_pct !== undefined);
+  await app.close();
+});
+
+// F-653 workspace-entity-lifecycle
+test("F-653: workspace entity lifecycle", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const ws = "ws-f653-" + Math.random().toString(36).slice(2, 8);
+  const secret = getSharedSecret();
+  const auth = { authorization: `Bearer ${secret}` };
+  await app.inject({
+    method: "POST",
+    url: "/api/v1/workspaces",
+    headers: auth,
+    payload: { workspace_id: ws, display_name: "F653" },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: `/api/v1/workspaces/${ws}/workspace-entity-lifecycle`,
+    headers: auth,
+  });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().claims !== undefined);
+  assert.ok(res.json().blockers !== undefined);
+  assert.ok(res.json().handoffs !== undefined);
+  await app.close();
+});

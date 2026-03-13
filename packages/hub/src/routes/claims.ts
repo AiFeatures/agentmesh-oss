@@ -4290,4 +4290,32 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-650 claim-scope-coverage
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/claim-scope-coverage",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspace } = req.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT scope, COUNT(*) as claim_count,
+             SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
+             SUM(CASE WHEN status = 'released' THEN 1 ELSE 0 END) as released,
+             COUNT(DISTINCT agent_id) as unique_agents
+           FROM claims WHERE workspace_id = ?
+           GROUP BY scope ORDER BY claim_count DESC LIMIT 50`,
+        )
+        .all(workspace) as Array<{
+        scope: string;
+        claim_count: number;
+        active: number;
+        released: number;
+        unique_agents: number;
+      }>;
+      const total_scopes = rows.length;
+      const contested = rows.filter((r) => r.unique_agents > 1).length;
+      return reply.send({ workspace, total_scopes, contested_scopes: contested, scopes: rows });
+    },
+  );
 };

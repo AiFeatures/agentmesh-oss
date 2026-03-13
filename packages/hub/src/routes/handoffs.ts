@@ -4483,4 +4483,33 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, avg_accept_seconds: avg, fastest: rows });
     },
   );
+
+  // F-652 handoff-timeout-analysis
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-timeout-analysis",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspace } = req.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT
+             COUNT(*) as total,
+             SUM(CASE WHEN expires_at IS NOT NULL AND status = 'pending' AND datetime('now') > expires_at THEN 1 ELSE 0 END) as timed_out,
+             SUM(CASE WHEN expires_at IS NOT NULL AND status = 'pending' AND datetime('now') <= expires_at THEN 1 ELSE 0 END) as pending_active,
+             SUM(CASE WHEN expires_at IS NULL THEN 1 ELSE 0 END) as no_timeout,
+             AVG(timeout_seconds) as avg_timeout_seconds
+           FROM handoffs WHERE workspace_id = ?`,
+        )
+        .get(workspace) as {
+        total: number;
+        timed_out: number;
+        pending_active: number;
+        no_timeout: number;
+        avg_timeout_seconds: number | null;
+      };
+      const timeout_rate =
+        rows.total > 0 ? Math.round(((rows.timed_out || 0) / rows.total) * 100) : 0;
+      return reply.send({ workspace, timeout_rate_pct: timeout_rate, ...rows });
+    },
+  );
 };
