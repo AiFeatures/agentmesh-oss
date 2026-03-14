@@ -4523,4 +4523,23 @@ export const workspaceRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-663: workspace throughput
+  app.get(
+    "/api/v1/workspaces/:workspace/workspace-throughput",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspace } = req.params as { workspace: string };
+      const claims = db.prepare(`SELECT COUNT(*) AS c FROM claims WHERE workspace_id = ? AND status = 'released'`).get(workspace) as { c: number };
+      const handoffs = db.prepare(`SELECT COUNT(*) AS c FROM handoffs WHERE workspace_id = ? AND status = 'accepted'`).get(workspace) as { c: number };
+      const blockers = db.prepare(`SELECT COUNT(*) AS c FROM blockers WHERE workspace_id = ? AND status = 'resolved'`).get(workspace) as { c: number };
+      const tasks = db.prepare(`SELECT COUNT(*) AS c FROM agent_tasks WHERE workspace_id = ? AND status = 'completed'`).get(workspace) as { c: number };
+      const total = claims.c + handoffs.c + blockers.c + tasks.c;
+      return reply.send({
+        workspace,
+        throughput: total,
+        breakdown: { claims_released: claims.c, handoffs_accepted: handoffs.c, blockers_resolved: blockers.c, tasks_completed: tasks.c },
+      });
+    },
+  );
 };

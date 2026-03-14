@@ -22650,3 +22650,69 @@ test("F-658: workspace compliance score", async () => {
   assert.ok(res.json().compliance_score !== undefined);
   await app.close();
 });
+
+// F-659: agent online duration
+test("F-659: agent online duration", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const ws = `ws-f659-${Math.random().toString(36).slice(2, 8)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/agents/agent-online-duration`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().agents));
+  await app.close();
+});
+
+// F-660: claim scope depth analysis
+test("F-660: claim scope depth analysis", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const ws = `ws-f660-${Math.random().toString(36).slice(2, 8)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/claims/claim-scope-depth-analysis`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().avg_depth !== undefined);
+  await app.close();
+});
+
+// F-661: blocker repeat offender
+test("F-661: blocker repeat offender", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const ws = `ws-f661-${Math.random().toString(36).slice(2, 8)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/blockers/blocker-repeat-offender`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().repeat_offenders));
+  await app.close();
+});
+
+// F-662: handoff context size trend
+test("F-662: handoff context size trend", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const ws = `ws-f662-${Math.random().toString(36).slice(2, 8)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/handoffs/handoff-context-size-trend`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(Array.isArray(res.json().trend));
+  await app.close();
+});
+
+// F-663: workspace throughput
+test("F-663: workspace throughput", async () => {
+  const app = buildApp();
+  await runMigrations();
+  const ws = `ws-f663-${Math.random().toString(36).slice(2, 8)}`;
+  const auth = { authorization: `Bearer ${getSharedSecret()}` };
+  await app.inject({ method: "POST", url: "/api/v1/workspaces", headers: auth, payload: { workspace_id: ws, display_name: ws } });
+  const res = await app.inject({ method: "GET", url: `/api/v1/workspaces/${ws}/workspace-throughput`, headers: auth });
+  assert.strictEqual(res.statusCode, 200);
+  assert.ok(res.json().throughput !== undefined);
+  assert.ok(res.json().breakdown);
+  await app.close();
+});

@@ -4530,4 +4530,24 @@ export const handoffRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total_pending: total, agents: rows.length, backlog: rows });
     },
   );
+
+  // F-662: handoff context size trend
+  app.get(
+    "/api/v1/workspaces/:workspace/handoffs/handoff-context-size-trend",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspace } = req.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT DATE(created_at) AS day,
+                  COUNT(*) AS handoff_count,
+                  ROUND(AVG(LENGTH(context)), 0) AS avg_context_length,
+                  MAX(LENGTH(context)) AS max_context_length
+           FROM handoffs WHERE workspace_id = ?
+           GROUP BY DATE(created_at) ORDER BY day DESC LIMIT 30`,
+        )
+        .all(workspace) as Array<{ day: string; handoff_count: number; avg_context_length: number; max_context_length: number }>;
+      return reply.send({ workspace, trend: rows });
+    },
+  );
 };

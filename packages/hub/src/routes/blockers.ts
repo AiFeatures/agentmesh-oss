@@ -4161,4 +4161,24 @@ export const blockerRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+
+  // F-661: blocker repeat offender analysis
+  app.get(
+    "/api/v1/workspaces/:workspace/blockers/blocker-repeat-offender",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspace } = req.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT agent_id, COUNT(*) AS blocker_count,
+                  SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) AS open_count,
+                  SUM(CASE WHEN severity = 'critical' THEN 1 ELSE 0 END) AS critical_count
+           FROM blockers WHERE workspace_id = ?
+           GROUP BY agent_id HAVING COUNT(*) > 1
+           ORDER BY blocker_count DESC LIMIT 20`,
+        )
+        .all(workspace) as Array<{ agent_id: string; blocker_count: number; open_count: number; critical_count: number }>;
+      return reply.send({ workspace, repeat_offenders: rows });
+    },
+  );
 };

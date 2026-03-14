@@ -4336,4 +4336,24 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, total, distribution: rows });
     },
   );
+
+  // F-660: claim scope depth analysis
+  app.get(
+    "/api/v1/workspaces/:workspace/claims/claim-scope-depth-analysis",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspace } = req.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT scope,
+                  LENGTH(scope) - LENGTH(REPLACE(scope, '.', '')) AS depth,
+                  COUNT(*) AS claim_count
+           FROM claims WHERE workspace_id = ?
+           GROUP BY scope ORDER BY depth DESC, claim_count DESC LIMIT 50`,
+        )
+        .all(workspace) as Array<{ scope: string; depth: number; claim_count: number }>;
+      const avgDepth = rows.length ? rows.reduce((s, r) => s + r.depth, 0) / rows.length : 0;
+      return reply.send({ workspace, avg_depth: Math.round(avgDepth * 100) / 100, scopes: rows });
+    },
+  );
 };

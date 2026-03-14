@@ -5263,4 +5263,22 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ workspace, agent_id: agentId, transitions: rows.length, timeline: rows });
     },
   );
+
+  // F-659: agent online duration
+  app.get(
+    "/api/v1/workspaces/:workspace/agents/agent-online-duration",
+    { preHandler: app.authGuard },
+    async (req, reply) => {
+      const { workspace } = req.params as { workspace: string };
+      const rows = db
+        .prepare(
+          `SELECT agent_id,
+                  ROUND((julianday('now') - julianday(created_at)) * 24, 2) AS hours_since_register,
+                  ROUND((julianday('now') - julianday(COALESCE(last_heartbeat_at, created_at))) * 60, 2) AS minutes_since_heartbeat
+           FROM agents WHERE workspace_id = ? ORDER BY created_at ASC`,
+        )
+        .all(workspace) as Array<{ agent_id: string; hours_since_register: number; minutes_since_heartbeat: number }>;
+      return reply.send({ workspace, agents: rows });
+    },
+  );
 };
