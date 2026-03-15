@@ -1,6 +1,6 @@
 # Fork Customizations
 
-> This repository is a fork of [unknown]().
+> This repository is a fork of [therajushahi/agentmesh-oss](https://github.com/therajushahi/agentmesh-oss).
 > Managed under the [iAiFy Enterprise](https://github.com/enterprises/iAiFy) governance model.
 
 ## Purpose
@@ -11,7 +11,7 @@ Open-source coordination hub for autonomous AI agents. Register, claim files, ha
 
 | Property | Value |
 |----------|-------|
-| Upstream | [unknown]() |
+| Upstream | [therajushahi/agentmesh-oss](https://github.com/therajushahi/agentmesh-oss) |
 | Language | TypeScript |
 | Fork org | AiFeatures |
 
