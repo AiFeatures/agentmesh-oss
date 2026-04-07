@@ -3755,7 +3755,7 @@ export const claimRoutes: FastifyPluginAsync = async (app) => {
           action: r.action,
           actor_id: r.actor_id,
           actor_type: r.actor_type,
-          payload: parseJsonSafe(r.payload),
+          payload: parseJsonSafe(String(r.payload ?? ""), null),
           timestamp: r.created_at,
         })),
         count: rows.length,

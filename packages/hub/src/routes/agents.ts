@@ -4576,8 +4576,8 @@ export const agentRoutes: FastifyPluginAsync = async (app) => {
         .get(agent2, workspace) as { capabilities: string } | undefined;
       if (!a1) return reply.code(404).send({ error: `Agent '${agent1}' not found` });
       if (!a2) return reply.code(404).send({ error: `Agent '${agent2}' not found` });
-      const caps1 = new Set<string>(parseJsonSafe(a1.capabilities) || []);
-      const caps2 = new Set<string>(parseJsonSafe(a2.capabilities) || []);
+      const caps1 = new Set<string>(parseJsonSafe(String(a1.capabilities ?? "[]"), [] as string[]));
+      const caps2 = new Set<string>(parseJsonSafe(String(a2.capabilities ?? "[]"), [] as string[]));
       const only1: string[] = [];
       const only2: string[] = [];
       const shared: string[] = [];

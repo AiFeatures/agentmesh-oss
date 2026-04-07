@@ -45,11 +45,11 @@ export function buildApp() {
       reply.header("X-Idempotent-Replayed", "true");
       return reply.code(existing.response_status).send(JSON.parse(existing.response_body));
     }
-    (request as Record<string, unknown>)._idempotencyKey = key;
+    (request as unknown as Record<string, unknown>)._idempotencyKey = key;
   });
 
   app.addHook("onSend", async (request, reply, payload) => {
-    const key = (request as Record<string, unknown>)._idempotencyKey as string | undefined;
+    const key = (request as unknown as Record<string, unknown>)._idempotencyKey as string | undefined;
     if (!key || request.method !== "POST") return payload;
     const workspace = (request.params as Record<string, string>)?.workspace ?? "";
     try {
@@ -147,7 +147,7 @@ export function buildApp() {
     return reply.code(404).send({ error: "Not found", status: 404 });
   });
 
-  app.setErrorHandler((error, request, reply) => {
+  app.setErrorHandler((error: Error & { validation?: unknown; statusCode?: number }, request, reply) => {
     if (error.validation) {
       return reply.code(400).send({
         error: "Validation failed",
